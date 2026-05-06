@@ -1,0 +1,8 @@
+.DS_Store
+.env
+.env.*
+.omx/
+.scratch/
+node_modules/
+dist/
+coverage/
