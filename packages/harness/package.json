@@ -16,6 +16,10 @@
     "./mcp": {
       "types": "./dist/mcp/index.d.ts",
       "default": "./dist/mcp/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli/index.d.ts",
+      "default": "./dist/cli/index.js"
     }
   },
   "files": [
@@ -28,5 +32,8 @@
   },
   "peerDependencies": {
     "playwright": "^1.59.1"
+  },
+  "bin": {
+    "agent-e2e-harness": "./dist/cli/index.js"
   }
 }
