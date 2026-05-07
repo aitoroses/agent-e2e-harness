@@ -140,6 +140,72 @@ export interface SeedGateResult<TTypes extends HarnessTypes = HarnessTypes> {
   guidance: readonly GuidanceAction[];
 }
 
+
+export type RunProgressStatus = 'running' | 'passed' | 'failed';
+
+export interface RunProgress {
+  status: RunProgressStatus;
+  completedStepIds: readonly string[];
+  failedStepIds: readonly string[];
+  currentStepId?: string;
+}
+
+export interface JourneyRun<TTypes extends HarnessTypes = HarnessTypes> {
+  id: string;
+  journey: ExecutableJourney<TTypes>;
+  profile: JourneyProfile<TTypes>;
+  execution: ExecutionSurface<TTypes>;
+  seedGate: SeedGateResult<TTypes>;
+  startedAt: string;
+  progress: RunProgress;
+}
+
+export interface BeginJourneyRunOptions<TTypes extends HarnessTypes = HarnessTypes> {
+  profileId?: string;
+  execution: ExecutionSurface<TTypes>;
+  runId?: string;
+}
+
+export type BeginJourneyRunResult<TTypes extends HarnessTypes = HarnessTypes> =
+  | {
+      status: 'blocked';
+      seedGate: SeedGateResult<TTypes>;
+    }
+  | {
+      status: 'running';
+      run: JourneyRun<TTypes>;
+      seedGate: SeedGateResult<TTypes>;
+    };
+
+export type ProofRunStatus = 'passed' | 'failed' | 'error';
+
+export interface ProofRunResult {
+  id: string;
+  title: string;
+  status: ProofRunStatus;
+  error?: string;
+}
+
+export type StepRunStatus = FeedbackStatus | 'error';
+
+export interface StepRunResult<TTypes extends HarnessTypes = HarnessTypes> {
+  runId: string;
+  phaseId: string;
+  stepId: string;
+  status: StepRunStatus;
+  startedAt: string;
+  endedAt: string;
+  durationMs: number;
+  feedback: FeedbackEnvelope<TTypes>;
+  observed?: ObservedDomainPayload<TTypes>;
+  artifacts: readonly ArtifactRef[];
+  warnings: readonly string[];
+  errors: readonly string[];
+  proofs: readonly ProofRunResult[];
+  guidance: readonly GuidanceAction[];
+  progress: RunProgress;
+}
+
 export interface StepHandlerContext<TTypes extends HarnessTypes = HarnessTypes> {
   execution: ExecutionSurface<TTypes>;
   profile: JourneyProfile<TTypes>;
@@ -263,6 +329,96 @@ export function defineJourney<TTypes extends HarnessTypes = HarnessTypes>(
 }
 
 
+
+export async function beginJourneyRun<TTypes extends HarnessTypes = HarnessTypes>(
+  journey: ExecutableJourney<TTypes>,
+  options: BeginJourneyRunOptions<TTypes>
+): Promise<BeginJourneyRunResult<TTypes>> {
+  const seedGate = await runEnvironmentSeed(
+    journey,
+    compactObject({ profileId: options.profileId, execution: options.execution }) as {
+      profileId?: string;
+      execution?: ExecutionSurface<TTypes>;
+    }
+  );
+
+  if (!seedGate.canRunSteps) {
+    return { status: 'blocked', seedGate };
+  }
+
+  const profile = journey.getProfile(options.profileId);
+  const run: JourneyRun<TTypes> = {
+    id: options.runId ?? deriveRunId(options.execution, journey, profile),
+    journey,
+    profile,
+    execution: options.execution,
+    seedGate,
+    startedAt: new Date().toISOString(),
+    progress: {
+      status: 'running',
+      completedStepIds: [],
+      failedStepIds: []
+    }
+  };
+
+  return { status: 'running', run, seedGate };
+}
+
+export async function runJourneyStep<TTypes extends HarnessTypes = HarnessTypes>(
+  run: JourneyRun<TTypes>,
+  selection: { phaseId: string; stepId: string }
+): Promise<StepRunResult<TTypes>> {
+  const started = Date.now();
+  const startedAt = new Date(started).toISOString();
+  const { phase, step } = findJourneyStep(run.journey, selection);
+
+  run.progress = {
+    ...run.progress,
+    currentStepId: step.id
+  };
+
+  let feedback: FeedbackEnvelope<TTypes>;
+  try {
+    feedback = await step.execute({ execution: run.execution, profile: run.profile });
+  } catch (error) {
+    feedback = {
+      status: 'failed',
+      errors: [error instanceof Error ? error.message : String(error)]
+    };
+  }
+
+  const proofs = await evaluateProofs(step.proofs ?? [], {
+    execution: run.execution,
+    profile: run.profile,
+    observed: (feedback.observed ?? {}) as ObservedDomainPayload<TTypes>
+  });
+  const failedProof = proofs.find((proof) => proof.status !== 'passed');
+  const status = deriveStepStatus(feedback, proofs);
+  const failed = status === 'failed' || status === 'error';
+  const ended = Date.now();
+  const guidance = failed ? failureGuidance(step, failedProof) : passGuidance(run.journey, phase.id, step.id, feedback.guidance);
+  const progress = nextProgress(run.progress, step.id, failed);
+  run.progress = progress;
+
+  return compactObject({
+    runId: run.id,
+    phaseId: phase.id,
+    stepId: step.id,
+    status,
+    startedAt,
+    endedAt: new Date(ended).toISOString(),
+    durationMs: Math.max(0, ended - started),
+    feedback,
+    observed: feedback.observed,
+    artifacts: feedback.artifacts ?? [],
+    warnings: feedback.warnings ?? [],
+    errors: feedback.errors ?? [],
+    proofs,
+    guidance,
+    progress
+  }) as StepRunResult<TTypes>;
+}
+
 export async function runEnvironmentSeed<TTypes extends HarnessTypes = HarnessTypes>(
   journey: ExecutableJourney<TTypes>,
   options: { profileId?: string; execution?: ExecutionSurface<TTypes> } = {}
@@ -337,6 +493,115 @@ export function toInspectableContract<TTypes extends HarnessTypes = HarnessTypes
   }) as InspectableJourneyContract<TTypes>;
 }
 
+
+
+function deriveRunId<TTypes extends HarnessTypes>(
+  execution: ExecutionSurface<TTypes>,
+  journey: ExecutableJourney<TTypes>,
+  profile: JourneyProfile<TTypes>
+): string {
+  if (typeof execution === 'object' && execution !== null && 'runId' in execution) {
+    const runId = (execution as { runId?: unknown }).runId;
+    if (typeof runId === 'string' && runId.length > 0) return runId;
+  }
+
+  return `run:${journey.id}:${profile.id}`;
+}
+
+function findJourneyStep<TTypes extends HarnessTypes>(
+  journey: ExecutableJourney<TTypes>,
+  selection: { phaseId: string; stepId: string }
+): { phase: PhaseDefinition<TTypes>; step: StepDefinition<TTypes> } {
+  const phase = journey.phases.find((candidate) => candidate.id === selection.phaseId);
+  if (!phase) throw new Error(`Unknown phase: ${selection.phaseId}`);
+
+  const step = phase.steps.find((candidate) => candidate.id === selection.stepId);
+  if (!step) throw new Error(`Unknown step: ${selection.stepId}`);
+
+  return { phase, step };
+}
+
+async function evaluateProofs<TTypes extends HarnessTypes>(
+  proofs: readonly ProofDefinition<TTypes>[],
+  context: ProofCheckContext<TTypes>
+): Promise<ProofRunResult[]> {
+  const results: ProofRunResult[] = [];
+
+  for (const proof of proofs) {
+    try {
+      const result = await proof.check(context);
+      const passed = typeof result === 'boolean' ? result : result.status === 'passed' || result.status === 'warning';
+      results.push({ id: proof.id, title: proof.title, status: passed ? 'passed' : 'failed' });
+    } catch (error) {
+      results.push({
+        id: proof.id,
+        title: proof.title,
+        status: 'error',
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  return results;
+}
+
+function deriveStepStatus<TTypes extends HarnessTypes>(
+  feedback: FeedbackEnvelope<TTypes>,
+  proofs: readonly ProofRunResult[]
+): StepRunStatus {
+  if (feedback.errors && feedback.errors.length > 0) return 'failed';
+  if (proofs.some((proof) => proof.status === 'error')) return 'error';
+  if (proofs.some((proof) => proof.status === 'failed')) return 'failed';
+  return feedback.status;
+}
+
+function passGuidance<TTypes extends HarnessTypes>(
+  journey: ExecutableJourney<TTypes>,
+  phaseId: string,
+  stepId: string,
+  existingGuidance: readonly GuidanceAction[] = []
+): readonly GuidanceAction[] {
+  const flattened = journey.phases.flatMap((phase) => phase.steps.map((step) => ({ phaseId: phase.id, stepId: step.id })));
+  const currentIndex = flattened.findIndex((step) => step.phaseId === phaseId && step.stepId === stepId);
+  const next = flattened[currentIndex + 1];
+
+  return [
+    ...existingGuidance,
+    next
+      ? { type: 'continue', label: 'Continue to next step', target: next.stepId }
+      : { type: 'continue', label: 'Run complete', target: 'run:complete' }
+  ];
+}
+
+function failureGuidance<TTypes extends HarnessTypes>(
+  step: StepDefinition<TTypes>,
+  failedProof: ProofRunResult | undefined
+): readonly GuidanceAction[] {
+  return [
+    { type: 'inspect', label: 'Inspect failed step', target: step.id },
+    {
+      type: 'fix',
+      label: failedProof ? 'Fix failed proof' : 'Fix failed step',
+      target: failedProof?.id ?? step.id
+    }
+  ];
+}
+
+function nextProgress(progress: RunProgress, stepId: string, failed: boolean): RunProgress {
+  return failed
+    ? {
+        status: 'failed',
+        currentStepId: stepId,
+        completedStepIds: progress.completedStepIds,
+        failedStepIds: [...progress.failedStepIds, stepId]
+      }
+    : {
+        status: 'passed',
+        currentStepId: stepId,
+        completedStepIds: [...progress.completedStepIds, stepId],
+        failedStepIds: progress.failedStepIds
+      };
+}
 
 function selectJourneyProfile<TTypes extends HarnessTypes>(
   profiles: NonEmptyArray<JourneyProfile<TTypes>>,
