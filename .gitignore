@@ -9,3 +9,6 @@ coverage/
 
 # Package build outputs
 packages/*/dist/
+
+.next/
+apps/*/.next/
