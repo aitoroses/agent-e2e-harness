@@ -5,8 +5,15 @@ import ts from 'typescript';
 
 const repoRoot = process.cwd();
 const coreDir = resolve(repoRoot, 'packages/harness/src/core');
-const negativeFixture = resolve(repoRoot, 'scripts/fixtures/core-boundary/playwright-import.ts');
-const forbiddenSpecifierPattern = /(^|[/@])playwright($|[-/])/i;
+const negativeFixtures = [
+  resolve(repoRoot, 'scripts/fixtures/core-boundary/playwright-import.ts'),
+  resolve(repoRoot, 'scripts/fixtures/core-boundary/mcp-import.ts')
+];
+const forbiddenSpecifierPatterns = [
+  /(^|[/@])playwright($|[-/])/i,
+  /(^|[/@])mcp($|[-/])/i,
+  /^@modelcontextprotocol\/sdk($|\/)/i
+];
 
 function tsFilesUnder(path) {
   if (!existsSync(path)) return [];
@@ -29,7 +36,7 @@ function collectForbiddenImports(filePath) {
   const violations = [];
 
   function record(specifier, node) {
-    if (specifier && forbiddenSpecifierPattern.test(specifier)) {
+    if (specifier && forbiddenSpecifierPatterns.some((pattern) => pattern.test(specifier))) {
       const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
       violations.push({
         file: relative(repoRoot, filePath),
@@ -79,10 +86,12 @@ function printViolations(violations) {
 }
 
 if (process.argv.includes('--self-test')) {
-  const fixtureViolations = checkPath(negativeFixture);
-  if (fixtureViolations.length === 0) {
-    console.error('core boundary self-test failed: negative Playwright fixture was not rejected');
-    process.exit(1);
+  for (const negativeFixture of negativeFixtures) {
+    const fixtureViolations = checkPath(negativeFixture, { requireExists: true });
+    if (fixtureViolations.length === 0) {
+      console.error(`core boundary self-test failed: negative fixture was not rejected: ${relative(repoRoot, negativeFixture)}`);
+      process.exit(1);
+    }
   }
 }
 
@@ -92,4 +101,4 @@ if (realViolations.length > 0) {
   process.exit(1);
 }
 
-console.log('core boundary check passed: packages/harness/src/core has no Playwright imports');
+console.log('core boundary check passed: packages/harness/src/core has no Playwright or MCP imports');
