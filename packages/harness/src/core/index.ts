@@ -257,6 +257,32 @@ export interface StepRunResult<TTypes extends AnyHarnessTypes = HarnessTypes> {
   progress: RunProgress;
 }
 
+
+export type ClosureStatus = 'crystallized' | 'failed';
+export type ClosureFailureReason = 'seed-gate-blocked' | 'step-failed';
+
+export interface ClosureEvidence<TTypes extends AnyHarnessTypes = HarnessTypes> {
+  runId?: string;
+  seed: SeedManifest<TTypes>;
+  startedAt: string;
+  endedAt: string;
+}
+
+export interface ClosureResult<TTypes extends AnyHarnessTypes = HarnessTypes> {
+  status: ClosureStatus;
+  crystallized: boolean;
+  intervention: 'none';
+  failureReason?: ClosureFailureReason;
+  seedGate: SeedGateResult<TTypes>;
+  steps: readonly StepRunResult<TTypes>[];
+  artifacts: readonly ArtifactRef[];
+  warnings: readonly (StructuredWarning | string)[];
+  errors: readonly string[];
+  evidence: ClosureEvidence<TTypes>;
+}
+
+export interface ClosureOptions<TTypes extends AnyHarnessTypes = HarnessTypes> extends BeginJourneyRunOptions<TTypes> {}
+
 export interface StepHandlerContext<TTypes extends AnyHarnessTypes = HarnessTypes> {
   execution: ExecutionSurface<TTypes>;
   profile: JourneyProfile<TTypes>;
@@ -381,6 +407,48 @@ export function defineJourney<TTypes extends AnyHarnessTypes = HarnessTypes>(
 
 
 
+
+
+export async function runClosure<TTypes extends AnyHarnessTypes = HarnessTypes>(
+  journey: ExecutableJourney<TTypes>,
+  options: ClosureOptions<TTypes>
+): Promise<ClosureResult<TTypes>> {
+  const startedAt = new Date().toISOString();
+  const begin = await beginJourneyRun(journey, options);
+
+  if (begin.status === 'blocked') {
+    const endedAt = new Date().toISOString();
+    return {
+      status: 'failed',
+      crystallized: false,
+      intervention: 'none',
+      failureReason: 'seed-gate-blocked',
+      seedGate: begin.seedGate,
+      steps: [],
+      artifacts: begin.seedGate.manifest.artifacts,
+      warnings: begin.seedGate.manifest.warnings,
+      errors: begin.seedGate.manifest.errors.map((error) => error.message),
+      evidence: {
+        seed: begin.seedGate.manifest,
+        startedAt,
+        endedAt
+      }
+    };
+  }
+
+  const steps: StepRunResult<TTypes>[] = [];
+  for (const phase of begin.run.journey.phases) {
+    for (const step of phase.steps) {
+      const result = await runJourneyStep(begin.run, { phaseId: phase.id, stepId: step.id });
+      steps.push(result);
+      if (result.status === 'failed' || result.status === 'error') {
+        return buildClosureResult(begin, steps, startedAt, 'step-failed');
+      }
+    }
+  }
+
+  return buildClosureResult(begin, steps, startedAt);
+}
 
 export function createOwnershipLedger<TTypes extends AnyHarnessTypes = HarnessTypes>(
   runId: string,
@@ -628,6 +696,34 @@ export function toInspectableContract<TTypes extends AnyHarnessTypes = HarnessTy
 
 
 
+
+
+function buildClosureResult<TTypes extends AnyHarnessTypes>(
+  begin: Extract<BeginJourneyRunResult<TTypes>, { status: 'running' }>,
+  steps: readonly StepRunResult<TTypes>[],
+  startedAt: string,
+  failureReason?: ClosureFailureReason
+): ClosureResult<TTypes> {
+  const failed = failureReason !== undefined;
+  const endedAt = new Date().toISOString();
+  return compactObject({
+    status: failed ? 'failed' : 'crystallized',
+    crystallized: !failed,
+    intervention: 'none',
+    failureReason,
+    seedGate: begin.seedGate,
+    steps,
+    artifacts: [...begin.seedGate.manifest.artifacts, ...steps.flatMap((step) => step.artifacts)],
+    warnings: [...begin.seedGate.manifest.warnings, ...steps.flatMap((step) => step.warnings)],
+    errors: [...begin.seedGate.manifest.errors.map((error) => error.message), ...steps.flatMap((step) => step.errors)],
+    evidence: compactObject({
+      runId: begin.run.id,
+      seed: begin.seedGate.manifest,
+      startedAt,
+      endedAt
+    })
+  }) as ClosureResult<TTypes>;
+}
 
 function uniqueResources<TTypes extends AnyHarnessTypes>(
   resources: readonly OwnedResource<TTypes>[]
