@@ -39,6 +39,7 @@ export interface JourneyProfile<TTypes extends HarnessTypes = HarnessTypes> {
   description?: string;
   data: ProfileData<TTypes>;
   isDefault?: boolean;
+  seed?: EnvironmentSeed<TTypes>;
 }
 
 export interface ArtifactRef {
@@ -68,6 +69,75 @@ export interface FeedbackEnvelope<TTypes extends HarnessTypes = HarnessTypes> {
   guidance?: readonly GuidanceAction[];
   warnings?: readonly string[];
   errors?: readonly string[];
+}
+
+
+export interface StructuredWarning {
+  code: string;
+  message: string;
+  guidance: NonEmptyArray<GuidanceAction>;
+  artifactRefs?: readonly string[];
+}
+
+export interface SeedError {
+  code: string;
+  message: string;
+  guidance?: readonly GuidanceAction[];
+  artifactRefs?: readonly string[];
+}
+
+export interface EnvironmentSeedState<TTypes extends HarnessTypes = HarnessTypes> {
+  checked: readonly OwnedResource<TTypes>[];
+  created: readonly OwnedResource<TTypes>[];
+  forbidden: readonly OwnedResource<TTypes>[];
+}
+
+export interface SeedContribution<TTypes extends HarnessTypes = HarnessTypes> {
+  environment?: Partial<EnvironmentSeedState<TTypes>>;
+  artifacts?: readonly ArtifactRef[];
+  warnings?: readonly StructuredWarning[];
+  errors?: readonly SeedError[];
+  guidance?: readonly GuidanceAction[];
+}
+
+interface NormalizedSeedContribution<TTypes extends HarnessTypes = HarnessTypes> {
+  environment: EnvironmentSeedState<TTypes>;
+  artifacts: readonly ArtifactRef[];
+  warnings: readonly StructuredWarning[];
+  errors: readonly SeedError[];
+  guidance: readonly GuidanceAction[];
+}
+
+export interface SeedContext<TTypes extends HarnessTypes = HarnessTypes> {
+  profile: JourneyProfile<TTypes>;
+  execution?: ExecutionSurface<TTypes>;
+}
+
+export type EnvironmentSeed<TTypes extends HarnessTypes = HarnessTypes> = (
+  context: SeedContext<TTypes>
+) => MaybePromise<SeedContribution<TTypes> | void>;
+
+export type SeedManifestStatus = 'passed' | 'warning' | 'failed';
+
+export interface SeedManifest<TTypes extends HarnessTypes = HarnessTypes> {
+  status: SeedManifestStatus;
+  profile: {
+    id: string;
+    label?: string;
+  };
+  environment: EnvironmentSeedState<TTypes>;
+  artifacts: readonly ArtifactRef[];
+  warnings: readonly StructuredWarning[];
+  errors: readonly SeedError[];
+}
+
+export type SeedGateStatus = 'ready' | 'blocked';
+
+export interface SeedGateResult<TTypes extends HarnessTypes = HarnessTypes> {
+  status: SeedGateStatus;
+  canRunSteps: boolean;
+  manifest: SeedManifest<TTypes>;
+  guidance: readonly GuidanceAction[];
 }
 
 export interface StepHandlerContext<TTypes extends HarnessTypes = HarnessTypes> {
@@ -116,6 +186,7 @@ export interface JourneyDefinition<TTypes extends HarnessTypes = HarnessTypes> {
   title: string;
   description?: string;
   profiles: NonEmptyArray<JourneyProfile<TTypes>>;
+  seed?: EnvironmentSeed<TTypes>;
   phases: NonEmptyArray<PhaseDefinition<TTypes>>;
 }
 
@@ -160,6 +231,7 @@ export interface InspectableJourneyContract<TTypes extends HarnessTypes = Harnes
 
 export interface ExecutableJourney<TTypes extends HarnessTypes = HarnessTypes> extends JourneyDefinition<TTypes> {
   defaultProfile: JourneyProfile<TTypes>;
+  getProfile: (profileId?: string) => JourneyProfile<TTypes>;
   toInspectableContract: () => InspectableJourneyContract<TTypes>;
 }
 
@@ -183,10 +255,37 @@ export function defineJourney<TTypes extends HarnessTypes = HarnessTypes>(
   const journey: ExecutableJourney<TTypes> = {
     ...definition,
     defaultProfile,
+    getProfile: (profileId?: string) => selectJourneyProfile(definition.profiles, profileId ?? defaultProfile.id),
     toInspectableContract: () => toInspectableContract(journey)
   };
 
   return journey;
+}
+
+
+export async function runEnvironmentSeed<TTypes extends HarnessTypes = HarnessTypes>(
+  journey: ExecutableJourney<TTypes>,
+  options: { profileId?: string; execution?: ExecutionSurface<TTypes> } = {}
+): Promise<SeedGateResult<TTypes>> {
+  const profile = journey.getProfile(options.profileId);
+  const context: SeedContext<TTypes> = compactObject({ profile, execution: options.execution });
+  const contributions = [
+    normalizeSeedContribution(await journey.seed?.(context)),
+    normalizeSeedContribution(await profile.seed?.(context))
+  ];
+  const manifest = buildSeedManifest(profile, contributions);
+  const warningGuidance = manifest.warnings.flatMap((warning) => warning.guidance);
+  const errorGuidance = manifest.errors.flatMap((error) => error.guidance ?? []);
+  const contributionGuidance = contributions.flatMap((contribution) => contribution.guidance);
+  const guidance = [...contributionGuidance, ...warningGuidance, ...errorGuidance];
+  const blocked = manifest.errors.length > 0;
+
+  return {
+    status: blocked ? 'blocked' : 'ready',
+    canRunSteps: !blocked,
+    manifest,
+    guidance
+  };
 }
 
 export function toInspectableContract<TTypes extends HarnessTypes = HarnessTypes>(
@@ -236,6 +335,56 @@ export function toInspectableContract<TTypes extends HarnessTypes = HarnessTypes
       })
     ) as unknown as NonEmptyArray<InspectablePhaseContract>
   }) as InspectableJourneyContract<TTypes>;
+}
+
+
+function selectJourneyProfile<TTypes extends HarnessTypes>(
+  profiles: NonEmptyArray<JourneyProfile<TTypes>>,
+  profileId: string
+): JourneyProfile<TTypes> {
+  const profile = profiles.find((candidate) => candidate.id === profileId);
+  if (!profile) {
+    throw new Error(`Unknown Journey Profile: ${profileId}`);
+  }
+
+  return profile;
+}
+
+function normalizeSeedContribution<TTypes extends HarnessTypes>(
+  contribution: SeedContribution<TTypes> | void
+): NormalizedSeedContribution<TTypes> {
+  return {
+    environment: {
+      checked: contribution?.environment?.checked ?? [],
+      created: contribution?.environment?.created ?? [],
+      forbidden: contribution?.environment?.forbidden ?? []
+    },
+    artifacts: contribution?.artifacts ?? [],
+    warnings: contribution?.warnings ?? [],
+    errors: contribution?.errors ?? [],
+    guidance: contribution?.guidance ?? []
+  };
+}
+
+function buildSeedManifest<TTypes extends HarnessTypes>(
+  profile: JourneyProfile<TTypes>,
+  contributions: readonly NormalizedSeedContribution<TTypes>[]
+): SeedManifest<TTypes> {
+  const warnings = contributions.flatMap((contribution) => contribution.warnings);
+  const errors = contributions.flatMap((contribution) => contribution.errors);
+
+  return {
+    status: errors.length > 0 ? 'failed' : warnings.length > 0 ? 'warning' : 'passed',
+    profile: compactObject({ id: profile.id, label: profile.label }) as SeedManifest<TTypes>['profile'],
+    environment: {
+      checked: contributions.flatMap((contribution) => contribution.environment.checked),
+      created: contributions.flatMap((contribution) => contribution.environment.created),
+      forbidden: contributions.flatMap((contribution) => contribution.environment.forbidden)
+    },
+    artifacts: contributions.flatMap((contribution) => contribution.artifacts),
+    warnings,
+    errors
+  };
 }
 
 function assertNonEmpty<T>(items: readonly T[], message: string): asserts items is NonEmptyArray<T> {
