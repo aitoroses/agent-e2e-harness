@@ -1,5 +1,21 @@
-# agent-e2e-harness
+# Agent E2E Harness
 
-Reusable E2E harness patterns for agent products: MCP-callable journeys, browser/API proof steps, artifact capture, and run-owned teardown.
+Reusable TypeScript harness for agent-built development proofs that can crystallize into deterministic CI E2E tests.
 
-This repository is currently being scaffolded from the runtime-v2 Operator UI and SDK E2E harness learnings.
+## Issue #2 scaffold commands
+
+```sh
+npm install
+npm run typecheck
+npm run build
+npm test
+npm run check:core-boundary
+npm run check
+```
+
+The package scaffold exposes:
+
+- `@agent-e2e/harness` — package-root placeholder for the future Playwright-specialized Default Harness API.
+- `@agent-e2e/harness/core` — generic Harness Core placeholder that must stay Playwright/MCP-free.
+
+Examples and demo apps belong under `examples/` and should consume public package entrypoints, not package source internals.

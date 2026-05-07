@@ -1,0 +1,22 @@
+{
+  "name": "agent-e2e-harness-repo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspace @agent-e2e/harness",
+    "build": "npm run build --workspace @agent-e2e/harness",
+    "test": "npm run build --workspace @agent-e2e/harness && npm run typecheck:public && npm run test --workspace @agent-e2e/harness",
+    "check:core-boundary": "node scripts/check-core-boundary.mjs --self-test",
+    "check": "npm run typecheck && npm run build && npm test && npm run check:core-boundary",
+    "typecheck:public": "tsc -p tsconfig.public-types.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  }
+}
