@@ -143,6 +143,54 @@ export interface SeedGateResult<TTypes extends AnyHarnessTypes = HarnessTypes> {
 }
 
 
+export interface OwnershipLedger<TTypes extends AnyHarnessTypes = HarnessTypes> {
+  runId: string;
+  resources: readonly OwnedResource<TTypes>[];
+}
+
+export interface CleanupSkippedResource<TTypes extends AnyHarnessTypes = HarnessTypes> {
+  resource: OwnedResource<TTypes>;
+  reason: 'not-owned' | 'unsupported';
+}
+
+export interface CleanupDeletedResource<TTypes extends AnyHarnessTypes = HarnessTypes> {
+  resource: OwnedResource<TTypes>;
+  adapterId: string;
+  artifact?: ArtifactRef;
+}
+
+export interface CleanupFailedResource<TTypes extends AnyHarnessTypes = HarnessTypes> {
+  resource: OwnedResource<TTypes>;
+  adapterId: string;
+  error: string;
+}
+
+export interface CleanupArtifacts<TTypes extends AnyHarnessTypes = HarnessTypes> {
+  planned: readonly OwnedResource<TTypes>[];
+  deleted: readonly CleanupDeletedResource<TTypes>[];
+  skipped: readonly CleanupSkippedResource<TTypes>[];
+  failed: readonly CleanupFailedResource<TTypes>[];
+}
+
+export interface CleanupPlan<TTypes extends AnyHarnessTypes = HarnessTypes> {
+  runId: string;
+  planned: readonly OwnedResource<TTypes>[];
+  skipped: readonly CleanupSkippedResource<TTypes>[];
+}
+
+export interface ResourceAdapter<TTypes extends AnyHarnessTypes = HarnessTypes> {
+  id: string;
+  supports: (resource: OwnedResource<TTypes>) => boolean;
+  delete: (resource: OwnedResource<TTypes>) => MaybePromise<void | { artifact?: ArtifactRef }>;
+}
+
+export interface TeardownResult<TTypes extends AnyHarnessTypes = HarnessTypes> {
+  runId: string;
+  plan: CleanupPlan<TTypes>;
+  artifacts: CleanupArtifacts<TTypes>;
+}
+
+
 export type RunProgressStatus = 'running' | 'passed' | 'failed';
 
 export interface RunProgress {
@@ -160,6 +208,7 @@ export interface JourneyRun<TTypes extends AnyHarnessTypes = HarnessTypes> {
   seedGate: SeedGateResult<TTypes>;
   startedAt: string;
   progress: RunProgress;
+  ownershipLedger: OwnershipLedger<TTypes>;
 }
 
 export interface BeginJourneyRunOptions<TTypes extends AnyHarnessTypes = HarnessTypes> {
@@ -332,6 +381,86 @@ export function defineJourney<TTypes extends AnyHarnessTypes = HarnessTypes>(
 
 
 
+
+export function createOwnershipLedger<TTypes extends AnyHarnessTypes = HarnessTypes>(
+  runId: string,
+  resources: readonly OwnedResource<TTypes>[] = []
+): OwnershipLedger<TTypes> {
+  return { runId, resources: uniqueResources(resources) };
+}
+
+export function recordOwnedResource<TTypes extends AnyHarnessTypes>(
+  run: JourneyRun<TTypes>,
+  resource: OwnedResource<TTypes>
+): OwnershipLedger<TTypes> {
+  run.ownershipLedger = createOwnershipLedger(run.id, [...run.ownershipLedger.resources, resource]);
+  return run.ownershipLedger;
+}
+
+export function createCleanupPlan<TTypes extends AnyHarnessTypes = HarnessTypes>(
+  ledger: OwnershipLedger<TTypes>,
+  options: { requestedResources?: readonly OwnedResource<TTypes>[] } = {}
+): CleanupPlan<TTypes> {
+  const ownedByKey = new Map(ledger.resources.map((resource) => [resourceKey(resource), resource]));
+  const requested = options.requestedResources ?? ledger.resources;
+  const planned: OwnedResource<TTypes>[] = [];
+  const skipped: CleanupSkippedResource<TTypes>[] = [];
+
+  for (const resource of requested) {
+    const owned = ownedByKey.get(resourceKey(resource));
+    if (!owned) {
+      skipped.push({ resource, reason: 'not-owned' });
+      continue;
+    }
+
+    planned.push(owned);
+  }
+
+  return { runId: ledger.runId, planned: uniqueResources(planned), skipped };
+}
+
+export async function teardownOwnedResources<TTypes extends AnyHarnessTypes = HarnessTypes>(
+  ledger: OwnershipLedger<TTypes>,
+  adapters: readonly ResourceAdapter<TTypes>[],
+  options: { requestedResources?: readonly OwnedResource<TTypes>[] } = {}
+): Promise<TeardownResult<TTypes>> {
+  const plan = createCleanupPlan(ledger, options);
+  const deleted: CleanupDeletedResource<TTypes>[] = [];
+  const skipped: CleanupSkippedResource<TTypes>[] = [...plan.skipped];
+  const failed: CleanupFailedResource<TTypes>[] = [];
+
+  for (const resource of plan.planned) {
+    const adapter = adapters.find((candidate) => candidate.supports(resource));
+    if (!adapter) {
+      skipped.push({ resource, reason: 'unsupported' });
+      continue;
+    }
+
+    try {
+      const result = await adapter.delete(resource);
+      const deletedResource = compactObject({ resource, adapterId: adapter.id, artifact: result?.artifact }) as CleanupDeletedResource<TTypes>;
+      deleted.push(deletedResource);
+    } catch (error) {
+      failed.push({
+        resource,
+        adapterId: adapter.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  return {
+    runId: ledger.runId,
+    plan,
+    artifacts: {
+      planned: plan.planned,
+      deleted,
+      skipped,
+      failed
+    }
+  };
+}
+
 export async function beginJourneyRun<TTypes extends AnyHarnessTypes = HarnessTypes>(
   journey: ExecutableJourney<TTypes>,
   options: BeginJourneyRunOptions<TTypes>
@@ -349,8 +478,9 @@ export async function beginJourneyRun<TTypes extends AnyHarnessTypes = HarnessTy
   }
 
   const profile = journey.getProfile(options.profileId);
+  const runId = options.runId ?? deriveRunId(options.execution, journey, profile);
   const run: JourneyRun<TTypes> = {
-    id: options.runId ?? deriveRunId(options.execution, journey, profile),
+    id: runId,
     journey,
     profile,
     execution: options.execution,
@@ -360,7 +490,8 @@ export async function beginJourneyRun<TTypes extends AnyHarnessTypes = HarnessTy
       status: 'running',
       completedStepIds: [],
       failedStepIds: []
-    }
+    },
+    ownershipLedger: createOwnershipLedger(runId, seedGate.manifest.environment.created)
   };
 
   return { status: 'running', run, seedGate };
@@ -496,6 +627,41 @@ export function toInspectableContract<TTypes extends AnyHarnessTypes = HarnessTy
 }
 
 
+
+
+function uniqueResources<TTypes extends AnyHarnessTypes>(
+  resources: readonly OwnedResource<TTypes>[]
+): readonly OwnedResource<TTypes>[] {
+  const seen = new Set<string>();
+  const unique: OwnedResource<TTypes>[] = [];
+  for (const resource of resources) {
+    const key = resourceKey(resource);
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(resource);
+    }
+  }
+  return unique;
+}
+
+function resourceKey(resource: unknown): string {
+  return stableStringify(resource);
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, field]) => `${JSON.stringify(key)}:${stableStringify(field)}`)
+      .join(',')}}`;
+  }
+
+  return JSON.stringify(value);
+}
 
 function deriveRunId<TTypes extends AnyHarnessTypes>(
   execution: ExecutionSurface<TTypes>,
