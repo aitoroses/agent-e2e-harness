@@ -28,12 +28,14 @@ export interface HarnessTypes<
   ownedResource: TOwnedResource;
 }
 
-export type ExecutionSurface<TTypes extends HarnessTypes = HarnessTypes> = TTypes['executionSurface'];
-export type ProfileData<TTypes extends HarnessTypes = HarnessTypes> = TTypes['profileData'];
-export type ObservedDomainPayload<TTypes extends HarnessTypes = HarnessTypes> = TTypes['observed'];
-export type OwnedResource<TTypes extends HarnessTypes = HarnessTypes> = TTypes['ownedResource'];
+export type AnyHarnessTypes = HarnessTypes<unknown, object, object, object>;
 
-export interface JourneyProfile<TTypes extends HarnessTypes = HarnessTypes> {
+export type ExecutionSurface<TTypes extends AnyHarnessTypes = HarnessTypes> = TTypes['executionSurface'];
+export type ProfileData<TTypes extends AnyHarnessTypes = HarnessTypes> = TTypes['profileData'];
+export type ObservedDomainPayload<TTypes extends AnyHarnessTypes = HarnessTypes> = TTypes['observed'];
+export type OwnedResource<TTypes extends AnyHarnessTypes = HarnessTypes> = TTypes['ownedResource'];
+
+export interface JourneyProfile<TTypes extends AnyHarnessTypes = HarnessTypes> {
   id: string;
   label?: string;
   description?: string;
@@ -62,7 +64,7 @@ export interface GuidanceAction {
 
 export type FeedbackStatus = 'passed' | 'failed' | 'warning' | 'skipped';
 
-export interface FeedbackEnvelope<TTypes extends HarnessTypes = HarnessTypes> {
+export interface FeedbackEnvelope<TTypes extends AnyHarnessTypes = HarnessTypes> {
   status: FeedbackStatus;
   observed?: ObservedDomainPayload<TTypes>;
   artifacts?: readonly ArtifactRef[];
@@ -86,13 +88,13 @@ export interface SeedError {
   artifactRefs?: readonly string[];
 }
 
-export interface EnvironmentSeedState<TTypes extends HarnessTypes = HarnessTypes> {
+export interface EnvironmentSeedState<TTypes extends AnyHarnessTypes = HarnessTypes> {
   checked: readonly OwnedResource<TTypes>[];
   created: readonly OwnedResource<TTypes>[];
   forbidden: readonly OwnedResource<TTypes>[];
 }
 
-export interface SeedContribution<TTypes extends HarnessTypes = HarnessTypes> {
+export interface SeedContribution<TTypes extends AnyHarnessTypes = HarnessTypes> {
   environment?: Partial<EnvironmentSeedState<TTypes>>;
   artifacts?: readonly ArtifactRef[];
   warnings?: readonly StructuredWarning[];
@@ -100,7 +102,7 @@ export interface SeedContribution<TTypes extends HarnessTypes = HarnessTypes> {
   guidance?: readonly GuidanceAction[];
 }
 
-interface NormalizedSeedContribution<TTypes extends HarnessTypes = HarnessTypes> {
+interface NormalizedSeedContribution<TTypes extends AnyHarnessTypes = HarnessTypes> {
   environment: EnvironmentSeedState<TTypes>;
   artifacts: readonly ArtifactRef[];
   warnings: readonly StructuredWarning[];
@@ -108,18 +110,18 @@ interface NormalizedSeedContribution<TTypes extends HarnessTypes = HarnessTypes>
   guidance: readonly GuidanceAction[];
 }
 
-export interface SeedContext<TTypes extends HarnessTypes = HarnessTypes> {
+export interface SeedContext<TTypes extends AnyHarnessTypes = HarnessTypes> {
   profile: JourneyProfile<TTypes>;
   execution?: ExecutionSurface<TTypes>;
 }
 
-export type EnvironmentSeed<TTypes extends HarnessTypes = HarnessTypes> = (
+export type EnvironmentSeed<TTypes extends AnyHarnessTypes = HarnessTypes> = (
   context: SeedContext<TTypes>
 ) => MaybePromise<SeedContribution<TTypes> | void>;
 
 export type SeedManifestStatus = 'passed' | 'warning' | 'failed';
 
-export interface SeedManifest<TTypes extends HarnessTypes = HarnessTypes> {
+export interface SeedManifest<TTypes extends AnyHarnessTypes = HarnessTypes> {
   status: SeedManifestStatus;
   profile: {
     id: string;
@@ -133,7 +135,7 @@ export interface SeedManifest<TTypes extends HarnessTypes = HarnessTypes> {
 
 export type SeedGateStatus = 'ready' | 'blocked';
 
-export interface SeedGateResult<TTypes extends HarnessTypes = HarnessTypes> {
+export interface SeedGateResult<TTypes extends AnyHarnessTypes = HarnessTypes> {
   status: SeedGateStatus;
   canRunSteps: boolean;
   manifest: SeedManifest<TTypes>;
@@ -150,7 +152,7 @@ export interface RunProgress {
   currentStepId?: string;
 }
 
-export interface JourneyRun<TTypes extends HarnessTypes = HarnessTypes> {
+export interface JourneyRun<TTypes extends AnyHarnessTypes = HarnessTypes> {
   id: string;
   journey: ExecutableJourney<TTypes>;
   profile: JourneyProfile<TTypes>;
@@ -160,13 +162,13 @@ export interface JourneyRun<TTypes extends HarnessTypes = HarnessTypes> {
   progress: RunProgress;
 }
 
-export interface BeginJourneyRunOptions<TTypes extends HarnessTypes = HarnessTypes> {
+export interface BeginJourneyRunOptions<TTypes extends AnyHarnessTypes = HarnessTypes> {
   profileId?: string;
   execution: ExecutionSurface<TTypes>;
   runId?: string;
 }
 
-export type BeginJourneyRunResult<TTypes extends HarnessTypes = HarnessTypes> =
+export type BeginJourneyRunResult<TTypes extends AnyHarnessTypes = HarnessTypes> =
   | {
       status: 'blocked';
       seedGate: SeedGateResult<TTypes>;
@@ -188,7 +190,7 @@ export interface ProofRunResult {
 
 export type StepRunStatus = FeedbackStatus | 'error';
 
-export interface StepRunResult<TTypes extends HarnessTypes = HarnessTypes> {
+export interface StepRunResult<TTypes extends AnyHarnessTypes = HarnessTypes> {
   runId: string;
   phaseId: string;
   stepId: string;
@@ -206,31 +208,31 @@ export interface StepRunResult<TTypes extends HarnessTypes = HarnessTypes> {
   progress: RunProgress;
 }
 
-export interface StepHandlerContext<TTypes extends HarnessTypes = HarnessTypes> {
+export interface StepHandlerContext<TTypes extends AnyHarnessTypes = HarnessTypes> {
   execution: ExecutionSurface<TTypes>;
   profile: JourneyProfile<TTypes>;
 }
 
-export interface ProofCheckContext<TTypes extends HarnessTypes = HarnessTypes> extends StepHandlerContext<TTypes> {
+export interface ProofCheckContext<TTypes extends AnyHarnessTypes = HarnessTypes> extends StepHandlerContext<TTypes> {
   observed: ObservedDomainPayload<TTypes>;
 }
 
-export type StepHandler<TTypes extends HarnessTypes = HarnessTypes> = (
+export type StepHandler<TTypes extends AnyHarnessTypes = HarnessTypes> = (
   context: StepHandlerContext<TTypes>
 ) => MaybePromise<FeedbackEnvelope<TTypes>>;
 
-export type ProofCheck<TTypes extends HarnessTypes = HarnessTypes> = (
+export type ProofCheck<TTypes extends AnyHarnessTypes = HarnessTypes> = (
   context: ProofCheckContext<TTypes>
 ) => MaybePromise<boolean | FeedbackEnvelope<TTypes>>;
 
-export interface ProofDefinition<TTypes extends HarnessTypes = HarnessTypes> {
+export interface ProofDefinition<TTypes extends AnyHarnessTypes = HarnessTypes> {
   id: string;
   title: string;
   description?: string;
   check: ProofCheck<TTypes>;
 }
 
-export interface StepDefinition<TTypes extends HarnessTypes = HarnessTypes> {
+export interface StepDefinition<TTypes extends AnyHarnessTypes = HarnessTypes> {
   id: string;
   title: string;
   description?: string;
@@ -240,14 +242,14 @@ export interface StepDefinition<TTypes extends HarnessTypes = HarnessTypes> {
   guidance?: readonly GuidanceAction[];
 }
 
-export interface PhaseDefinition<TTypes extends HarnessTypes = HarnessTypes> {
+export interface PhaseDefinition<TTypes extends AnyHarnessTypes = HarnessTypes> {
   id: string;
   title: string;
   description?: string;
   steps: NonEmptyArray<StepDefinition<TTypes>>;
 }
 
-export interface JourneyDefinition<TTypes extends HarnessTypes = HarnessTypes> {
+export interface JourneyDefinition<TTypes extends AnyHarnessTypes = HarnessTypes> {
   id: string;
   title: string;
   description?: string;
@@ -256,7 +258,7 @@ export interface JourneyDefinition<TTypes extends HarnessTypes = HarnessTypes> {
   phases: NonEmptyArray<PhaseDefinition<TTypes>>;
 }
 
-export interface InspectableJourneyProfile<TTypes extends HarnessTypes = HarnessTypes> {
+export interface InspectableJourneyProfile<TTypes extends AnyHarnessTypes = HarnessTypes> {
   id: string;
   label?: string;
   description?: string;
@@ -286,7 +288,7 @@ export interface InspectablePhaseContract {
   steps: NonEmptyArray<InspectableStepContract>;
 }
 
-export interface InspectableJourneyContract<TTypes extends HarnessTypes = HarnessTypes> {
+export interface InspectableJourneyContract<TTypes extends AnyHarnessTypes = HarnessTypes> {
   id: string;
   title: string;
   description?: string;
@@ -295,13 +297,13 @@ export interface InspectableJourneyContract<TTypes extends HarnessTypes = Harnes
   phases: NonEmptyArray<InspectablePhaseContract>;
 }
 
-export interface ExecutableJourney<TTypes extends HarnessTypes = HarnessTypes> extends JourneyDefinition<TTypes> {
+export interface ExecutableJourney<TTypes extends AnyHarnessTypes = HarnessTypes> extends JourneyDefinition<TTypes> {
   defaultProfile: JourneyProfile<TTypes>;
   getProfile: (profileId?: string) => JourneyProfile<TTypes>;
   toInspectableContract: () => InspectableJourneyContract<TTypes>;
 }
 
-export function defineJourney<TTypes extends HarnessTypes = HarnessTypes>(
+export function defineJourney<TTypes extends AnyHarnessTypes = HarnessTypes>(
   definition: JourneyDefinition<TTypes>
 ): ExecutableJourney<TTypes> {
   assertNonEmpty(definition.profiles, 'Executable Journey requires at least one Journey Profile');
@@ -330,7 +332,7 @@ export function defineJourney<TTypes extends HarnessTypes = HarnessTypes>(
 
 
 
-export async function beginJourneyRun<TTypes extends HarnessTypes = HarnessTypes>(
+export async function beginJourneyRun<TTypes extends AnyHarnessTypes = HarnessTypes>(
   journey: ExecutableJourney<TTypes>,
   options: BeginJourneyRunOptions<TTypes>
 ): Promise<BeginJourneyRunResult<TTypes>> {
@@ -364,7 +366,7 @@ export async function beginJourneyRun<TTypes extends HarnessTypes = HarnessTypes
   return { status: 'running', run, seedGate };
 }
 
-export async function runJourneyStep<TTypes extends HarnessTypes = HarnessTypes>(
+export async function runJourneyStep<TTypes extends AnyHarnessTypes = HarnessTypes>(
   run: JourneyRun<TTypes>,
   selection: { phaseId: string; stepId: string }
 ): Promise<StepRunResult<TTypes>> {
@@ -419,7 +421,7 @@ export async function runJourneyStep<TTypes extends HarnessTypes = HarnessTypes>
   }) as StepRunResult<TTypes>;
 }
 
-export async function runEnvironmentSeed<TTypes extends HarnessTypes = HarnessTypes>(
+export async function runEnvironmentSeed<TTypes extends AnyHarnessTypes = HarnessTypes>(
   journey: ExecutableJourney<TTypes>,
   options: { profileId?: string; execution?: ExecutionSurface<TTypes> } = {}
 ): Promise<SeedGateResult<TTypes>> {
@@ -444,7 +446,7 @@ export async function runEnvironmentSeed<TTypes extends HarnessTypes = HarnessTy
   };
 }
 
-export function toInspectableContract<TTypes extends HarnessTypes = HarnessTypes>(
+export function toInspectableContract<TTypes extends AnyHarnessTypes = HarnessTypes>(
   journey: JourneyDefinition<TTypes> & { defaultProfile?: JourneyProfile<TTypes> }
 ): InspectableJourneyContract<TTypes> {
   assertNonEmpty(journey.profiles, 'Inspectable Journey Contract requires at least one Journey Profile');
@@ -495,7 +497,7 @@ export function toInspectableContract<TTypes extends HarnessTypes = HarnessTypes
 
 
 
-function deriveRunId<TTypes extends HarnessTypes>(
+function deriveRunId<TTypes extends AnyHarnessTypes>(
   execution: ExecutionSurface<TTypes>,
   journey: ExecutableJourney<TTypes>,
   profile: JourneyProfile<TTypes>
@@ -508,7 +510,7 @@ function deriveRunId<TTypes extends HarnessTypes>(
   return `run:${journey.id}:${profile.id}`;
 }
 
-function findJourneyStep<TTypes extends HarnessTypes>(
+function findJourneyStep<TTypes extends AnyHarnessTypes>(
   journey: ExecutableJourney<TTypes>,
   selection: { phaseId: string; stepId: string }
 ): { phase: PhaseDefinition<TTypes>; step: StepDefinition<TTypes> } {
@@ -521,7 +523,7 @@ function findJourneyStep<TTypes extends HarnessTypes>(
   return { phase, step };
 }
 
-async function evaluateProofs<TTypes extends HarnessTypes>(
+async function evaluateProofs<TTypes extends AnyHarnessTypes>(
   proofs: readonly ProofDefinition<TTypes>[],
   context: ProofCheckContext<TTypes>
 ): Promise<ProofRunResult[]> {
@@ -545,7 +547,7 @@ async function evaluateProofs<TTypes extends HarnessTypes>(
   return results;
 }
 
-function deriveStepStatus<TTypes extends HarnessTypes>(
+function deriveStepStatus<TTypes extends AnyHarnessTypes>(
   feedback: FeedbackEnvelope<TTypes>,
   proofs: readonly ProofRunResult[]
 ): StepRunStatus {
@@ -555,7 +557,7 @@ function deriveStepStatus<TTypes extends HarnessTypes>(
   return feedback.status;
 }
 
-function passGuidance<TTypes extends HarnessTypes>(
+function passGuidance<TTypes extends AnyHarnessTypes>(
   journey: ExecutableJourney<TTypes>,
   phaseId: string,
   stepId: string,
@@ -573,7 +575,7 @@ function passGuidance<TTypes extends HarnessTypes>(
   ];
 }
 
-function failureGuidance<TTypes extends HarnessTypes>(
+function failureGuidance<TTypes extends AnyHarnessTypes>(
   step: StepDefinition<TTypes>,
   failedProof: ProofRunResult | undefined
 ): readonly GuidanceAction[] {
@@ -603,7 +605,7 @@ function nextProgress(progress: RunProgress, stepId: string, failed: boolean): R
       };
 }
 
-function selectJourneyProfile<TTypes extends HarnessTypes>(
+function selectJourneyProfile<TTypes extends AnyHarnessTypes>(
   profiles: NonEmptyArray<JourneyProfile<TTypes>>,
   profileId: string
 ): JourneyProfile<TTypes> {
@@ -615,7 +617,7 @@ function selectJourneyProfile<TTypes extends HarnessTypes>(
   return profile;
 }
 
-function normalizeSeedContribution<TTypes extends HarnessTypes>(
+function normalizeSeedContribution<TTypes extends AnyHarnessTypes>(
   contribution: SeedContribution<TTypes> | void
 ): NormalizedSeedContribution<TTypes> {
   return {
@@ -631,7 +633,7 @@ function normalizeSeedContribution<TTypes extends HarnessTypes>(
   };
 }
 
-function buildSeedManifest<TTypes extends HarnessTypes>(
+function buildSeedManifest<TTypes extends AnyHarnessTypes>(
   profile: JourneyProfile<TTypes>,
   contributions: readonly NormalizedSeedContribution<TTypes>[]
 ): SeedManifest<TTypes> {
