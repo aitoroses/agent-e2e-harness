@@ -1,14 +1,47 @@
 .DS_Store
+.AppleDouble
+.LSOverride
 .env
 .env.*
+!.env.example
+
+# Agent-local state
+.codex/
+.agents/
 .omx/
 .scratch/
+
+# Dependencies and package manager caches
 node_modules/
+.npm/
+.pnpm-store/
+
+# Build and coverage outputs
 dist/
+build/
 coverage/
+.nyc_output/
+*.tsbuildinfo
+*.log
 
 # Package build outputs
 packages/*/dist/
 
+# Framework and test outputs
 .next/
 apps/*/.next/
+.vercel/
+out/
+playwright-report/
+test-results/
+
+# Editor state
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local harness proof artifacts
+.agents-e2e/
+apps/*/.agents-e2e/
+packages/*/.agents-e2e/

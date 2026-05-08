@@ -4,5 +4,5 @@
     "noEmit": true,
     "types": []
   },
-  "include": ["test-d/**/*.ts"]
+  "include": ["packages/harness/test-d/**/*.ts"]
 }

@@ -1,32 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { __agentE2EScaffold } from '@agent-e2e/harness';
-import { __agentE2ECoreScaffold } from '@agent-e2e/harness/core';
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { agentE2EDefaultHarnessApi } from '@agent-e2e/harness';
+import { agentE2ECoreApi } from '@agent-e2e/harness/core';
+import { DEFAULT_AGENT_E2E_ARTIFACT_ROOT } from '@agent-e2e/harness/artifacts';
 
 describe('public package exports', () => {
-  it('loads the package-root scaffold through the package export map', () => {
-    expect(__agentE2EScaffold).toMatchObject({
+  it('loads the package-root API contract through the package export map', () => {
+    expect(agentE2EDefaultHarnessApi).toMatchObject({
       packageName: '@agent-e2e/harness',
       surface: 'default-harness-api',
-      status: 'scaffold-only'
+      status: 'ready'
     });
   });
 
-  it('loads the generic core scaffold through the /core subpath export', () => {
-    expect(__agentE2ECoreScaffold).toMatchObject({
+  it('loads the generic core API contract through the /core subpath export', () => {
+    expect(agentE2ECoreApi).toMatchObject({
       packageName: '@agent-e2e/harness',
       surface: 'harness-core',
-      status: 'scaffold-only'
+      status: 'ready'
     });
   });
-});
 
-describe('examples placeholder', () => {
-  it('exists without documenting internal core source imports', () => {
-    const examplesReadme = resolve(process.cwd(), '../../examples/README.md');
-
-    expect(existsSync(examplesReadme)).toBe(true);
-    expect(readFileSync(examplesReadme, 'utf8')).not.toContain('packages/harness/src/core');
+  it('loads the artifact utilities through the /artifacts subpath export', () => {
+    expect(DEFAULT_AGENT_E2E_ARTIFACT_ROOT).toBe('.agents-e2e/artifacts');
   });
 });

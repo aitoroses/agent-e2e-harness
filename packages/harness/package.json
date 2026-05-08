@@ -1,9 +1,26 @@
 {
   "name": "@agent-e2e/harness",
   "version": "0.0.0",
-  "private": true,
   "type": "module",
-  "description": "Library-first Agent E2E Harness scaffold.",
+  "description": "Library-first Agent E2E Harness for seeded journeys, MCP proof loops, artifacts, and cleanup.",
+  "keywords": [
+    "agent",
+    "e2e",
+    "mcp",
+    "playwright",
+    "testcontainers",
+    "testing",
+    "automation"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aitoroses/agent-e2e-harness.git",
+    "directory": "packages/harness"
+  },
+  "bugs": {
+    "url": "https://github.com/aitoroses/agent-e2e-harness/issues"
+  },
+  "homepage": "https://github.com/aitoroses/agent-e2e-harness/tree/main/packages/harness#readme",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -20,6 +37,26 @@
     "./cli": {
       "types": "./dist/cli/index.d.ts",
       "default": "./dist/cli/index.js"
+    },
+    "./stack": {
+      "types": "./dist/stack/index.d.ts",
+      "default": "./dist/stack/index.js"
+    },
+    "./dev-mcp": {
+      "types": "./dist/dev-mcp/index.d.ts",
+      "default": "./dist/dev-mcp/index.js"
+    },
+    "./playwright-mcp": {
+      "types": "./dist/playwright-mcp/index.d.ts",
+      "default": "./dist/playwright-mcp/index.js"
+    },
+    "./testcontainers": {
+      "types": "./dist/testcontainers/index.d.ts",
+      "default": "./dist/testcontainers/index.js"
+    },
+    "./artifacts": {
+      "types": "./dist/artifacts/index.d.ts",
+      "default": "./dist/artifacts/index.js"
     }
   },
   "files": [
@@ -31,9 +68,33 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "playwright": "^1.59.1"
+    "playwright": "^1.59.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@testcontainers/postgresql": "^11.14.0",
+    "pg": "^8.16.3",
+    "zod": "^4.2.1"
   },
   "bin": {
     "agent-e2e-harness": "./dist/cli/index.js"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    },
+    "@modelcontextprotocol/sdk": {
+      "optional": true
+    },
+    "@testcontainers/postgresql": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    },
+    "zod": {
+      "optional": true
+    }
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
