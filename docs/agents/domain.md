@@ -9,7 +9,7 @@ This repo uses a **single-context** layout:
 - `CONTEXT.md` at the repo root, when it exists
 - `docs/adr/` for architectural decision records, when it exists
 
-The repo is currently early/scaffolded, so these files may not exist yet. Proceed silently when they are absent; producer workflows such as `grill-with-docs` can create them lazily when domain language or durable decisions crystallize.
+This repo keeps durable domain language in `CONTEXT.md` and durable architectural decisions in `docs/adr/`. Proceed silently if a future clone is missing one of these files, but in this repository treat them as the primary domain sources.
 
 ## Before exploring, read these
 

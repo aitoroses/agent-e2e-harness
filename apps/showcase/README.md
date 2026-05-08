@@ -23,21 +23,19 @@ npm run dev:mcp --workspace @agent-e2e/showcase
 cat .agents-e2e/dev-mcp.json
 ```
 
-Then drive everything through MCP using the printed `mcpUrl` and `appUrl`:
+Then configure your MCP client with the printed `mcpUrl`:
 
-```sh
-mcporter list <mcp-url> --allow-http --schema --json
-mcporter call --http-url <mcp-url> --allow-http --tool stack.start --args '{}' --output json
-mcporter call --http-url <mcp-url> --allow-http --tool run.begin --args '{"journeyId":"showcase:proof-notes","runId":"showcase-dev"}' --output json
-mcporter call --http-url <mcp-url> --allow-http --tool browser.open --args '{"targetUrl":"<app-url>","journeyId":"showcase:proof-notes","runId":"showcase-dev-browser"}' --output json
-mcporter call --http-url <mcp-url> --allow-http --tool browser.snapshot --args '{"browserSessionId":"<id>"}' --output json
-mcporter call --http-url <mcp-url> --allow-http --tool browser.act --args '{"browserSessionId":"<id>","ref":"<create-button-ref>","action":"click"}' --output json
-mcporter call --http-url <mcp-url> --allow-http --tool journey.step --args '{"runId":"showcase-dev","phaseId":"phase:proof-notes","stepId":"step:create-proof-note","browserSessionId":"<id>"}' --output json
-mcporter call --http-url <mcp-url> --allow-http --tool artifact.read --args '{"path":".agents-e2e/artifacts/showcase-proof-notes/showcase-dev/01-phase-phase-proof-notes/01-step-step-create-proof-note/step-feedback.json"}' --output json
-mcporter call --http-url <mcp-url> --allow-http --tool cleanup.plan --args '{"runId":"showcase-dev"}' --output json
-mcporter call --http-url <mcp-url> --allow-http --tool run.reseed --args '{"runId":"showcase-dev"}' --output json
-mcporter call --http-url <mcp-url> --allow-http --tool stack.stop --args '{}' --output json
+```json
+{
+  "mcpServers": {
+    "agent-e2e-showcase": {
+      "url": "http://127.0.0.1:<port>/mcp"
+    }
+  }
+}
 ```
+
+Use the agent's MCP tools in this order: `stack.start`, `run.begin`, `browser.open`, `browser.snapshot`, `browser.act`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.reseed`, and `stack.stop`. Use `appUrl` from the manifest as the browser target.
 
 Artifacts are generated under `.agents-e2e/artifacts/<journey>/<run>/`. The harness deliberately avoids `.scratch`, `ui-e2e/`, and nested `steps/` directories so the returned MCP artifact refs are the debugging map:
 
