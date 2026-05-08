@@ -25,8 +25,8 @@ describe('Reference CLI', () => {
     await expect(runCli(['seed'])).resolves.toMatchObject({ code: 0, json: { status: 'ok', seedGate: { canRunSteps: true } } });
     await expect(runCli(['run'])).resolves.toMatchObject({ code: 0, json: { status: 'ok', results: [{ status: 'passed' }] } });
     await expect(runCli(['artifacts'])).resolves.toMatchObject({ code: 0, json: { status: 'ok' } });
-    await expect(runCli(['cleanup-plan'])).resolves.toMatchObject({ code: 0, json: { status: 'ok', plan: { planned: [{ kind: 'record', id: 'demo:seed' }] } } });
-    await expect(runCli(['teardown'])).resolves.toMatchObject({ code: 0, json: { status: 'ok', result: { artifacts: { deleted: [{ adapterId: 'demo-record-adapter' }] } } } });
+    await expect(runCli(['cleanup-plan'])).resolves.toMatchObject({ code: 0, json: { status: 'ok', plan: { planned: [] } } });
+    await expect(runCli(['teardown'])).resolves.toMatchObject({ code: 0, json: { status: 'ok', result: { artifacts: { deleted: [] } } } });
   });
 
   it('runs closure with non-zero exit on seed or proof failure', async () => {

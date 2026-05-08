@@ -5,13 +5,13 @@
  * It must not import Playwright, MCP, or product-specific schemas.
  */
 
-export const __agentE2ECoreScaffold = {
+export const agentE2ECoreApi = {
   packageName: '@agent-e2e/harness',
   surface: 'harness-core',
-  status: 'scaffold-only'
+  status: 'ready'
 } as const;
 
-export type AgentE2EHarnessCoreScaffold = typeof __agentE2ECoreScaffold;
+export type AgentE2EHarnessCoreContract = typeof agentE2ECoreApi;
 
 export type MaybePromise<T> = T | Promise<T>;
 export type NonEmptyArray<T> = readonly [T, ...T[]];
@@ -48,6 +48,7 @@ export interface ArtifactRef {
   id: string;
   kind: string;
   uri: string;
+  path?: string;
   name?: string;
   mediaType?: string;
   description?: string;
@@ -71,6 +72,7 @@ export interface FeedbackEnvelope<TTypes extends AnyHarnessTypes = HarnessTypes>
   guidance?: readonly GuidanceAction[];
   warnings?: readonly string[];
   errors?: readonly string[];
+  ownedResources?: readonly OwnedResource<TTypes>[];
 }
 
 
@@ -184,11 +186,53 @@ export interface ResourceAdapter<TTypes extends AnyHarnessTypes = HarnessTypes> 
   delete: (resource: OwnedResource<TTypes>) => MaybePromise<void | { artifact?: ArtifactRef }>;
 }
 
+export interface ResourceKindDefinition<
+  TKind extends string = string,
+  TCreateInput extends object = Record<string, unknown>,
+  TResource extends { kind: TKind; id: string } = { kind: TKind; id: string }
+> {
+  kind: TKind;
+  create?: (input: TCreateInput) => MaybePromise<TResource>;
+  delete?: (resource: TResource) => MaybePromise<void | { artifact?: ArtifactRef }>;
+}
+
+export interface ResourceRegistry<TResource extends { kind: string; id: string } = { kind: string; id: string }> {
+  definitions: readonly ResourceKindDefinition<string, object, TResource>[];
+  create: <TCreateInput extends object>(kind: string, input: TCreateInput) => Promise<TResource>;
+  adapter: ResourceAdapter<HarnessTypes<unknown, Record<string, unknown>, Record<string, unknown>, TResource>>;
+}
+
 export interface TeardownResult<TTypes extends AnyHarnessTypes = HarnessTypes> {
   runId: string;
   plan: CleanupPlan<TTypes>;
   artifacts: CleanupArtifacts<TTypes>;
 }
+
+export interface ReseedJourneyRunOptions<TTypes extends AnyHarnessTypes = HarnessTypes> extends BeginJourneyRunOptions<TTypes> {
+  previousLedger?: OwnershipLedger<TTypes>;
+  resourceAdapters?: readonly ResourceAdapter<TTypes>[];
+  requestedResources?: readonly OwnedResource<TTypes>[];
+}
+
+export type ReseedBlockedReason = 'cleanup-failed' | 'seed-gate-blocked';
+
+export type ReseedJourneyRunResult<TTypes extends AnyHarnessTypes = HarnessTypes> =
+  | {
+      status: 'blocked';
+      reason: ReseedBlockedReason;
+      canRunSteps: false;
+      cleanup: TeardownResult<TTypes>;
+      seedGate?: SeedGateResult<TTypes>;
+      guidance: readonly GuidanceAction[];
+    }
+  | {
+      status: 'running';
+      canRunSteps: true;
+      cleanup: TeardownResult<TTypes>;
+      seedGate: SeedGateResult<TTypes>;
+      run: JourneyRun<TTypes>;
+      guidance: readonly GuidanceAction[];
+    };
 
 
 export type RunProgressStatus = 'running' | 'passed' | 'failed';
@@ -252,6 +296,7 @@ export interface StepRunResult<TTypes extends AnyHarnessTypes = HarnessTypes> {
   artifacts: readonly ArtifactRef[];
   warnings: readonly string[];
   errors: readonly string[];
+  ownedResources: readonly OwnedResource<TTypes>[];
   proofs: readonly ProofRunResult[];
   guidance: readonly GuidanceAction[];
   progress: RunProgress;
@@ -465,6 +510,38 @@ export function recordOwnedResource<TTypes extends AnyHarnessTypes>(
   return run.ownershipLedger;
 }
 
+export function defineResourceKind<
+  TKind extends string,
+  TCreateInput extends object,
+  TResource extends { kind: TKind; id: string }
+>(definition: ResourceKindDefinition<TKind, TCreateInput, TResource>): ResourceKindDefinition<TKind, TCreateInput, TResource> {
+  return definition;
+}
+
+export function createResourceRegistry<TResource extends { kind: string; id: string }>(
+  definitions: readonly ResourceKindDefinition<string, object, TResource>[]
+): ResourceRegistry<TResource> {
+  const byKind = new Map(definitions.map((definition) => [definition.kind, definition]));
+
+  return {
+    definitions,
+    async create<TCreateInput extends object>(kind: string, input: TCreateInput): Promise<TResource> {
+      const definition = byKind.get(kind);
+      if (!definition?.create) throw new Error(`No resource creator registered for kind: ${kind}`);
+      return definition.create(input);
+    },
+    adapter: {
+      id: 'resource-registry-adapter',
+      supports: (resource) => byKind.has(resource.kind) && typeof byKind.get(resource.kind)?.delete === 'function',
+      delete: async (resource) => {
+        const definition = byKind.get(resource.kind);
+        if (!definition?.delete) throw new Error(`No resource destroyer registered for kind: ${resource.kind}`);
+        return definition.delete(resource);
+      }
+    }
+  };
+}
+
 export function createCleanupPlan<TTypes extends AnyHarnessTypes = HarnessTypes>(
   ledger: OwnershipLedger<TTypes>,
   options: { requestedResources?: readonly OwnedResource<TTypes>[] } = {}
@@ -529,6 +606,55 @@ export async function teardownOwnedResources<TTypes extends AnyHarnessTypes = Ha
   };
 }
 
+export async function reseedJourneyRun<TTypes extends AnyHarnessTypes = HarnessTypes>(
+  journey: ExecutableJourney<TTypes>,
+  options: ReseedJourneyRunOptions<TTypes>
+): Promise<ReseedJourneyRunResult<TTypes>> {
+  const cleanup = await teardownOwnedResources(
+    options.previousLedger ?? createOwnershipLedger<TTypes>(options.runId ?? deriveRunId(options.execution, journey, journey.getProfile(options.profileId))),
+    options.resourceAdapters ?? [],
+    compactObject({ requestedResources: options.requestedResources }) as { requestedResources?: readonly OwnedResource<TTypes>[] }
+  );
+
+  if (cleanup.artifacts.failed.length > 0) {
+    return {
+      status: 'blocked',
+      reason: 'cleanup-failed',
+      canRunSteps: false,
+      cleanup,
+      guidance: [
+        {
+          type: 'fix',
+          label: 'Fix resource cleanup before reseeding',
+          target: cleanup.runId,
+          detail: `${cleanup.artifacts.failed.length} owned resource cleanup operation(s) failed.`
+        }
+      ]
+    };
+  }
+
+  const begin = await beginJourneyRun(journey, options);
+  if (begin.status === 'blocked') {
+    return {
+      status: 'blocked',
+      reason: 'seed-gate-blocked',
+      canRunSteps: false,
+      cleanup,
+      seedGate: begin.seedGate,
+      guidance: begin.seedGate.guidance
+    };
+  }
+
+  return {
+    status: 'running',
+    canRunSteps: true,
+    cleanup,
+    seedGate: begin.seedGate,
+    run: begin.run,
+    guidance: begin.seedGate.guidance
+  };
+}
+
 export async function beginJourneyRun<TTypes extends AnyHarnessTypes = HarnessTypes>(
   journey: ExecutableJourney<TTypes>,
   options: BeginJourneyRunOptions<TTypes>
@@ -559,7 +685,7 @@ export async function beginJourneyRun<TTypes extends AnyHarnessTypes = HarnessTy
       completedStepIds: [],
       failedStepIds: []
     },
-    ownershipLedger: createOwnershipLedger(runId, seedGate.manifest.environment.created)
+    ownershipLedger: createOwnershipLedger(runId)
   };
 
   return { status: 'running', run, seedGate };
@@ -588,6 +714,10 @@ export async function runJourneyStep<TTypes extends AnyHarnessTypes = HarnessTyp
     };
   }
 
+  for (const resource of feedback.ownedResources ?? []) {
+    recordOwnedResource(run, resource);
+  }
+
   const proofs = await evaluateProofs(step.proofs ?? [], {
     execution: run.execution,
     profile: run.profile,
@@ -614,6 +744,7 @@ export async function runJourneyStep<TTypes extends AnyHarnessTypes = HarnessTyp
     artifacts: feedback.artifacts ?? [],
     warnings: feedback.warnings ?? [],
     errors: feedback.errors ?? [],
+    ownedResources: feedback.ownedResources ?? [],
     proofs,
     guidance,
     progress

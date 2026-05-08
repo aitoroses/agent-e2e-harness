@@ -9,13 +9,13 @@ import type { Browser, BrowserContext, Page } from 'playwright';
 
 export * from './core/index.js';
 
-export const __agentE2EScaffold = {
+export const agentE2EDefaultHarnessApi = {
   packageName: '@agent-e2e/harness',
   surface: 'default-harness-api',
-  status: 'scaffold-only'
+  status: 'ready'
 } as const;
 
-export type AgentE2EDefaultHarnessApiScaffold = typeof __agentE2EScaffold;
+export type AgentE2EDefaultHarnessApiContract = typeof agentE2EDefaultHarnessApi;
 
 export interface PlaywrightExecutionSurface {
   browser: Browser;
