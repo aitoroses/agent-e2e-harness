@@ -6,15 +6,20 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "dev:mcp": "npm run build --workspace @agent-e2e/harness && tsc -p tsconfig.dev-mcp.json && node .agents-e2e/dev-mcp-runtime/scripts/dev-mcp.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build --workspace @agent-e2e/harness && vitest run"
   },
   "dependencies": {
     "@agent-e2e/harness": "0.0.0",
     "next": "^16.2.5",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "pg": "^8.16.3"
   },
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "@types/pg": "^8.15.5"
   }
 }
