@@ -1,0 +1,95 @@
+import { describe, expect, it } from "vitest";
+import {
+  createPostgresTestcontainersProvider,
+  type PostgresTestcontainersRuntime,
+} from "@agent-e2e/harness/testcontainers";
+
+describe("Testcontainers PostgreSQL provider contract", () => {
+  it("starts PostgreSQL, applies schema SQL, reports status, and stops through injected runtime", async () => {
+    const events: string[] = [];
+    const runtime: PostgresTestcontainersRuntime = {
+      PostgreSqlContainer: class {
+        constructor(private readonly image: string) {
+          events.push(`image:${image}`);
+        }
+        withDatabase(database: string) {
+          events.push(`database:${database}`);
+          return this;
+        }
+        withUsername(username: string) {
+          events.push(`username:${username}`);
+          return this;
+        }
+        withPassword(password: string) {
+          events.push(`password:${password}`);
+          return this;
+        }
+        async start() {
+          events.push("container:start");
+          return {
+            getConnectionUri: () =>
+              "postgresql://agent:agent@127.0.0.1:15432/proof_notes",
+            getHost: () => "127.0.0.1",
+            getPort: () => 15432,
+            getDatabase: () => "proof_notes",
+            getUsername: () => "agent",
+            getPassword: () => "agent",
+            stop: async () => {
+              events.push("container:stop");
+            },
+          };
+        }
+      },
+      Client: class {
+        constructor(private readonly config: { connectionString: string }) {
+          events.push(`client:${config.connectionString}`);
+        }
+        async connect() {
+          events.push("client:connect");
+        }
+        async query(sql: string) {
+          events.push(`schema:${sql}`);
+        }
+        async end() {
+          events.push("client:end");
+        }
+      },
+    };
+    const provider = createPostgresTestcontainersProvider(
+      {
+        image: "postgres:16-alpine",
+        database: "proof_notes",
+        username: "agent",
+        password: "agent",
+        schemaSql: "create table proof_notes(id text primary key);",
+      },
+      async () => runtime,
+    );
+
+    const handle = await provider.start();
+    expect(handle).toMatchObject({
+      host: "127.0.0.1",
+      port: 15432,
+      database: "proof_notes",
+    });
+    expect(provider.status(handle)).toMatchObject({
+      status: "ready",
+      services: [{ id: "postgres", status: "ready" }],
+    });
+    await expect(provider.stop(handle)).resolves.toMatchObject({
+      status: "stopped",
+    });
+    expect(events).toEqual([
+      "image:postgres:16-alpine",
+      "database:proof_notes",
+      "username:agent",
+      "password:agent",
+      "container:start",
+      "client:postgresql://agent:agent@127.0.0.1:15432/proof_notes",
+      "client:connect",
+      "schema:create table proof_notes(id text primary key);",
+      "client:end",
+      "container:stop",
+    ]);
+  });
+});
