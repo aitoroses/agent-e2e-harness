@@ -47,13 +47,12 @@ export default defineAgentE2EConfig({
 Then make `npm run dev:mcp` start the framework-owned Dev MCP server:
 
 ```ts
-import { startAgentE2EDevMcp } from '@agent-e2e/harness/dev-mcp';
-import config from '../agent-e2e.config.js';
+import { startAgentE2EDevMcpFromConfig } from '@agent-e2e/harness/dev-mcp';
 
-await startAgentE2EDevMcp(config);
+await startAgentE2EDevMcpFromConfig();
 ```
 
-`startAgentE2EDevMcp` creates the in-process harness server, Playwright-owned browser sessions, `.agents-e2e/artifacts`, and `.agents-e2e/dev-mcp.json` for you. It uses `127.0.0.1:3766/mcp` by default; override with `AGENT_E2E_MCP_PORT` when needed.
+`startAgentE2EDevMcpFromConfig` / `startAgentE2EDevMcp` create the in-process harness server, Playwright-owned browser sessions, `.agents-e2e/artifacts`, and `.agents-e2e/dev-mcp.json` for you. The config-based entrypoint reloads the compiled `agent-e2e.config` output when it changes, so new MCP calls see updated journeys without reconnecting the MCP client. It uses `127.0.0.1:3766/mcp` by default; override with `AGENT_E2E_MCP_PORT` when needed.
 
 Start the Dev MCP command and register the emitted `mcpUrl` in your MCP client:
 

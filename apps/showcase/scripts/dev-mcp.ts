@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { startAgentE2EDevMcp } from "@agent-e2e/harness/dev-mcp";
-import config from "../agent-e2e.config.js";
+import { startAgentE2EDevMcpFromConfig } from "@agent-e2e/harness/dev-mcp";
 
-await startAgentE2EDevMcp(config);
+await startAgentE2EDevMcpFromConfig({
+  configPath: new URL("../agent-e2e.config.js", import.meta.url).pathname,
+});

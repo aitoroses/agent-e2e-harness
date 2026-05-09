@@ -16,7 +16,7 @@ The showcase intentionally uses a database in the managed stack so seed, reseed,
 
 ## Real proof path
 
-Start Dev MCP. The showcase uses `agent-e2e.config.ts`, starts the framework-owned Dev MCP server at `127.0.0.1:3766/mcp` by default, and writes `.agents-e2e/dev-mcp.json`. Set `AGENT_E2E_MCP_PORT` only when you intentionally need a different MCP port.
+Start Dev MCP. The showcase uses `agent-e2e.config.ts`, starts the framework-owned Dev MCP server at `127.0.0.1:3766/mcp` by default, watches the compiled config output for journey changes, and writes `.agents-e2e/dev-mcp.json`. Set `AGENT_E2E_MCP_PORT` only when you intentionally need a different MCP port.
 
 ```sh
 npm run dev:mcp --workspace @agent-e2e/showcase

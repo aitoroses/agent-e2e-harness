@@ -150,8 +150,12 @@ A tracer-bullet development loop where each showcase capability starts as a **Te
 _Avoid_: write all tests first, manual browser QA, implementation-first demo
 
 **Dev MCP Server**:
-An HTTP MCP server mode for agent development where journeys and app code can hot-reload while agents call harness tools through a standard MCP client.
+An HTTP MCP server mode for agent development where the endpoint stays stable while app code and the journey registry can refresh during agent iteration through a standard MCP client.
 _Avoid_: one-shot stdio runner, production server, static journey snapshot
+
+**Hot-Reloaded Journey Registry**:
+The Dev MCP behavior where journey/resource config is reloaded behind a stable MCP endpoint when the compiled `agent-e2e.config` output changes. Reloading replaces the available journey registry for new runs; agents should start a new run after a registry change rather than continuing a stale active run.
+_Avoid_: server restart, app hot reload, static journey registry
 
 **MCP-Owned Browser Session**:
 A Playwright browser/page lifecycle owned by the **Dev MCP Server**, with a persistent session id so agents can run journey steps, inspect snapshots, call forensics tools, and close the browser through MCP operations.
@@ -235,7 +239,7 @@ _Avoid_: harness, transport layer
 - The first **Reference Showcase App** should use the **Proof Notes Showcase** story because it is small, persistent, and clearly separates seeded baseline state from journey-created product-visible resources.
 - The **Reference Showcase App** should be developed through **Journey-Driven Showcase Development** so the repo demonstrates agent-built development, not only the final harness API.
 - **Journey-Driven Showcase Development** should use **Harness-Driven TDD**: define a **Textual Journey Plan**, run it through the harness MCP control surface with a standard MCP client, implement the missing app/harness behavior, then rerun until it becomes deterministic proof.
-- During **Harness-Driven TDD**, the MCP control surface should run as a **Dev MCP Server** over HTTP so journeys can hot-reload while agents iterate through MCP tools.
+- During **Harness-Driven TDD**, the MCP control surface should run as a **Dev MCP Server** over HTTP with a **Hot-Reloaded Journey Registry** so agents can keep the MCP endpoint configured while journey definitions evolve.
 - The **Dev MCP Server** should own Playwright through **MCP-Owned Browser Sessions**, not require callers to inject browser/page objects into tool calls.
 - **Visible Dev Browser** is the default for dev-mode MCP operations; closure and CI may use headless browser execution.
 - **Browser Snapshot** should be the default forensics entry point for visible browser state, combining semantic page structure, interactive refs, visual evidence, and debugging signals into one agent-readable packet.

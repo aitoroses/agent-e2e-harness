@@ -2,12 +2,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { defineJourney, type HarnessTypes } from "@agent-e2e/harness/core";
 import {
   defineAgentE2EConfig,
   loadAgentE2EConfig,
+  startAgentE2EDevMcpFromConfig,
   startAgentE2EDevMcp,
   startDevMcpStreamableHttpServer,
   DEFAULT_DEV_MCP_PORT,
@@ -255,4 +257,61 @@ describe("Dev MCP Streamable HTTP server", () => {
 
     await rm(tmpRoot, { recursive: true, force: true });
   });
+
+  it("reloads journey config without restarting the Dev MCP endpoint", async () => {
+    const tmpRoot = await mkdtemp(join(tmpdir(), "agent-e2e-reload-"));
+    const configPath = join(tmpRoot, "agent-e2e.config.mjs");
+    await writeConfig(configPath, "journey:one");
+
+    const server = await startAgentE2EDevMcpFromConfig({
+      configPath,
+      port: 0,
+      installSignalHandlers: false,
+      logger: false,
+    });
+    handles.push(server);
+    const client = new Client({
+      name: "agent-e2e-reload-client",
+      version: "0.0.0",
+    });
+    await client.connect(new StreamableHTTPClientTransport(new URL(server.url)));
+
+    try {
+      await expect(listJourneyIds(client)).resolves.toEqual(["journey:one"]);
+      await delay(20);
+      await writeConfig(configPath, "journey:two");
+      await expect(listJourneyIds(client)).resolves.toEqual(["journey:two"]);
+    } finally {
+      await client.close();
+      await server.close();
+      handles = handles.filter((handle) => handle !== server);
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });
+
+async function listJourneyIds(client: Client): Promise<string[]> {
+  const list = await client.callTool({ name: "journey.list", arguments: {} });
+  const text = list.content[0]?.type === "text" ? list.content[0].text : "";
+  const payload = JSON.parse(text) as { journeys: Array<{ id: string }> };
+  return payload.journeys.map((journey) => journey.id);
+}
+
+async function writeConfig(path: string, journeyId: string): Promise<void> {
+  await writeFile(
+    path,
+    `import { defineJourney } from '@agent-e2e/harness/core';
+export default {
+  browserSessions: false,
+  journeys: [
+    defineJourney({
+      id: ${JSON.stringify(journeyId)},
+      title: 'Reloaded journey',
+      profiles: [{ id: 'default', data: {}, isDefault: true }],
+      phases: [{ id: 'phase:reload', title: 'Reload', steps: [{ id: 'step:reload', title: 'Reload step', execute: async () => ({ status: 'passed' }) }] }]
+    })
+  ]
+};
+`,
+  );
+}

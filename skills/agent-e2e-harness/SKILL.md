@@ -63,7 +63,7 @@ The command should:
 - Start a local HTTP MCP endpoint for development. The default MCP port is stable; use `AGENT_E2E_MCP_PORT` when the user needs a different one.
 - Start no hidden long-lived process outside the documented command.
 - Write a manifest with `mcpUrl`. App URLs should come from `stack.start` / `stack.status` service URLs, not from the Dev MCP manifest.
-- Keep journeys and app integration code easy to reload during agent iteration.
+- Keep the Dev MCP endpoint stable while compiled journey/config output reloads behind it during agent iteration.
 - Shut down cleanly on `SIGINT`/`SIGTERM`; the proof loop should still call `stack.stop` for managed app infrastructure.
 
 Do not substitute private scripts, direct function calls, or raw Playwright snippets as the final proof for an MCP workflow. Those are acceptable only as lower-level debugging and must be labeled as such.
