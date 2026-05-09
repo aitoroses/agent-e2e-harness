@@ -173,6 +173,10 @@ _Avoid_: invisible default, CI-only headless browser, screenshot-only debugging
 The primary dev-mode browser forensics tool exposed through MCP. It should summarize the current page as an agent-usable investigation packet: URL, title, semantic structure, interactive targets, stable refs, visible errors, relevant network/console signals, screenshots or crops when useful, artifacts, and next guidance.
 _Avoid_: raw DOM dump, screenshot-only artifact, selector list, generic Playwright snapshot
 
+**Run Forensics**:
+The per-step evidence capture for a **Journey Run**: before/after/failure screenshots, scoped console/network signals, result artifacts, and step feedback.
+_Avoid_: router-owned screenshot logic, unscoped browser logs, hidden debug side effects
+
 **Dev MCP Tool Grammar**:
 The default Playwright-backed MCP tool vocabulary for journey-driven development: orientation, stack/readiness, run lifecycle, MCP-owned browser sessions, browser forensics, journey execution, artifacts, and cleanup.
 _Avoid_: ad-hoc tool pile, caller-injected Playwright objects, product-specific tool names
@@ -252,6 +256,7 @@ _Avoid_: per-adapter status enum, tool-specific response shape, unchecked respon
 - The **Dev MCP Server** should own Playwright through **MCP-Owned Browser Sessions**, not require callers to inject browser/page objects into tool calls.
 - **Visible Dev Browser** is the default for dev-mode MCP operations; closure and CI may use headless browser execution.
 - **Browser Snapshot** should be the default forensics entry point for visible browser state, combining semantic page structure, interactive refs, visual evidence, and debugging signals into one agent-readable packet.
+- **Run Forensics** should be owned by a focused Module below the **MCP Control Surface**, keeping browser evidence capture local while the tool router stays orchestration-focused.
 - The default **Dev MCP Tool Grammar** should use reusable harness vocabulary and avoid product-specific tool names.
 - The **Reference Showcase App** README should include a **Showcase Build Narrative** so future agents and humans can understand how the app was built through journeys, not just how to run it.
 - The **Reference Showcase App** should demonstrate three outcomes: a working app, deep inspectability for agents across the proof/build history, and CI-demonstrable verification.
