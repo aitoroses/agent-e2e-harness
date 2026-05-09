@@ -35,7 +35,7 @@ Then configure your MCP client with the printed `mcpUrl`:
 }
 ```
 
-Use the agent's MCP tools in this order: `stack.start`, `run.begin`, `browser.open`, `browser.snapshot`, `browser.act`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.reseed`, and `stack.stop`. Use `appUrl` from the manifest as the browser target.
+Use the agent's MCP tools in this order: `stack.start`, `run.begin`, `browser.open`, `browser.snapshot`, `browser.act`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.reseed`, and `stack.stop`. Use `appUrl` from the manifest as the browser target and append `?agentE2ERunId=<runId>` so the visible UI action writes resources owned by the active run.
 
 Artifacts are generated under `.agents-e2e/artifacts/<journey>/<run>/`. The harness deliberately avoids `.scratch`, `ui-e2e/`, and nested `steps/` directories so the returned MCP artifact refs are the debugging map:
 

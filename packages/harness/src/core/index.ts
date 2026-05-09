@@ -329,6 +329,7 @@ export interface ClosureResult<TTypes extends AnyHarnessTypes = HarnessTypes> {
 export interface ClosureOptions<TTypes extends AnyHarnessTypes = HarnessTypes> extends BeginJourneyRunOptions<TTypes> {}
 
 export interface StepHandlerContext<TTypes extends AnyHarnessTypes = HarnessTypes> {
+  runId: string;
   execution: ExecutionSurface<TTypes>;
   profile: JourneyProfile<TTypes>;
 }
@@ -706,7 +707,7 @@ export async function runJourneyStep<TTypes extends AnyHarnessTypes = HarnessTyp
 
   let feedback: FeedbackEnvelope<TTypes>;
   try {
-    feedback = await step.execute({ execution: run.execution, profile: run.profile });
+    feedback = await step.execute({ runId: run.id, execution: run.execution, profile: run.profile });
   } catch (error) {
     feedback = {
       status: 'failed',
@@ -721,6 +722,7 @@ export async function runJourneyStep<TTypes extends AnyHarnessTypes = HarnessTyp
   const proofs = await evaluateProofs(step.proofs ?? [], {
     execution: run.execution,
     profile: run.profile,
+    runId: run.id,
     observed: (feedback.observed ?? {}) as ObservedDomainPayload<TTypes>
   });
   const failedProof = proofs.find((proof) => proof.status !== 'passed');

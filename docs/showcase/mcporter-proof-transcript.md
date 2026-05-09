@@ -9,7 +9,7 @@ AGENT_E2E_MCP_PORT=3491 AGENT_E2E_SHOWCASE_PORT=3117 npm run dev:mcp --workspace
 mcporter list http://127.0.0.1:3491/mcp --allow-http --schema --json
 mcporter call --http-url http://127.0.0.1:3491/mcp --allow-http --tool stack.start --args '{}' --output json
 mcporter call --http-url http://127.0.0.1:3491/mcp --allow-http --tool run.begin --args '{"journeyId":"showcase:proof-notes","runId":"showcase-dev"}' --output json
-mcporter call --http-url http://127.0.0.1:3491/mcp --allow-http --tool browser.open --args '{"targetUrl":"http://127.0.0.1:3117","journeyId":"showcase:proof-notes","runId":"showcase-dev"}' --output json
+mcporter call --http-url http://127.0.0.1:3491/mcp --allow-http --tool browser.open --args '{"targetUrl":"http://127.0.0.1:3117?agentE2ERunId=showcase-dev","journeyId":"showcase:proof-notes","runId":"showcase-dev"}' --output json
 mcporter call --http-url http://127.0.0.1:3491/mcp --allow-http --tool browser.snapshot --args '{"browserSessionId":"<id>"}' --output json
 mcporter call --http-url http://127.0.0.1:3491/mcp --allow-http --tool browser.act --args '{"browserSessionId":"<id>","ref":"@e2","action":"click"}' --output json
 mcporter call --http-url http://127.0.0.1:3491/mcp --allow-http --tool journey.step --args '{"runId":"showcase-dev","phaseId":"phase:proof-notes","stepId":"step:create-proof-note","browserSessionId":"<id>"}' --output json

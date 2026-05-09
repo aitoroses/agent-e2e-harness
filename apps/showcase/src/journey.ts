@@ -25,6 +25,7 @@ export interface ShowcaseProfileData {
 export interface ShowcaseObserved {
   noteBody: string;
   noteId: string;
+  noteOwnedByRun: string;
   persistedAfterReload: boolean;
   baselineWorkspaceId: string;
   baselineUserId: string;
@@ -83,7 +84,10 @@ export function createShowcaseJourney(
           {
             id: SHOWCASE_STEP_ID,
             title: "Create and persist proof note",
-            execute: async ({ execution, profile }) => {
+            execute: async ({ execution, profile, runId }) => {
+              const targetUrl = new URL(profile.data.baseUrl);
+              targetUrl.searchParams.set("agentE2ERunId", runId);
+              await execution.page.goto(targetUrl.toString());
               await execution.page
                 .getByRole("button", { name: "Create proof note" })
                 .click();
@@ -93,6 +97,7 @@ export function createShowcaseJourney(
                 .waitFor();
               const note = execution.page.locator("[data-note-id]").first();
               const noteId = (await note.getAttribute("data-note-id")) ?? "";
+              const noteOwnedByRun = (await note.getAttribute("data-owned-by-run")) ?? "";
               const noteBody = ((await note.locator("strong").textContent()) ?? "")
                 .replace(/\s+/g, " ")
                 .trim();
@@ -114,6 +119,7 @@ export function createShowcaseJourney(
                 observed: {
                   noteBody,
                   noteId,
+                  noteOwnedByRun,
                   persistedAfterReload: true,
                   baselineWorkspaceId,
                   baselineUserId,
@@ -132,8 +138,10 @@ export function createShowcaseJourney(
               {
                 id: "proof:note-created-through-ui",
                 title: "Proof note was created through the UI and persisted",
-                check: async ({ observed }) =>
-                  observed.noteBody === PROOF_NOTE_BODY && observed.persistedAfterReload,
+                check: async ({ observed, runId }) =>
+                  observed.noteBody === PROOF_NOTE_BODY &&
+                  observed.persistedAfterReload &&
+                  observed.noteOwnedByRun === runId,
               },
               {
                 id: "proof:seed-baseline-survived",

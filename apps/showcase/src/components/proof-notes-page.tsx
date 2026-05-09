@@ -33,12 +33,13 @@ export function ProofNotesPage() {
 
   async function createNote() {
     setStatus("Creating proof note");
+    const runId = activeRunId();
     const response = await fetch("/api/notes", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         body: PROOF_NOTE_BODY,
-        runId: "showcase-journey",
+        runId,
       }),
     });
     const payload = (await response.json()) as { note: ProofNote };
@@ -205,6 +206,7 @@ export function ProofNotesPage() {
               <li
                 key={note.id}
                 data-note-id={note.id}
+                data-owned-by-run={note.ownedByRun}
                 style={{
                   borderRadius: 16,
                   background: "#fff7ec",
@@ -229,4 +231,9 @@ export function ProofNotesPage() {
       </section>
     </main>
   );
+}
+
+function activeRunId() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("agentE2ERunId") ?? params.get("runId") ?? "run:browser";
 }

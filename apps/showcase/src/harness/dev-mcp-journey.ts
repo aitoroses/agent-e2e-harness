@@ -18,6 +18,7 @@ import {
 interface ShowcaseMcpObserved {
   noteBody: string;
   noteId: string;
+  noteOwnedByRun: string;
   persistedAfterReload: boolean;
   baselineWorkspaceId: string;
   baselineUserId: string;
@@ -33,7 +34,7 @@ export type ShowcaseMcpHarness = HarnessTypes<
 interface NotesApiSnapshot {
   workspace: { id: string };
   user: { id: string };
-  notes?: Array<{ id: string; body: string }>;
+  notes?: Array<{ id: string; body: string; ownedByRun: string }>;
 }
 
 export function createShowcaseMcpJourney(baseUrl: string) {
@@ -72,7 +73,7 @@ export function createShowcaseMcpJourney(baseUrl: string) {
           {
             id: SHOWCASE_STEP_ID,
             title: "Capture browser-created proof note as owned resource",
-            execute: async ({ profile }) => {
+            execute: async ({ profile, runId }) => {
               const response = await fetch(notesApiUrl(profile.data.baseUrl), { cache: "no-store" });
               if (!response.ok) {
                 return {
@@ -82,11 +83,13 @@ export function createShowcaseMcpJourney(baseUrl: string) {
                 };
               }
               const snapshot = await response.json() as NotesApiSnapshot;
-              const note = snapshot.notes?.find((candidate) => candidate.body === PROOF_NOTE_BODY);
+              const note = snapshot.notes?.find(
+                (candidate) => candidate.body === PROOF_NOTE_BODY && candidate.ownedByRun === runId,
+              );
               if (!note) {
                 return {
                   status: "failed",
-                  errors: ["Browser-created proof note was not found."],
+                  errors: [`Browser-created proof note for run ${runId} was not found.`],
                   guidance: [
                     { type: "inspect", label: "Open headed browser", target: "browser.open" },
                     { type: "inspect", label: "Capture browser snapshot", target: "browser.snapshot" },
@@ -99,6 +102,7 @@ export function createShowcaseMcpJourney(baseUrl: string) {
                 observed: {
                   noteBody: note.body,
                   noteId: note.id,
+                  noteOwnedByRun: note.ownedByRun,
                   persistedAfterReload: true,
                   baselineWorkspaceId: snapshot.workspace.id,
                   baselineUserId: snapshot.user.id,
@@ -111,8 +115,10 @@ export function createShowcaseMcpJourney(baseUrl: string) {
               {
                 id: "proof:note-created-through-ui",
                 title: "Browser-created proof note was captured and persisted",
-                check: async ({ observed }) =>
-                  observed.noteBody === PROOF_NOTE_BODY && observed.persistedAfterReload === true,
+                check: async ({ observed, runId }) =>
+                  observed.noteBody === PROOF_NOTE_BODY &&
+                  observed.persistedAfterReload === true &&
+                  observed.noteOwnedByRun === runId,
               },
               {
                 id: "proof:seed-baseline-survived",

@@ -63,7 +63,7 @@
     "build": "npm run clean && tsc -p tsconfig.json",
     "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "npm run build && vitest run"
   },
   "peerDependencies": {
     "playwright": "^1.59.1",

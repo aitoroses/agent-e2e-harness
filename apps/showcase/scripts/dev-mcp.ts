@@ -76,7 +76,7 @@ console.log(``);
 console.log(`Proof order:`);
 console.log(`  1. mcporter call --http-url ${server.url} --allow-http --tool 'stack.start' --args '{}' --output json`);
 console.log(`  2. mcporter call --http-url ${server.url} --allow-http --tool 'run.begin' --args '{"journeyId":"showcase:proof-notes","runId":"showcase-dev"}' --output json`);
-console.log(`  3. browser.open -> browser.snapshot -> browser.act -> journey.step --browserSessionId -> cleanup.plan/reseed`);
+console.log(`  3. browser.open appUrl?agentE2ERunId=showcase-dev -> browser.snapshot -> browser.act -> journey.step --browserSessionId -> cleanup.plan/reseed`);
 
 async function shutdown(signal: NodeJS.Signals) {
   console.log(`
