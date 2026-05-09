@@ -1,6 +1,6 @@
 # Agent E2E Harness
 
-A reusable toolkit for agent-built development: agents validate their own work through executable journeys, seeded repeatable environments, MCP-callable controls, browser/API evidence, artifact capture, and owned-resource teardown. The same proofs should remain consolidated as CI E2E tests. It is extensible enough to replace product-specific harnesses such as the Terrarium Runtime UI E2E harness.
+A reusable toolkit for agent-built development: agents validate their own work through executable journeys, seeded repeatable environments, MCP-callable controls, browser/API evidence, artifact capture, and owned-resource teardown. The same proofs should remain consolidated as CI E2E tests. It is extensible enough to replace product-specific harnesses through stable extension points.
 
 ## Language
 
@@ -15,7 +15,7 @@ _Avoid_: agent builder, MCP authoring, manual QA
 
 **Product-Specific Harness**:
 A harness embedded in one product codebase that the **Agent E2E Harness** should be able to replace through extension points.
-_Avoid_: legacy harness, bespoke test code
+_Avoid_: one-off harness, bespoke test code
 
 **Executable Journey**:
 A repeatable validation flow that an agent can execute during development and the project can later run unchanged as a CI E2E test.
@@ -62,8 +62,16 @@ A run-scoped record of resources created by an **Executable Journey** that bound
 _Avoid_: cleanup list, resource cache, teardown state
 
 **Resource Adapter**:
-An extension that knows how to create, inspect, or delete one kind of product resource without expanding the **Ownership Ledger**.
+An extension that knows how to create, inspect, or delete one typed kind of product resource without expanding the **Ownership Ledger**.
 _Avoid_: cleanup callback, plugin, driver
+
+**Typed Resource Registry**:
+A harness-level registry that binds owned resource kinds to typed creation inputs and destruction mechanics while owned resources remain minimal handles with kind, id, and optional label/metadata.
+_Avoid_: stringly typed cleanup map, arbitrary metadata, untyped fixture helpers
+
+**Reseed**:
+A first-class harness operation that returns a selected **Journey Profile** to its seeded state by applying ownership-bounded cleanup for the current run context before running **Environment Seed** again.
+_Avoid_: rerun seed, truncate everything, browser refresh
 
 **Observed Domain Payload**:
 A product-specific typed payload inside step feedback that records domain observations without changing the harness-owned feedback envelope.
@@ -97,6 +105,86 @@ _Avoid_: the harness, core server
 The optional command-line interface for starting the **Reference Harness Server** and running common validation flows.
 _Avoid_: main product, runner script
 
+**Reference Showcase App**:
+A small but realistic consumer application in this repository that demonstrates the **Agent E2E Harness** product promise end-to-end: **Environment Seed**, MCP/dev iteration, **Deterministic Proof**, **Closure Command**, artifacts, and safe teardown, without depending on behavior outside this repository.
+_Avoid_: smoke fixture, fake button demo, package test app, migration demo
+
+**Managed Showcase Infrastructure**:
+Ephemeral infrastructure brought up for the **Reference Showcase App** and torn down as part of the proof process, so the demo exercises real stack lifecycle instead of only browser or in-memory state.
+_Avoid_: ambient local service, manual database, localStorage fixture
+
+**Managed Execution Stack**:
+The app/runtime infrastructure required for a dev-mode harness run, including databases, app processes, containers, queues, and local services, provisioned and torn down through harness-owned lifecycle hooks while concrete infrastructure remains product- or showcase-owned.
+_Avoid_: hidden test setup, seed side effect, external prerequisite, manual stack
+
+**Stack Provider**:
+An extension point that starts, inspects, and stops a **Managed Execution Stack** for a specific product or showcase, such as containers, app processes, databases, queues, or other local services.
+_Avoid_: hardcoded Docker logic, test helper, deployment adapter
+
+**Reference Stack Provider**:
+The default **Stack Provider** implementation used by the **Reference Showcase App** to demonstrate harness-managed dev-mode infrastructure lifecycle. The first reference provider should use Testcontainers with PostgreSQL and schema initialization.
+_Avoid_: production deployment provider, hidden testcontainer, app-specific script
+
+**Showcase Infrastructure Provider**:
+The product-owned provider code that implements **Stack Provider** lifecycle for the **Reference Showcase App**. The showcase may use Testcontainers/PostgreSQL, but that choice must not become a public harness export.
+_Avoid_: core dependency, public harness adapter, hidden Docker setup
+
+**Dev-Mode Stack**:
+A **Managed Execution Stack** optimized for agent iteration against editable source code, typically combining disposable services such as Testcontainers databases with local development processes such as a Next.js dev server.
+_Avoid_: production deployment, prebuilt-only app image, CI-only stack
+
+**Proof Notes Showcase**:
+The first **Reference Showcase App** product story: a tiny persisted notes application where seed creates baseline workspace/user state, the journey creates a proof note through the UI, proof verifies persistence, and reseed/teardown remove only owned proof-note resources.
+_Avoid_: counter demo, localStorage button, arbitrary CRUD app
+
+**Journey-Driven Showcase Development**:
+The dogfooding practice of building the **Reference Showcase App** iteratively through its own harness journeys, so each app capability is introduced with the seed, stack, proof, artifact, and cleanup behavior that will later serve as CI E2E coverage.
+_Avoid_: demo built first and tested later, after-the-fact Playwright spec, disconnected fixture
+
+**Textual Journey Plan**:
+A human-readable description of the journeys the showcase intends to support before implementation, used as the source for tracer-bullet development through the harness MCP control surface.
+_Avoid_: hidden implementation note, bulk test matrix, after-the-fact docs
+
+**Harness-Driven TDD**:
+A tracer-bullet development loop where each showcase capability starts as a **Textual Journey Plan**, is exercised through the harness MCP tools via a standard MCP client, fails for the missing behavior, and is then implemented until the same journey passes and crystallizes.
+_Avoid_: write all tests first, manual browser QA, implementation-first demo
+
+**Dev MCP Server**:
+An HTTP MCP server mode for agent development where journeys and app code can hot-reload while agents call harness tools through a standard MCP client.
+_Avoid_: one-shot stdio runner, production server, static journey snapshot
+
+**MCP-Owned Browser Session**:
+A Playwright browser/page lifecycle owned by the **Dev MCP Server**, with a persistent session id so agents can run journey steps, inspect snapshots, call forensics tools, and close the browser through MCP operations.
+_Avoid_: caller-injected page, hidden test browser, one-shot browser fixture
+
+**Visible Dev Browser**:
+A headed browser launched by MCP dev-mode operations so agents and humans can see the product surface while journeys execute, inspect parked states, and correlate artifacts with visible UI.
+_Avoid_: invisible default, CI-only headless browser, screenshot-only debugging
+
+**Browser Snapshot**:
+The primary dev-mode browser forensics tool exposed through MCP. It should summarize the current page as an agent-usable investigation packet: URL, title, semantic structure, interactive targets, stable refs, visible errors, relevant network/console signals, screenshots or crops when useful, artifacts, and next guidance.
+_Avoid_: raw DOM dump, screenshot-only artifact, selector list, generic Playwright snapshot
+
+**Dev MCP Tool Grammar**:
+The default Playwright-backed MCP tool vocabulary for journey-driven development: orientation, stack/readiness, run lifecycle, MCP-owned browser sessions, browser forensics, journey execution, artifacts, and cleanup.
+_Avoid_: ad-hoc tool pile, caller-injected Playwright objects, product-specific tool names
+
+**Showcase Build Narrative**:
+The documentation in the **Reference Showcase App** that explains how the app was built through **Harness-Driven TDD**, including the textual journeys, MCP calls, failing/passing proof loop, closure, and CI consolidation.
+_Avoid_: usage-only README, marketing demo, unexplained example app
+
+**Journey UX**:
+The agent-facing and author-facing experience of understanding, selecting, running, debugging, reseeding, and crystallizing **Executable Journeys**, including textual journey plans, MCP tool shapes, guidance actions, artifacts, and proof timelines.
+_Avoid_: raw test API, hidden runner internals, accidental CLI shape
+
+**Showcase Skill**:
+A reusable `SKILL.md` distilled from the **Showcase Build Narrative** and **Harness-Driven TDD** procedure, so future agents can build or extend apps by defining journeys, running them through MCP, and crystallizing the resulting UX into CI validation.
+_Avoid_: one-off README instructions, generic TDD advice, undocumented agent ritual
+
+**Skills Repo Initialization**:
+The bootstrap step, using `npx skills`, that prepares a repository to host and use the **Showcase Skill** workflow before agents begin journey-first development.
+_Avoid_: manual prompt copy-paste, undocumented local setup, repo-specific ritual
+
 **MCP Control Surface**:
 The Model Context Protocol interface that lets agents inspect, run, pause, debug, and tear down journeys.
 _Avoid_: harness, transport layer
@@ -124,13 +212,45 @@ _Avoid_: harness, transport layer
 - MCP/dev mode supports explicit seed-only execution for inspection; CI/closure mode may run seed automatically and fail if the **Seed Gate** fails.
 - Teardown may only plan deletion for resources in the run's **Ownership Ledger**.
 - A **Resource Adapter** defines deletion mechanics for a resource kind but cannot widen ownership implicitly.
+- **Reseed** cleans previously owned resources through registered **Resource Adapters** before applying **Environment Seed** again.
+- Every owned resource kind that may appear in the **Ownership Ledger** needs a corresponding destruction mechanic, usually supplied by a **Resource Adapter**, so the harness can orchestrate safe cleanup without product-specific guessing.
+- **Resource Adapters** may also define typed creation and inspection mechanics, but journeys and seed decide when resource creation is part of setup versus product behavior under proof.
+- The **Typed Resource Registry** is registered at the harness level so all journeys share consistent typed creation semantics and ownership handles for reseed, teardown, and artifacts.
+- Resource typing is intentionally lean: creation inputs are typed because they carry product semantics; destruction uses the owned resource kind and id; rich product observations belong in **Observed Domain Payloads**, not resource handles.
 - Teams doing **Agent-Built Development** may embed the **Harness Core** without using the **Reference Harness Server** or **Reference CLI**.
 - A **Product-Specific Harness** can be replaced when its product-specific behavior fits behind **Harness Core** extension points.
+- The **Reference Showcase App** consumes the public harness API as a product would and exists to make the harness value legible through a realistic seeded application flow, not merely to smoke-test package exports.
+- The **Reference Showcase App** should use **Managed Showcase Infrastructure** so seed, proof, closure, and teardown operate against a real stack lifecycle rather than a pre-existing local service.
+- In dev mode, stack management is part of the **Agent E2E Harness** product experience: the harness coordinates a **Managed Execution Stack** through a **Stack Provider** extension point.
+- A **Stack Provider** owns infrastructure lifecycle mechanics, while **Environment Seed** owns repeatable application state inside the ready stack.
+- A **Managed Execution Stack** is torn down by stack lifecycle, while product resources created during a journey remain bounded by the **Ownership Ledger** and **Resource Adapters**.
+- **Environment Seed** may prepare application state through product APIs, direct database access, admin clients, or other product-owned setup mechanisms; it is defined by purpose, not by transport.
+- The **Managed Execution Stack** includes dev processes as well as infrastructure services, so a product may recommend Docker/Testcontainers for repeatable dev-mode runs without making every seed operation a container concern.
+- For the **Reference Showcase App**, exercising product APIs during seed and resource cleanup is preferred because those calls are additional E2E proof surfaces, not merely setup plumbing.
+- The **Reference Stack Provider** should default to Testcontainers because it gives the showcase real disposable infrastructure while remaining CI-friendly and local-agent friendly.
+- The first **Reference Showcase App** stack should include PostgreSQL with schema initialization, so seed can operate on real persisted application state instead of browser-local state.
+- Testcontainers is the recommended standard for the first **Reference Showcase App** because it demonstrates repeatable dev-mode infrastructure without requiring pre-existing local services.
+- Infrastructure provider implementations should stay in the consumer app or a future dedicated adapter package; the main harness package should expose generic **Stack Provider** contracts, not the showcase's PostgreSQL/Testcontainers choice.
+- The recommended showcase stack is a **Dev-Mode Stack**: agents should be able to iterate application code while the harness manages disposable backing services and local dev processes.
+- The first **Reference Showcase App** should use the **Proof Notes Showcase** story because it is small, persistent, and clearly separates seeded baseline state from journey-created product-visible resources.
+- The **Reference Showcase App** should be developed through **Journey-Driven Showcase Development** so the repo demonstrates agent-built development, not only the final harness API.
+- **Journey-Driven Showcase Development** should use **Harness-Driven TDD**: define a **Textual Journey Plan**, run it through the harness MCP control surface with a standard MCP client, implement the missing app/harness behavior, then rerun until it becomes deterministic proof.
+- During **Harness-Driven TDD**, the MCP control surface should run as a **Dev MCP Server** over HTTP so journeys can hot-reload while agents iterate through MCP tools.
+- The **Dev MCP Server** should own Playwright through **MCP-Owned Browser Sessions**, not require callers to inject browser/page objects into tool calls.
+- **Visible Dev Browser** is the default for dev-mode MCP operations; closure and CI may use headless browser execution.
+- **Browser Snapshot** should be the default forensics entry point for visible browser state, combining semantic page structure, interactive refs, visual evidence, and debugging signals into one agent-readable packet.
+- The default **Dev MCP Tool Grammar** should use reusable harness vocabulary and avoid product-specific tool names.
+- The **Reference Showcase App** README should include a **Showcase Build Narrative** so future agents and humans can understand how the app was built through journeys, not just how to run it.
+- The **Reference Showcase App** should demonstrate three outcomes: a working app, deep inspectability for agents across the proof/build history, and CI-demonstrable verification.
+- **Journey UX** should be designed before implementation because the showcase is meant to teach agents how to move from textual intent to MCP-driven proof, not merely expose low-level runner functions.
+- The primary user of **Journey UX** is the coding agent in dev mode; human maintainers and CI are secondary users.
+- The procedure captured in the **Showcase Build Narrative** should be distilled into a **Showcase Skill** so agents can reuse the same journey-first development method beyond this repo.
+- The **Showcase Skill** should include **Skills Repo Initialization** so a new repository can be prepared with `npx skills` before applying the journey-first harness workflow.
 
 ## Example dialogue
 
 > **Dev:** "Are we building an MCP server or a testing library?"
-> **Domain expert:** "Both, but the **Harness Core** is the product boundary. The **Reference Harness Server** is a reusable default implementation on top, and products like Terrarium Runtime should plug their specifics into extension points and **Journey Profiles** rather than fork the harness."
+> **Domain expert:** "Both, but the **Harness Core** is the product boundary. The **Reference Harness Server** is a reusable default implementation on top, and consumer apps should plug their specifics into extension points and **Journey Profiles** rather than fork the harness."
 
 ## Flagged ambiguities
 
@@ -139,8 +259,8 @@ _Avoid_: harness, transport layer
 
 - "Journey" hierarchy initially omitted profiles — resolved: **Journey Profile** is first-class because the same **Executable Journey** must run across different seeded substrates without changing its intent.
 - **Journey Profiles** were made required rather than optional — resolved: repeatability and CI reuse require environment assumptions to be explicit from the first journey definition.
-- **Journey Profile** was sharpened from environment-only to journey variation after inspecting runtime-v2: OC1 profiles select Codex/Claude substrates, credential strategies, refs, copy matchers, seed dependencies, and profile-aware step/proof branches while preserving the same journey intent.
-- Profile-vs-journey boundary resolved: Codex local vs Claude local for first-session proof are **Journey Profiles**; first-session proof vs blocked-launch recovery are separate **Executable Journeys**.
+- **Journey Profile** was sharpened from environment-only to journey variation: profiles select runtime targets, credentials, refs, seed dependencies, and profile-aware step/proof branches while preserving the same journey intent.
+- Profile-vs-journey boundary resolved: alternative substrates for the same proof are **Journey Profiles**; materially different user goals or recovery flows are separate **Executable Journeys**.
 - Crystallization contract resolved: MCP step/phase passes are development evidence; final proof requires the declared **Closure Command** to pass non-interactively from clean seed.
 - Teardown boundary resolved: use a mandatory run-scoped **Ownership Ledger** plus **Resource Adapters** for deletion mechanics; never delete by profile prefix or arbitrary cleanup scope alone.
 - Journey data model resolved as hybrid: keep the **Inspectable Journey Contract** data-shaped for agents/CI, while allowing step and proof handlers to remain executable TypeScript.
@@ -155,3 +275,34 @@ _Avoid_: harness, transport layer
 - Guidance model resolved: `next` uses semantic **Guidance Actions** with optional executable tool/command bindings, avoiding both free-text-only guidance and MCP-only coupling.
 - Execution surface typing resolved: do not force a tiny browser port into core. Carry page/browser through **Harness Types** so journeys can use full Playwright objects by default while core remains generic.
 - Package default resolved: `@agent-e2e/harness` should default to the Playwright-specialized **Default Harness API**, while `@agent-e2e/harness/core` exposes generic factories/types.
+- Reseed cleanup resolved: reseed is first-class and should clean ownership-ledger resources via resource-kind destruction mechanics before reapplying **Environment Seed**.
+- Resource typing resolved: product resources should use a lean **Typed Resource Registry**. Type creation inputs and resource kinds; keep owned resources as minimal `kind`/`id` handles with optional label/metadata; keep rich observations in **Observed Domain Payloads**.
+- Showcase purpose resolved: the repository needs a **Reference Showcase App**, not just a technical smoke showcase. It should demonstrate seed, MCP iteration, deterministic proof, closure, artifacts, and teardown through a small realistic app while keeping showcase semantics local to this repo.
+- Showcase infrastructure direction resolved: the showcase should bring infrastructure up and tear it down as part of the process, instead of relying on localStorage or an ambient manually managed database.
+- Stack management boundary resolved: dev-mode stack management belongs to the **Agent E2E Harness** as an extension point. The harness coordinates stack lifecycle, but concrete infrastructure is supplied by product/showcase **Stack Providers** rather than hardcoded into core.
+- Reference stack direction resolved: the showcase should use a Testcontainers-backed PostgreSQL stack with schema initialization as the default demonstration of managed infrastructure.
+- Showcase provider standard resolved: Testcontainers should remain in the showcase as the recommended dev-mode infrastructure approach for the demo.
+- Provider packaging resolved: keep PostgreSQL/Testcontainers showcase-local; the public harness package exposes generic stack contracts and should not export demo infrastructure providers.
+- Dev-mode stack resolved: the showcase should favor editable-source dev mode for agent iteration, not a production-only prebuilt app image flow.
+- Showcase product story resolved: use **Proof Notes Showcase** with baseline workspace/user seed, UI-created proof note, persisted proof, owned-resource cleanup, and closure.
+- Showcase seed/cleanup transport resolved: prefer product API calls for seed and owned-resource cleanup in the showcase, because API exercise is itself useful system proof. Direct SQL remains appropriate for schema initialization and low-level stack provisioning.
+- Showcase development method resolved: build the showcase app through its own journeys iteratively, so the demo is created by the same deterministic proof workflow it teaches.
+- Showcase TDD method resolved: use **Harness-Driven TDD**. Journeys are first written as text, then exercised through the harness MCP surface via a standard MCP client; each failing journey drives the next vertical implementation slice until it passes and can later crystallize.
+- Dev MCP mode resolved: development should use an HTTP **Dev MCP Server**, not only one-shot stdio, so journey definitions and app code can hot-reload during agent iteration.
+- MCP browser ownership resolved: dev-mode MCP operations should create and manage Playwright browser/page sessions themselves, headed by default for visibility, with headless reserved for closure/CI paths.
+- Browser forensics resolved: `browser.snapshot` should be the primary MCP browser forensics tool, not a narrow DOM or screenshot helper.
+- Dev MCP tool direction resolved: use a Playwright-backed MCP tool grammar shaped around stack, run, browser, journey, artifact, cleanup, and proof operations.
+- Showcase documentation outcome resolved: the showcase README should tell how the showcase was built through the harness, producing a working app, agent-inspectable proof history, and CI-demonstrable verification.
+- Journey UX priority resolved: design the journey authoring and agent execution experience upfront before building the richer showcase, so the app demonstrates an intentional proof workflow rather than accidental tool plumbing.
+- Journey UX user priority resolved: optimize first for the coding agent in dev mode, with human review and CI execution served by the same artifacts and closure evidence.
+- Skill extraction direction resolved: document the showcase construction procedure from conception through CI crystallization so it can become a reusable `SKILL.md`.
+- Skill bootstrap resolved: the future `SKILL.md` should include repo initialization through `npx skills`, so the workflow can start from a clean repository rather than assuming local manual setup.
+- Artifact layout resolved: primary proof/debug output belongs under `.agents-e2e/artifacts/<journey>/<run>/`, with numbered `01-phase-.../01-step-.../` folders. Do not keep product-specific nesting from earlier harnesses, generic `steps/` nesting, or `.scratch` as a primary proof path.
+- Failure evidence resolved: failed journey steps must return first-class artifacts too, especially `failure.png`, `result.json`, `console.json`, `network.json`, and `step-feedback.json`, so agents can debug from MCP without hidden terminal state.
+- Skill packaging resolved: the consumer workflow skill lives in `skills/agent-e2e-harness/SKILL.md` after `npx skills init`; local installed copies under `.codex/` or `.agents/` are not versioned.
+- Proof transcript resolved: meaningful dogfood MCP runs should be summarized in `docs/showcase/mcporter-proof-transcript.md` so validation survives beyond terminal scrollback while generated `.agents-e2e/` artifacts remain ignored.
+- Showcase organization resolved: the showcase must model best-practice consumer-app layout, with app routes in `apps/showcase/app`, reusable product/harness integration code in `apps/showcase/src`, and app E2E tests in `apps/showcase/test` rather than inside `packages/harness/test`.
+- Public type fixture organization resolved: type-level public API fixtures live under `packages/harness/test-d`, close to the package they validate, instead of a repo-root `test-d` directory.
+- Showcase drift prevention resolved: shared showcase ids, proof body, baseline resources, schema SQL, URL helpers, and resource-adapter behavior live in `apps/showcase/src/proof-notes-contract.ts` so the typed Playwright journey, MCP journey, app routes, and stack provider do not duplicate those constants.
+- Showcase script boundary resolved: `apps/showcase/scripts/dev-mcp.ts` is only a CLI entrypoint compiled to an ignored runtime before Node executes it; reusable showcase-specific stack and Dev MCP journey composition live under `apps/showcase/src/harness/` so scripts do not become a parallel app architecture.
+- Dev/showcase port policy resolved: Dev MCP and showcase app ports are dynamically allocated by default and written to `.agents-e2e/dev-mcp.json`; fixed ports are explicit opt-in via `AGENT_E2E_MCP_PORT` / `AGENT_E2E_SHOWCASE_PORT`.

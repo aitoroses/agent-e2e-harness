@@ -1,21 +1,42 @@
 {
-  "name": "agent-e2e-harness-repo",
+  "name": "agent-e2e-harness",
   "version": "0.0.0",
   "private": true,
+  "description": "Reusable E2E harness for agent-driven proof loops, MCP tooling, artifacts, and CI closure.",
+  "keywords": [
+    "agent",
+    "e2e",
+    "mcp",
+    "playwright",
+    "testing",
+    "automation"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aitoroses/agent-e2e-harness.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aitoroses/agent-e2e-harness/issues"
+  },
+  "homepage": "https://github.com/aitoroses/agent-e2e-harness#readme",
+  "author": "Aitor Roses",
+  "license": "MIT",
   "type": "module",
   "workspaces": [
     "packages/*",
     "apps/*"
   ],
   "scripts": {
-    "typecheck": "npm run typecheck --workspace @agent-e2e/harness",
+    "typecheck": "npm run typecheck --workspace @agent-e2e/harness && npm run typecheck --workspace @agent-e2e/showcase",
     "build": "npm run build --workspace @agent-e2e/harness",
-    "test": "npm run build --workspace @agent-e2e/harness && npm run typecheck:public && npm run test --workspace @agent-e2e/harness",
-    "check:core-boundary": "node scripts/check-core-boundary.mjs --self-test",
-    "check": "npm run typecheck && npm run build && npm test && npm run check:core-boundary",
-    "typecheck:public": "tsc -p tsconfig.public-types.json --noEmit"
+    "test": "npm run build --workspace @agent-e2e/harness && npm run typecheck:public && npm run test --workspace @agent-e2e/harness && npm run test --workspace @agent-e2e/showcase",
+    "check:core-boundary": "npm run check:boundaries",
+    "check": "npm run typecheck && npm run build && npm test && npm run check:boundaries",
+    "typecheck:public": "tsc -p tsconfig.public-types.json --noEmit",
+    "check:boundaries": "node scripts/check-boundaries.mjs --self-test"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/node": "^22.15.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -24,6 +45,7 @@
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "typescript": "^5.8.3",
-    "vitest": "^3.1.2"
+    "vitest": "^3.1.2",
+    "zod": "^4.4.3"
   }
 }

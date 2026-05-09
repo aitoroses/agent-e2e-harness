@@ -1,18 +1,73 @@
-# Agent E2E Harness Showcase
+# Proof Notes Showcase
 
-Small Next.js consumer app for the harness package-root Playwright API.
+A Next.js demo app that dogfoods the Agent E2E Harness as a real user would:
 
-## Commands
+1. Dev MCP starts first.
+2. `stack.start` creates disposable PostgreSQL with Testcontainers and starts `next dev` as managed infrastructure.
+3. `run.begin` seeds a baseline workspace/user through the app API.
+4. `browser.open` launches a Playwright-owned headed browser by default.
+5. `browser.snapshot` exposes forensic refs.
+6. `browser.act` clicks the UI through a fresh snapshot ref.
+7. `journey.step` captures the browser-created proof note as a journey-owned resource and runs proofs.
+8. `cleanup.plan` and `run.reseed` prove owned-resource cleanup while preserving the seed baseline.
+9. `stack.stop` tears the disposable infrastructure down.
+
+The showcase intentionally uses a database in the managed stack so seed, reseed, resource ownership, and teardown are observable beyond in-memory UI state.
+
+## Real proof path
+
+Start Dev MCP. It allocates non-conflicting MCP/app ports by default, prints the URLs, and writes `.agents-e2e/dev-mcp.json`. Set `AGENT_E2E_MCP_PORT` or `AGENT_E2E_SHOWCASE_PORT` only when you intentionally need fixed ports.
 
 ```sh
-npm run dev --workspace @agent-e2e/showcase -- --hostname 127.0.0.1 --port 3100
-npm test --workspace @agent-e2e/harness -- showcase
+npm run dev:mcp --workspace @agent-e2e/showcase
+cat .agents-e2e/dev-mcp.json
 ```
 
-The showcase journey demonstrates:
+Then configure your MCP client with the printed `mcpUrl`:
 
-- explicit seed/reseed by clearing browser state and navigating to the app;
-- MCP/dev iteration through `createMcpHarnessServer`, `beginRun`, and `runStep`;
-- closure through `runClosure` from clean seed;
-- artifact IDs for seed and proof status;
-- teardown compatibility through the shared ownership-ledger APIs.
+```json
+{
+  "mcpServers": {
+    "agent-e2e-showcase": {
+      "url": "http://127.0.0.1:<port>/mcp"
+    }
+  }
+}
+```
+
+Use the agent's MCP tools in this order: `stack.start`, `run.begin`, `browser.open`, `browser.snapshot`, `browser.act`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.reseed`, and `stack.stop`. Use `appUrl` from the manifest as the browser target and append `?agentE2ERunId=<runId>` so the visible UI action writes resources owned by the active run.
+
+Artifacts are generated under `.agents-e2e/artifacts/<journey>/<run>/`. The harness deliberately avoids `.scratch`, `ui-e2e/`, and nested `steps/` directories so the returned MCP artifact refs are the debugging map:
+
+```text
+.agents-e2e/artifacts/showcase-proof-notes/showcase-dev/
+  seed-manifest.json
+  result.json
+  timeline.json
+  metrics.json
+  owned-resources.json
+  01-phase-phase-proof-notes/01-step-step-create-proof-note/
+    before.png
+    after.png
+    console.json
+    network.json
+    result.json
+    step-feedback.json
+```
+
+## Framework surfaces demonstrated
+
+- `@agent-e2e/harness/dev-mcp`: local Streamable HTTP MCP server.
+- `@agent-e2e/harness/stack`: reusable managed process stack provider.
+- `apps/showcase/src/harness/postgres-testcontainers.ts`: showcase-owned PostgreSQL Testcontainers provider.
+- `@agent-e2e/harness/playwright-mcp`: headed browser sessions, snapshots, actions, screenshots.
+- `@agent-e2e/harness/mcp`: run, step, cleanup, reseed control surface.
+
+`scripts/dev-mcp.ts` is only the runnable entrypoint and is compiled to ignored `.agents-e2e/dev-mcp-runtime/` output before Node runs it. Showcase-specific harness composition lives in `src/harness/`; shared ids, schema SQL, proof body, and resource-adapter behavior live in `src/proof-notes-contract.ts`; lifecycle mechanics belong in the framework.
+
+## Validation
+
+```sh
+npm run build --workspace @agent-e2e/showcase
+npm run test --workspace @agent-e2e/showcase -- --reporter=verbose
+```

@@ -2,11 +2,46 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "preserve",
-    "allowJs": true,
+    "allowJs": false,
     "noEmit": true,
     "incremental": true,
-    "plugins": [{ "name": "next" }]
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@agent-e2e/harness": [
+        "../../packages/harness/src/index.ts"
+      ],
+      "@agent-e2e/harness/core": [
+        "../../packages/harness/src/core/index.ts"
+      ],
+      "@agent-e2e/harness/mcp": [
+        "../../packages/harness/src/mcp/index.ts"
+      ],
+      "@agent-e2e/harness/dev-mcp": [
+        "../../packages/harness/src/dev-mcp/index.ts"
+      ],
+      "@agent-e2e/harness/playwright-mcp": [
+        "../../packages/harness/src/playwright-mcp/index.ts"
+      ],
+      "@agent-e2e/harness/stack": [
+        "../../packages/harness/src/stack/index.ts"
+      ],
+      "@agent-e2e/harness/artifacts": [
+        "../../packages/harness/src/artifacts/index.ts"
+      ]
+    }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

@@ -1,0 +1,38 @@
+:root {
+  color: #21170f;
+  background: #f7f1e8;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(
+      circle at top left,
+      rgba(193, 111, 37, 0.14),
+      transparent 34rem
+    ),
+    linear-gradient(180deg, #fffaf2 0%, #f4eadc 100%);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 0;
+}
