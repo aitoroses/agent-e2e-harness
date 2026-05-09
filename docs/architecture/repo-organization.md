@@ -4,12 +4,11 @@ This repo is both a reusable library and a dogfood showcase. The organization ru
 
 ## Standard layout
 
-- `packages/harness/src/core` — generic contracts only. No Playwright, MCP transport, Testcontainers, app, React, or DB imports.
+- `packages/harness/src/core` — generic contracts only. No Playwright, MCP transport, consumer infrastructure, app, React, or DB imports.
 - `packages/harness/src/mcp` — protocol-neutral harness control surface. It may accept execution surfaces but must not import Playwright or MCP HTTP transport.
 - `packages/harness/src/dev-mcp` — local HTTP MCP tool grammar/router/server.
 - `packages/harness/src/playwright-mcp` — MCP-owned Playwright browser sessions and forensics.
 - `packages/harness/src/stack` — generic managed-stack contracts/process provider.
-- `packages/harness/src/testcontainers` — optional Testcontainers provider.
 - `packages/harness/src/artifacts` — reusable `.agents-e2e/artifacts` recorder/reader.
 - `packages/harness/test` — harness package tests only; no imports from `apps/showcase`.
 - `packages/harness/test-d` — public type fixtures for exported harness subpaths.
@@ -25,6 +24,6 @@ This repo is both a reusable library and a dogfood showcase. The organization ru
 
 ## Current accepted compromise
 
-`apps/showcase/scripts/dev-mcp.ts` is intentionally only a public entrypoint; `npm run dev:mcp` compiles it to an ignored `.agents-e2e/dev-mcp-runtime/` runtime before Node executes it, avoiding ad-hoc TS loaders and misplaced source JavaScript. Showcase-specific stack/journey composition lives under `apps/showcase/src/harness/`; reusable lifecycle mechanics must remain in `@agent-e2e/harness`. It allocates MCP/app ports dynamically by default and writes `.agents-e2e/dev-mcp.json`; fixed ports are explicit opt-in for reproducible transcripts or external tooling.
+`apps/showcase/scripts/dev-mcp.ts` is intentionally only a public entrypoint; `npm run dev:mcp` compiles it to an ignored `.agents-e2e/dev-mcp-runtime/` runtime before Node executes it, avoiding ad-hoc TS loaders and misplaced source JavaScript. Showcase-specific stack/journey composition and its PostgreSQL Testcontainers provider live under `apps/showcase/src/harness/`; reusable lifecycle mechanics must remain in `@agent-e2e/harness`. It allocates MCP/app ports dynamically by default and writes `.agents-e2e/dev-mcp.json`; fixed ports are explicit opt-in for reproducible transcripts or external tooling.
 
 Shared showcase ids, seed constants, proof-note body, schema SQL, URLs, and resource-adapter behavior live in `apps/showcase/src/proof-notes-contract.ts` so the typed Playwright journey, MCP journey, app routes, and stack provider do not drift.

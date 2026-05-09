@@ -125,9 +125,9 @@ _Avoid_: hardcoded Docker logic, test helper, deployment adapter
 The default **Stack Provider** implementation used by the **Reference Showcase App** to demonstrate harness-managed dev-mode infrastructure lifecycle. The first reference provider should use Testcontainers with PostgreSQL and schema initialization.
 _Avoid_: production deployment provider, hidden testcontainer, app-specific script
 
-**Testcontainers Provider API**:
-The public reference provider surface for implementing **Stack Provider** lifecycle with Testcontainers while keeping Testcontainers out of the generic **Harness Core**.
-_Avoid_: core dependency, showcase-only helper, hidden Docker setup
+**Showcase Infrastructure Provider**:
+The product-owned provider code that implements **Stack Provider** lifecycle for the **Reference Showcase App**. The showcase may use Testcontainers/PostgreSQL, but that choice must not become a public harness export.
+_Avoid_: core dependency, public harness adapter, hidden Docker setup
 
 **Dev-Mode Stack**:
 A **Managed Execution Stack** optimized for agent iteration against editable source code, typically combining disposable services such as Testcontainers databases with local development processes such as a Next.js dev server.
@@ -230,7 +230,7 @@ _Avoid_: harness, transport layer
 - The **Reference Stack Provider** should default to Testcontainers because it gives the showcase real disposable infrastructure while remaining CI-friendly and local-agent friendly.
 - The first **Reference Showcase App** stack should include PostgreSQL with schema initialization, so seed can operate on real persisted application state instead of browser-local state.
 - Testcontainers is the recommended standard for the first **Reference Showcase App** because it demonstrates repeatable dev-mode infrastructure without requiring pre-existing local services.
-- The first reusable infrastructure provider should be a public **Testcontainers Provider API**, so consumers can adopt the same recommended dev-mode stack pattern shown by the showcase.
+- Infrastructure provider implementations should stay in the consumer app or a future dedicated adapter package; the main harness package should expose generic **Stack Provider** contracts, not the showcase's PostgreSQL/Testcontainers choice.
 - The recommended showcase stack is a **Dev-Mode Stack**: agents should be able to iterate application code while the harness manages disposable backing services and local dev processes.
 - The first **Reference Showcase App** should use the **Proof Notes Showcase** story because it is small, persistent, and clearly separates seeded baseline state from journey-created product-visible resources.
 - The **Reference Showcase App** should be developed through **Journey-Driven Showcase Development** so the repo demonstrates agent-built development, not only the final harness API.
@@ -281,8 +281,8 @@ _Avoid_: harness, transport layer
 - Showcase infrastructure direction resolved: the showcase should bring infrastructure up and tear it down as part of the process, instead of relying on localStorage or an ambient manually managed database.
 - Stack management boundary resolved: dev-mode stack management belongs to the **Agent E2E Harness** as an extension point. The harness coordinates stack lifecycle, but concrete infrastructure is supplied by product/showcase **Stack Providers** rather than hardcoded into core.
 - Reference stack direction resolved: the showcase should use a Testcontainers-backed PostgreSQL stack with schema initialization as the default demonstration of managed infrastructure.
-- Showcase provider standard resolved: Testcontainers should remain in the showcase as the recommended standard dev-mode infrastructure approach, even if the exact packaging of reusable provider APIs is decided separately.
-- Provider packaging resolved: ship Testcontainers as part of the public harness API now, outside the generic **Harness Core**, rather than keeping it showcase-local.
+- Showcase provider standard resolved: Testcontainers should remain in the showcase as the recommended dev-mode infrastructure approach for the demo.
+- Provider packaging resolved: keep PostgreSQL/Testcontainers showcase-local; the public harness package exposes generic stack contracts and should not export demo infrastructure providers.
 - Dev-mode stack resolved: the showcase should favor editable-source dev mode for agent iteration, not a production-only prebuilt app image flow.
 - Showcase product story resolved: use **Proof Notes Showcase** with baseline workspace/user seed, UI-created proof note, persisted proof, owned-resource cleanup, and closure.
 - Showcase seed/cleanup transport resolved: prefer product API calls for seed and owned-resource cleanup in the showcase, because API exercise is itself useful system proof. Direct SQL remains appropriate for schema initialization and low-level stack provisioning.

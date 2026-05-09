@@ -59,7 +59,7 @@ Artifacts are generated under `.agents-e2e/artifacts/<journey>/<run>/`. The harn
 
 - `@agent-e2e/harness/dev-mcp`: local Streamable HTTP MCP server.
 - `@agent-e2e/harness/stack`: reusable managed process stack provider.
-- `@agent-e2e/harness/testcontainers`: reusable PostgreSQL Testcontainers provider.
+- `apps/showcase/src/harness/postgres-testcontainers.ts`: showcase-owned PostgreSQL Testcontainers provider.
 - `@agent-e2e/harness/playwright-mcp`: headed browser sessions, snapshots, actions, screenshots.
 - `@agent-e2e/harness/mcp`: run, step, cleanup, reseed control surface.
 

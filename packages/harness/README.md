@@ -12,10 +12,9 @@ Add optional peers for the integrations you use:
 
 ```sh
 npm install -D @modelcontextprotocol/sdk playwright
-npm install -D @testcontainers/postgresql pg
 ```
 
-`@modelcontextprotocol/sdk` is needed for the local Dev MCP HTTP server. `playwright` is needed for browser sessions. Testcontainers and `pg` are only needed for the PostgreSQL stack provider.
+`@modelcontextprotocol/sdk` is needed for the local Dev MCP HTTP server. `playwright` is needed for browser sessions. Database clients, containers, queues, and other infrastructure dependencies belong in the consumer app that implements a stack provider.
 
 ## Public Exports
 
@@ -25,17 +24,15 @@ import { createMcpHarnessServer } from '@agent-e2e/harness/mcp';
 import { startDevMcpStreamableHttpServer } from '@agent-e2e/harness/dev-mcp';
 import { createPlaywrightMcpBrowserSessionManager } from '@agent-e2e/harness/playwright-mcp';
 import { createProcessStackProvider } from '@agent-e2e/harness/stack';
-import { createPostgresTestcontainersProvider } from '@agent-e2e/harness/testcontainers';
 import { createRunArtifactRecorder } from '@agent-e2e/harness/artifacts';
 ```
 
 Subpaths are intentionally split:
 
-- `core` has no Playwright, MCP transport, Testcontainers, database, or app-framework imports.
+- `core` has no Playwright, MCP transport, consumer infrastructure, database, or app-framework imports.
 - `dev-mcp` exposes the local MCP control server and tool grammar.
 - `playwright-mcp` owns browser sessions and browser forensics.
 - `stack` owns generic app/service lifecycle.
-- `testcontainers` adds the optional PostgreSQL provider.
 - `artifacts` records and reads validation evidence.
 
 ## Minimal Journey

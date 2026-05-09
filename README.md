@@ -11,7 +11,7 @@ Use it when a human asks an agent to instrument an application for E2E developme
 - Playwright MCP browser sessions with snapshots, actions, screenshots, and artifact refs.
 - Artifact recording for time travel debugging under `.agents-e2e/artifacts`.
 - Ownership-ledger cleanup so reseed deletes only resources created by the current proof.
-- Stack providers for app processes and optional PostgreSQL Testcontainers.
+- Stack contracts for app processes and other consumer-owned infrastructure.
 - Public subpath exports so consumer apps import only the surfaces they need.
 
 ## Install
@@ -26,10 +26,9 @@ Add optional runtime dependencies for the surfaces you use:
 
 ```sh
 npm install -D playwright @modelcontextprotocol/sdk
-npm install -D @testcontainers/postgresql pg
 ```
 
-The Testcontainers and PostgreSQL packages are only needed when the app proof starts a disposable PostgreSQL stack.
+Install database clients, containers, queues, or other infrastructure packages in the consumer app that owns that stack provider.
 
 ## Quick Start
 
@@ -90,7 +89,6 @@ Then drive the tool loop from the agent's MCP tool picker: `stack.start`, `run.b
 - `@agent-e2e/harness/dev-mcp` - local Streamable HTTP Dev MCP server, tool grammar, and router.
 - `@agent-e2e/harness/playwright-mcp` - MCP-owned Playwright browser sessions.
 - `@agent-e2e/harness/stack` - managed stack and process provider contracts.
-- `@agent-e2e/harness/testcontainers` - PostgreSQL Testcontainers provider.
 - `@agent-e2e/harness/artifacts` - validation artifact recorder and reader.
 
 See `packages/harness/README.md` for API examples.
@@ -100,7 +98,7 @@ See `packages/harness/README.md` for API examples.
 `apps/showcase` is a reference consumer app, not the product being tested by the harness. It demonstrates the full proof loop with a Proof Notes app:
 
 1. `dev:mcp` starts the local MCP server.
-2. `stack.start` creates disposable PostgreSQL and starts `next dev`.
+2. `stack.start` creates showcase-owned disposable PostgreSQL and starts `next dev`.
 3. `run.begin` seeds a baseline workspace/user.
 4. `browser.open`, `browser.snapshot`, and `browser.act` drive a Playwright-owned browser.
 5. `journey.step` proves a note was created and records it as run-owned.

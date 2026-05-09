@@ -30,9 +30,6 @@
       "@agent-e2e/harness/stack": [
         "../../packages/harness/src/stack/index.ts"
       ],
-      "@agent-e2e/harness/testcontainers": [
-        "../../packages/harness/src/testcontainers/index.ts"
-      ],
       "@agent-e2e/harness/artifacts": [
         "../../packages/harness/src/artifacts/index.ts"
       ]

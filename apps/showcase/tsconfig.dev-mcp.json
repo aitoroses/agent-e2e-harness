@@ -27,9 +27,6 @@
       "@agent-e2e/harness/stack": [
         "../../packages/harness/dist/stack/index.d.ts"
       ],
-      "@agent-e2e/harness/testcontainers": [
-        "../../packages/harness/dist/testcontainers/index.d.ts"
-      ],
       "@agent-e2e/harness/artifacts": [
         "../../packages/harness/dist/artifacts/index.d.ts"
       ]

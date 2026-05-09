@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   createPostgresTestcontainersProvider,
   type PostgresTestcontainersRuntime,
-} from "@agent-e2e/harness/testcontainers";
+} from "../src/harness/postgres-testcontainers.js";
 
-describe("Testcontainers PostgreSQL provider contract", () => {
+describe("showcase PostgreSQL Testcontainers provider", () => {
   it("starts PostgreSQL, applies schema SQL, reports status, and stops through injected runtime", async () => {
     const events: string[] = [];
     const runtime: PostgresTestcontainersRuntime = {

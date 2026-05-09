@@ -1,10 +1,6 @@
-import type { StackProvider, StackStatusPacket } from "../stack/index.js";
+import type { StackProvider, StackStatusPacket } from "@agent-e2e/harness/stack";
 
-export interface AgentE2ETestcontainersApiContract {
-  surface: "testcontainers-provider-contracts";
-}
-
-export interface PostgresContainerProviderConfig {
+export interface PostgresTestcontainersProviderConfig {
   image?: string;
   database: string;
   username: string;
@@ -53,16 +49,12 @@ export interface PostgresClient {
 export type PostgresRuntimeLoader =
   () => Promise<PostgresTestcontainersRuntime>;
 
-export const testcontainersApiContract: AgentE2ETestcontainersApiContract = {
-  surface: "testcontainers-provider-contracts",
-};
-
 export function createPostgresTestcontainersProvider(
-  config: PostgresContainerProviderConfig,
+  config: PostgresTestcontainersProviderConfig,
   loadRuntime: PostgresRuntimeLoader = loadPostgresRuntime,
 ): StackProvider<PostgresStackHandle> {
   return {
-    id: "testcontainers-postgres",
+    id: "showcase-postgres-testcontainer",
     async start() {
       const runtime = await loadRuntime();
       const container = await new runtime.PostgreSqlContainer(
@@ -90,7 +82,7 @@ export function createPostgresTestcontainersProvider(
     status(handle) {
       return postgresStatus(
         "ready",
-        "PostgreSQL Testcontainer is ready.",
+        "Showcase PostgreSQL Testcontainer is ready.",
         handle,
       );
     },
@@ -98,7 +90,7 @@ export function createPostgresTestcontainersProvider(
       await handle.stop();
       return postgresStatus(
         "stopped",
-        "PostgreSQL Testcontainer stopped.",
+        "Showcase PostgreSQL Testcontainer stopped.",
         handle,
       );
     },

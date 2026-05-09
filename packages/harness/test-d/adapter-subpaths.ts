@@ -1,7 +1,6 @@
 import { allocateTcpPort, type AgentE2EStackApiContract, type StackProvider } from '@agent-e2e/harness/stack';
 import type { AgentE2EDevMcpApiContract, DevMcpToolName } from '@agent-e2e/harness/dev-mcp';
 import type { AgentE2EPlaywrightMcpApiContract, BrowserSnapshotPacket } from '@agent-e2e/harness/playwright-mcp';
-import type { AgentE2ETestcontainersApiContract, PostgresContainerProviderConfig } from '@agent-e2e/harness/testcontainers';
 import type { RunArtifacts } from '@agent-e2e/harness/artifacts';
 
 type Expect<T extends true> = T;
@@ -10,7 +9,6 @@ type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ?
 type StackSurface = Expect<Equal<AgentE2EStackApiContract['surface'], 'stack-provider-contracts'>>;
 type DevMcpSurface = Expect<Equal<AgentE2EDevMcpApiContract['surface'], 'dev-mcp-http-server-contracts'>>;
 type PlaywrightMcpSurface = Expect<Equal<AgentE2EPlaywrightMcpApiContract['surface'], 'playwright-backed-mcp-contracts'>>;
-type TestcontainersSurface = Expect<Equal<AgentE2ETestcontainersApiContract['surface'], 'testcontainers-provider-contracts'>>;
 
 const toolName: DevMcpToolName = 'browser.snapshot';
 const stackProvider: StackProvider<{ id: string }> = {
@@ -43,16 +41,9 @@ const runArtifacts: RunArtifacts = {
   absDir: '/tmp/artifacts/journey-type/run-type',
   relDir: '.agents-e2e/artifacts/journey-type/run-type'
 };
-const postgresConfig: PostgresContainerProviderConfig = {
-  database: 'proof_notes',
-  username: 'agent',
-  password: 'agent'
-};
-
 void toolName;
 void stackProvider;
 void allocateTcpPort;
 void snapshot;
 void runArtifacts;
-void postgresConfig;
-export type AdapterSubpathContract = StackSurface | DevMcpSurface | PlaywrightMcpSurface | TestcontainersSurface;
+export type AdapterSubpathContract = StackSurface | DevMcpSurface | PlaywrightMcpSurface;

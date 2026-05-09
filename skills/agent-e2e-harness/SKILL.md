@@ -162,7 +162,7 @@ Time travel means an agent can answer "what happened in that run?" from artifact
 
 ## Architecture Rules
 
-- Core journey contracts must not import app frameworks, databases, MCP HTTP transports, Playwright browser implementations, or Testcontainers directly.
+- Core journey contracts must not import app frameworks, databases, MCP HTTP transports, Playwright browser implementations, or consumer infrastructure providers directly.
 - Stack providers own infrastructure lifecycle; seed owns repeatable application state inside a ready stack.
 - Seed must not create the behavior the journey is supposed to prove.
 - Cleanup must be ownership-ledger bounded; never delete by broad prefix, tenant, timestamp, or ad-hoc query alone.
@@ -184,7 +184,7 @@ Use it to inspect structure and expected behavior, not as a template to copy bli
 - `apps/showcase/src/harness/` for app-specific Dev MCP composition.
 - `apps/showcase/src/journey.ts` for a typed Playwright journey.
 - `apps/showcase/test/showcase.e2e.test.ts` for crystallized closure proof.
-- `packages/harness/src/dev-mcp`, `playwright-mcp`, `stack`, `testcontainers`, and `artifacts` for reusable package surfaces.
+- `packages/harness/src/dev-mcp`, `playwright-mcp`, `stack`, and `artifacts` for reusable package surfaces.
 
 ## Validation Before Final Answer
 
