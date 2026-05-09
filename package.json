@@ -21,6 +21,7 @@
   },
   "homepage": "https://github.com/aitoroses/agent-e2e-harness#readme",
   "author": "Aitor Roses",
+  "license": "MIT",
   "type": "module",
   "workspaces": [
     "packages/*",

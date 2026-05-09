@@ -21,6 +21,7 @@
     "url": "https://github.com/aitoroses/agent-e2e-harness/issues"
   },
   "homepage": "https://github.com/aitoroses/agent-e2e-harness/tree/main/packages/harness#readme",
+  "license": "MIT",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
