@@ -9,6 +9,11 @@ const harnessPackage = JSON.parse(
   exports: Record<string, unknown>;
   peerDependencies: Record<string, string>;
 };
+const showcasePackage = JSON.parse(
+  readFileSync(resolve(repoRoot, 'apps/showcase/package.json'), 'utf8'),
+) as {
+  scripts: Record<string, string>;
+};
 
 function entries(path: string): string[] {
   return existsSync(path) ? readdirSync(path).sort() : [];
@@ -36,8 +41,9 @@ describe('repository organization contract', () => {
     expect(existsSync(resolve(repoRoot, 'packages/harness/test/showcase.test.ts'))).toBe(false);
   });
 
-  it('uses showcase scripts only as runnable entrypoints, with reusable code under src', () => {
-    expect(entries(resolve(repoRoot, 'apps/showcase/scripts'))).toEqual(['dev-mcp.ts']);
+  it('uses the package CLI for Dev MCP instead of app-owned runnable scripts', () => {
+    expect(entries(resolve(repoRoot, 'apps/showcase/scripts'))).toEqual([]);
+    expect(showcasePackage.scripts['dev:mcp']).toContain('agent-e2e-harness dev-mcp');
   });
 
   it('keeps consumer infrastructure providers out of the published harness package', () => {

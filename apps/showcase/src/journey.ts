@@ -124,7 +124,7 @@ export function createShowcaseJourney(
                   baselineWorkspaceId,
                   baselineUserId,
                 },
-                ownedResources: [{ kind: PROOF_NOTE_RESOURCE_KIND, id: noteId }],
+                ownedResources: [{ kind: PROOF_NOTE_RESOURCE_KIND, id: noteId, baseUrl: profile.data.baseUrl }],
                 artifacts: [
                   {
                     id: "artifact:showcase-proof-note",
@@ -166,7 +166,6 @@ export type ShowcaseHarnessTypes = PlaywrightHarnessTypes<
 >;
 
 export function createShowcaseResourceAdapter(
-  baseUrl: string,
 ): ResourceAdapter<ShowcaseHarnessTypes> {
-  return createShowcaseApiResourceAdapter(baseUrl) as unknown as ResourceAdapter<ShowcaseHarnessTypes>;
+  return createShowcaseApiResourceAdapter() as unknown as ResourceAdapter<ShowcaseHarnessTypes>;
 }

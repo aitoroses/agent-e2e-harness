@@ -1,4 +1,5 @@
 import { defineJourney, type HarnessTypes } from "@agent-e2e/harness/core";
+import type { StackStatusPacket } from "@agent-e2e/harness/stack";
 import {
   BASELINE_USER,
   BASELINE_WORKSPACE,
@@ -25,8 +26,8 @@ interface ShowcaseMcpObserved {
 }
 
 export type ShowcaseMcpHarness = HarnessTypes<
-  Record<string, unknown>,
-  { baseUrl: string },
+  { stack?: StackStatusPacket },
+  Record<string, never>,
   ShowcaseMcpObserved,
   ShowcaseResource
 >;
@@ -37,13 +38,15 @@ interface NotesApiSnapshot {
   notes?: Array<{ id: string; body: string; ownedByRun: string }>;
 }
 
-export function createShowcaseMcpJourney(baseUrl: string) {
+export function createShowcaseMcpJourney() {
   return defineJourney<ShowcaseMcpHarness>({
     id: SHOWCASE_JOURNEY_ID,
     title: "Proof Notes persisted journey",
-    profiles: [{ id: SHOWCASE_PROFILE_ID, data: { baseUrl }, isDefault: true }],
-    seed: async ({ profile }) => {
-      const response = await fetch(seedApiUrl(profile.data.baseUrl), { method: "POST" });
+    profiles: [{ id: SHOWCASE_PROFILE_ID, data: {}, isDefault: true }],
+    seed: async ({ execution }) => {
+      const baseUrl = showcaseAppUrl(execution);
+      if (!baseUrl) return missingStackUrlSeed();
+      const response = await fetch(seedApiUrl(baseUrl), { method: "POST" });
       if (!response.ok) {
         return {
           errors: [
@@ -62,7 +65,7 @@ export function createShowcaseMcpJourney(baseUrl: string) {
             { kind: PROOF_BASELINE_RESOURCE_KIND, id: `baseline:user:${BASELINE_USER.id}` },
           ],
         },
-        artifacts: [{ id: "artifact:showcase-seed", kind: "url", uri: seedApiUrl(profile.data.baseUrl) }],
+        artifacts: [{ id: "artifact:showcase-seed", kind: "url", uri: seedApiUrl(baseUrl) }],
       };
     },
     phases: [
@@ -73,8 +76,16 @@ export function createShowcaseMcpJourney(baseUrl: string) {
           {
             id: SHOWCASE_STEP_ID,
             title: "Capture browser-created proof note as owned resource",
-            execute: async ({ profile, runId }) => {
-              const response = await fetch(notesApiUrl(profile.data.baseUrl), { cache: "no-store" });
+            execute: async ({ execution, runId }) => {
+              const baseUrl = showcaseAppUrl(execution);
+              if (!baseUrl) {
+                return {
+                  status: "failed",
+                  errors: ["Showcase app URL was not found in the active stack status."],
+                  guidance: [{ type: "inspect", label: "Start managed stack", target: "stack.start" }],
+                };
+              }
+              const response = await fetch(notesApiUrl(baseUrl), { cache: "no-store" });
               if (!response.ok) {
                 return {
                   status: "failed",
@@ -107,8 +118,8 @@ export function createShowcaseMcpJourney(baseUrl: string) {
                   baselineWorkspaceId: snapshot.workspace.id,
                   baselineUserId: snapshot.user.id,
                 },
-                ownedResources: [{ kind: PROOF_NOTE_RESOURCE_KIND, id: note.id }],
-                artifacts: [{ id: "artifact:showcase-proof-note", kind: "json", uri: notesApiUrl(profile.data.baseUrl) }],
+                ownedResources: [{ kind: PROOF_NOTE_RESOURCE_KIND, id: note.id, baseUrl }],
+                artifacts: [{ id: "artifact:showcase-proof-note", kind: "json", uri: notesApiUrl(baseUrl) }],
               };
             },
             proofs: [
@@ -135,3 +146,21 @@ export function createShowcaseMcpJourney(baseUrl: string) {
 }
 
 export { createShowcaseResourceAdapter };
+
+function showcaseAppUrl(execution: ShowcaseMcpHarness["executionSurface"] | undefined): string | undefined {
+  const services = execution?.stack?.services ?? [];
+  return services.find((service) => service.id === "showcase-next-dev" && service.url)?.url
+    ?? services.find((service) => service.url)?.url;
+}
+
+function missingStackUrlSeed() {
+  return {
+    errors: [
+      {
+        code: "showcase-stack-url-missing",
+        message: "Showcase app URL was not found in the active stack status.",
+        guidance: [{ type: "inspect" as const, label: "Start managed stack", target: "stack.start" }],
+      },
+    ],
+  };
+}

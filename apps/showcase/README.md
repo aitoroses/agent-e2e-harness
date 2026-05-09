@@ -16,26 +16,25 @@ The showcase intentionally uses a database in the managed stack so seed, reseed,
 
 ## Real proof path
 
-Start Dev MCP. It allocates non-conflicting MCP/app ports by default, prints the URLs, and writes `.agents-e2e/dev-mcp.json`. Set `AGENT_E2E_MCP_PORT` or `AGENT_E2E_SHOWCASE_PORT` only when you intentionally need fixed ports.
+Start Dev MCP. The showcase runs `agent-e2e-harness dev-mcp`, which uses Bun to load `agent-e2e.config.ts` directly, starts the framework-owned Dev MCP server at `127.0.0.1:3766/mcp` by default, and hot-reloads the journey registry when the config changes. Set `AGENT_E2E_MCP_PORT` only when you intentionally need a different MCP port.
 
 ```sh
 npm run dev:mcp --workspace @agent-e2e/showcase
-cat .agents-e2e/dev-mcp.json
 ```
 
-Then configure your MCP client with the printed `mcpUrl`:
+Then configure your MCP client with the stable local URL:
 
 ```json
 {
   "mcpServers": {
     "agent-e2e-showcase": {
-      "url": "http://127.0.0.1:<port>/mcp"
+      "url": "http://127.0.0.1:3766/mcp"
     }
   }
 }
 ```
 
-Use the agent's MCP tools in this order: `stack.start`, `run.begin`, `browser.open`, `browser.snapshot`, `browser.act`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.reseed`, and `stack.stop`. Use `appUrl` from the manifest as the browser target and append `?agentE2ERunId=<runId>` so the visible UI action writes resources owned by the active run.
+Use the agent's MCP tools in this order: `stack.start`, `run.begin`, `browser.open`, `browser.snapshot`, `browser.act`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.reseed`, and `stack.stop`. Use the `showcase-next-dev` URL returned by `stack.start` / `stack.status` as the browser target and append `?agentE2ERunId=<runId>` so the visible UI action writes resources owned by the active run.
 
 Artifacts are generated under `.agents-e2e/artifacts/<journey>/<run>/`. The harness deliberately avoids `.scratch`, `ui-e2e/`, and nested `steps/` directories so the returned MCP artifact refs are the debugging map:
 
@@ -63,7 +62,7 @@ Artifacts are generated under `.agents-e2e/artifacts/<journey>/<run>/`. The harn
 - `@agent-e2e/harness/playwright-mcp`: headed browser sessions, snapshots, actions, screenshots.
 - `@agent-e2e/harness/mcp`: run, step, cleanup, reseed control surface.
 
-`scripts/dev-mcp.ts` is only the runnable entrypoint and is compiled to ignored `.agents-e2e/dev-mcp-runtime/` output before Node runs it. Showcase-specific harness composition lives in `src/harness/`; shared ids, schema SQL, proof body, and resource-adapter behavior live in `src/proof-notes-contract.ts`; lifecycle mechanics belong in the framework.
+`agent-e2e.config.ts` is the conventional integration point for journeys, resource adapters, and the showcase stack provider. The runnable entrypoint is the package CLI, `agent-e2e-harness dev-mcp`. Showcase-specific harness composition lives in `src/harness/`; shared ids, schema SQL, proof body, and resource-adapter behavior live in `src/proof-notes-contract.ts`; lifecycle mechanics belong in the framework.
 
 ## Validation
 

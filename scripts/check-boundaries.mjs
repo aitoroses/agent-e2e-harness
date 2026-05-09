@@ -48,12 +48,20 @@ const boundaryScopes = [
   },
   {
     label: 'dev-mcp',
-    description: 'packages/harness/src/dev-mcp has no Playwright, Testcontainers, app, React, or DB imports',
+    description: 'packages/harness/src/dev-mcp has no direct Playwright package, Testcontainers, app, React, or DB imports',
     dir: resolve(repoRoot, 'packages/harness/src/dev-mcp'),
-    forbiddenSpecifierPatterns: adapterForbiddenSpecifierPatterns.filter(
-      (pattern) => String(pattern) !== String(/^@modelcontextprotocol\/sdk($|\/)/i),
-    ),
-    negativeFixtures: []
+    forbiddenSpecifierPatterns: [
+      /^playwright($|\/)/i,
+      /^@playwright\//i,
+      ...adapterForbiddenSpecifierPatterns.filter(
+        (pattern) =>
+          String(pattern) !== String(/^@modelcontextprotocol\/sdk($|\/)/i) &&
+          String(pattern) !== String(/(^|[/@])playwright($|[-/])/i),
+        ),
+    ],
+    negativeFixtures: [
+      resolve(repoRoot, 'packages/harness/test-fixtures/boundary-imports/dev-mcp/playwright-import.ts')
+    ]
   },
   {
     label: 'playwright-mcp',

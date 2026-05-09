@@ -63,7 +63,7 @@ describe("Next.js showcase app", () => {
     const tmpRoot = await mkdtemp(join(tmpdir(), "agent-e2e-showcase-"));
     const artifactRoot = join(tmpRoot, ".agents-e2e", "artifacts");
     const journey = createShowcaseJourney(baseUrl);
-    const resourceAdapter = createShowcaseResourceAdapter(baseUrl);
+    const resourceAdapter = createShowcaseResourceAdapter();
     const server = createMcpHarnessServer({
       journeys: [journey],
       resourceAdapters: [resourceAdapter],

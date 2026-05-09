@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "dev:mcp": "npm run build --workspace @agent-e2e/harness && tsc -p tsconfig.dev-mcp.json && node .agents-e2e/dev-mcp-runtime/scripts/dev-mcp.js",
+    "dev:mcp": "npm run build --workspace @agent-e2e/harness && agent-e2e-harness dev-mcp",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build --workspace @agent-e2e/harness && vitest run"
   },

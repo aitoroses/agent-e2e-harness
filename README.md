@@ -28,66 +28,57 @@ Add optional runtime dependencies for the surfaces you use:
 npm install -D playwright @modelcontextprotocol/sdk
 ```
 
+Dev MCP uses Bun as its TypeScript runtime. Install Bun `>=1.3.0` before adding the `dev:mcp` command.
+
 Install database clients, containers, queues, or other infrastructure packages in the consumer app that owns that stack provider.
 
 ## Quick Start
 
-Create an app-owned Dev MCP command, usually `npm run dev:mcp`, that composes your app stack, seed, journeys, browser sessions, and artifact store:
+Create a conventional `agent-e2e.config.ts` at the app root:
 
 ```ts
-import { mkdir, writeFile } from 'node:fs/promises';
-import { createMcpHarnessServer } from '@agent-e2e/harness/mcp';
-import { startDevMcpStreamableHttpServer } from '@agent-e2e/harness/dev-mcp';
-import { createPlaywrightMcpBrowserSessionManager } from '@agent-e2e/harness/playwright-mcp';
+import { defineAgentE2EConfig } from '@agent-e2e/harness/dev-mcp';
 
-const artifactRoot = '.agents-e2e/artifacts';
-const appUrl = 'http://127.0.0.1:3000';
-
-const harness = createMcpHarnessServer({
-  journeys: [myJourney],
-  resourceAdapters: [myResourceAdapter],
-  artifactRoot
-});
-
-const browserSessions = createPlaywrightMcpBrowserSessionManager({
-  artifactRoot
-});
-
-const server = await startDevMcpStreamableHttpServer({
-  harness,
+export default defineAgentE2EConfig({
   stackProvider: myStackProvider,
-  browserSessions,
-  host: '127.0.0.1',
-  port: 0
+  journeys: [myJourney],
+  resourceAdapters: [myResourceAdapter]
 });
-
-await mkdir('.agents-e2e', { recursive: true });
-await writeFile(
-  '.agents-e2e/dev-mcp.json',
-  `${JSON.stringify({ mcpUrl: server.url, appUrl, artifactRoot }, null, 2)}\n`
-);
 ```
 
-Start the Dev MCP command and register the emitted URL in your MCP client:
+Then make `npm run dev:mcp` start the framework-owned Dev MCP server through the package CLI:
+
+```json
+{
+  "scripts": {
+    "dev:mcp": "agent-e2e-harness dev-mcp"
+  }
+}
+```
+
+`agent-e2e-harness dev-mcp` creates the in-process harness server, Playwright-owned browser sessions, `.agents-e2e/artifacts`, signal handlers, and the hot-reloaded journey registry. It reloads `agent-e2e.config.ts` when it changes, so new MCP calls see updated journeys without reconnecting the MCP client. It uses `127.0.0.1:3766/mcp` by default; override with `AGENT_E2E_MCP_PORT` when needed.
+
+Start the Dev MCP command:
 
 ```sh
 npm run dev:mcp
-cat .agents-e2e/dev-mcp.json
 ```
 
-Configure a standard Streamable HTTP MCP server using the `mcpUrl` from that manifest. Most MCP clients represent it like this:
+Configure a standard Streamable HTTP MCP server using the stable local URL:
 
 ```json
 {
   "mcpServers": {
     "agent-e2e": {
-      "url": "http://127.0.0.1:<port>/mcp"
+      "url": "http://127.0.0.1:3766/mcp"
     }
   }
 }
 ```
 
 Then drive the tool loop from the agent's MCP tool picker: `stack.start`, `run.begin`, `browser.open`, `browser.snapshot`, `browser.act`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.reseed`, and `stack.stop`.
+
+The app URL is not a Dev MCP setting. Call `stack.start` or `stack.status` and use the returned `services[].url` as the `browser.open` target.
 
 `mcporter` is useful for developing or debugging this repository's MCP server, but it is not required for a consumer app.
 
@@ -117,7 +108,6 @@ See `packages/harness/README.md` for API examples.
 
 ```sh
 npm run dev:mcp --workspace @agent-e2e/showcase
-cat .agents-e2e/dev-mcp.json
 ```
 
 See `apps/showcase/README.md` for the full walkthrough.

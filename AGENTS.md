@@ -29,7 +29,7 @@ This project exists to prove that a reusable harness can guide agents through de
 
 ### Repo-internal MCP implementation checks
 
-Consumer docs should describe a standard Streamable HTTP MCP client configured with the `mcpUrl` written by `dev:mcp`. When validating this repository's Dev MCP implementation itself, `mcporter` is an acceptable low-level smoke-test client:
+Consumer docs should describe a standard Streamable HTTP MCP client configured with the stable Dev MCP URL, `http://127.0.0.1:3766/mcp`, unless the app intentionally overrides `AGENT_E2E_MCP_PORT`. When validating this repository's Dev MCP implementation itself, `mcporter` is an acceptable low-level smoke-test client:
 
 ```sh
 mcporter list http://127.0.0.1:<port>/mcp --allow-http --schema --json
@@ -44,10 +44,9 @@ The stable path is:
 
 ```sh
 npm run dev:mcp --workspace @agent-e2e/showcase
-cat .agents-e2e/dev-mcp.json
 ```
 
-`dev:mcp` is the canonical Dev MCP entrypoint. It allocates non-conflicting MCP/app ports by default and writes `mcpUrl` plus `appUrl` to `.agents-e2e/dev-mcp.json`; fixed ports are explicit opt-in via `AGENT_E2E_MCP_PORT` / `AGENT_E2E_SHOWCASE_PORT`. Consumer usage should connect a standard MCP client to `mcpUrl`. Dev MCP/server/browser sessions must be managed by documented commands with clear start/status/stop behavior. A browser session must not depend on a temporary shell or hidden `.scratch` process staying alive.
+`dev:mcp` is the canonical Dev MCP entrypoint and should delegate to `agent-e2e-harness dev-mcp`. It uses a stable MCP URL by default, `http://127.0.0.1:3766/mcp`, and keeps app URLs as stack-owned data returned by `stack.start` / `stack.status`. Fixed MCP ports are configured with `AGENT_E2E_MCP_PORT`. Consumer usage should connect a standard MCP client to the stable Dev MCP URL. Dev MCP/server/browser sessions must be managed by documented commands with clear start/status/stop behavior. A browser session must not depend on a temporary shell or hidden `.scratch` process staying alive.
 
 ### Browser proof expectation
 

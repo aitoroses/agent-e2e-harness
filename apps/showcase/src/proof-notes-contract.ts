@@ -42,6 +42,7 @@ export const PROOF_NOTES_SCHEMA_SQL = `
 export interface ProofNoteResource {
   kind: typeof PROOF_NOTE_RESOURCE_KIND;
   id: string;
+  baseUrl: string;
 }
 
 export type ShowcaseResource = ProofNoteResource | {
@@ -71,13 +72,17 @@ export function createDeletedProofNoteArtifact(resourceId: string): ArtifactRef 
 
 export function createShowcaseResourceAdapter<
   TTypes extends HarnessTypes<unknown, object, object, ShowcaseResource>,
->(baseUrl: string): ResourceAdapter<TTypes> {
+>(): ResourceAdapter<TTypes> {
   return {
     id: SHOWCASE_RESOURCE_ADAPTER_ID,
     supports: (resource) =>
-      resource.kind === PROOF_NOTE_RESOURCE_KIND && resource.id.startsWith("proof-note:"),
+      resource.kind === PROOF_NOTE_RESOURCE_KIND &&
+      resource.id.startsWith("proof-note:") &&
+      typeof resource.baseUrl === "string",
     delete: async (resource) => {
-      const response = await fetch(noteApiUrl(baseUrl, resource.id), { method: "DELETE" });
+      if (resource.kind !== PROOF_NOTE_RESOURCE_KIND)
+        throw new Error(`Unsupported showcase resource kind: ${resource.kind}`);
+      const response = await fetch(noteApiUrl(resource.baseUrl, resource.id), { method: "DELETE" });
       if (!response.ok) {
         throw new Error(`Failed to delete proof note ${resource.id}: ${response.status}`);
       }

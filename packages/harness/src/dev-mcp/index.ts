@@ -3,8 +3,14 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
+import { existsSync } from "node:fs";
+import { stat } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
-import type { McpHarnessServer, McpToolResponse } from "../mcp/index.js";
+import { extname, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import type { AnyHarnessTypes, ExecutableJourney, ResourceAdapter } from "../core/index.js";
+import { createMcpHarnessServer, type McpHarnessServer } from "../mcp/index.js";
+import type { McpToolResponse } from "../mcp/index.js";
 import type { StackProvider, StackStatusPacket } from "../stack/index.js";
 
 export interface AgentE2EDevMcpApiContract {
@@ -67,6 +73,19 @@ export type DevMcpToolName = (typeof DEV_MCP_TOOL_GRAMMAR)[number] | (typeof FUT
 
 export type DevMcpToolStatus = "ok" | "not-found" | "blocked" | "error";
 
+export const DEFAULT_DEV_MCP_HOST = "127.0.0.1";
+export const DEFAULT_DEV_MCP_PORT = 3766;
+export const DEFAULT_DEV_MCP_PATH = "/mcp";
+export const DEFAULT_AGENT_E2E_DIR = ".agents-e2e";
+export const DEFAULT_AGENT_E2E_ARTIFACT_ROOT = ".agents-e2e/artifacts";
+export const DEFAULT_DEV_MCP_CONFIG_FILES = [
+  "agent-e2e.config.ts",
+  "agent-e2e.config.mts",
+  "agent-e2e.config.js",
+  "agent-e2e.config.mjs",
+  "agent-e2e.config.cjs",
+] as const;
+
 export interface DevMcpToolResponse {
   status: DevMcpToolStatus;
   tool: DevMcpToolName | string;
@@ -84,8 +103,10 @@ export interface DevMcpBrowserSessionController {
   list: () => unknown;
 }
 
+type DevMcpHarnessProvider = McpHarnessServer | (() => Promise<McpHarnessServer | undefined> | McpHarnessServer | undefined);
+
 export interface DevMcpToolRouterOptions<TStackHandle = unknown> {
-  harness?: McpHarnessServer;
+  harness?: DevMcpHarnessProvider;
   browserSessions?: DevMcpBrowserSessionController;
   stackProvider?: StackProvider<TStackHandle>;
 }
@@ -122,9 +143,303 @@ export interface DevMcpHttpServerHandle {
   close: () => Promise<void>;
 }
 
+export interface AgentE2EDevMcpConfig<
+  TTypes extends AnyHarnessTypes = AnyHarnessTypes,
+  TStackHandle = unknown,
+> {
+  journeys: readonly ExecutableJourney<TTypes>[];
+  resourceAdapters?: readonly ResourceAdapter<TTypes>[];
+  stackProvider?: StackProvider<TStackHandle>;
+  browserSessions?: DevMcpBrowserSessionController | false;
+  harness?: DevMcpHarnessProvider;
+  artifactRoot?: string;
+  host?: string;
+  port?: number;
+  path?: string;
+  allowedOrigins?: readonly string[];
+  installSignalHandlers?: boolean;
+  logger?: Pick<Console, "log" | "error"> | false;
+}
+
+export interface AgentE2EDevMcpManifest {
+  mcpUrl: string;
+  artifactRoot: string;
+  host: string;
+  port: number;
+  path: string;
+  stack?: {
+    startTool: "stack.start";
+    statusTool: "stack.status";
+    stopTool: "stack.stop";
+  };
+}
+
+export interface AgentE2EDevMcpServerHandle extends DevMcpHttpServerHandle {
+  artifactRoot: string;
+  manifest: AgentE2EDevMcpManifest;
+}
+
+export interface LoadAgentE2EConfigOptions {
+  cwd?: string;
+  configPath?: string;
+  cacheBust?: boolean;
+}
+
+export interface StartAgentE2EDevMcpFromConfigOptions {
+  cwd?: string;
+  configPath?: string;
+  artifactRoot?: string;
+  host?: string;
+  port?: number;
+  path?: string;
+  allowedOrigins?: readonly string[];
+  installSignalHandlers?: boolean;
+  logger?: Pick<Console, "log" | "error"> | false;
+}
+
 export const devMcpApiContract: AgentE2EDevMcpApiContract = {
   surface: "dev-mcp-http-server-contracts",
 };
+
+export function defineAgentE2EConfig<
+  TTypes extends AnyHarnessTypes = AnyHarnessTypes,
+  TStackHandle = unknown,
+>(
+  config: AgentE2EDevMcpConfig<TTypes, TStackHandle>,
+): AgentE2EDevMcpConfig<TTypes, TStackHandle> {
+  return config;
+}
+
+export async function loadAgentE2EConfig<
+  TTypes extends AnyHarnessTypes = AnyHarnessTypes,
+  TStackHandle = unknown,
+>(
+  options: LoadAgentE2EConfigOptions = {},
+): Promise<AgentE2EDevMcpConfig<TTypes, TStackHandle>> {
+  const configPath = resolveAgentE2EConfigPath(options);
+  assertSupportedConfigRuntime(configPath);
+
+  const href = pathToFileURL(configPath).href;
+  const imported = await import(options.cacheBust ? `${href}?mtime=${Date.now()}` : href);
+  const config = (imported.default ?? imported.config ?? imported) as AgentE2EDevMcpConfig<TTypes, TStackHandle>;
+  if (!config || !Array.isArray(config.journeys))
+    throw new Error(`Agent E2E config must export { journeys } from ${configPath}`);
+  return config;
+}
+
+export function resolveAgentE2EConfigPath(options: LoadAgentE2EConfigOptions = {}): string {
+  const cwd = options.cwd ?? process.cwd();
+  const configPath = options.configPath
+    ? resolve(cwd, options.configPath)
+    : DEFAULT_DEV_MCP_CONFIG_FILES
+      .map((candidate) => resolve(cwd, candidate))
+      .find((candidate) => existsSync(candidate));
+  if (!configPath)
+    throw new Error(
+      `Could not find Agent E2E config. Expected one of: ${DEFAULT_DEV_MCP_CONFIG_FILES.join(", ")}`,
+    );
+  return configPath;
+}
+
+export async function startAgentE2EDevMcpFromConfig<
+  TTypes extends AnyHarnessTypes = AnyHarnessTypes,
+  TStackHandle = unknown,
+>(
+  options: StartAgentE2EDevMcpFromConfigOptions = {},
+): Promise<AgentE2EDevMcpServerHandle> {
+  const configPath = resolveAgentE2EConfigPath(options);
+  const config = await loadAgentE2EConfig<TTypes, TStackHandle>({
+    configPath,
+    cacheBust: true,
+  });
+  const artifactRoot = options.artifactRoot ?? config.artifactRoot;
+  const sourceOptions: ReloadingHarnessSourceOptions<TTypes, TStackHandle> = {
+    configPath,
+  };
+  if (artifactRoot) sourceOptions.artifactRoot = artifactRoot;
+  const source = createReloadingHarnessSource<TTypes, TStackHandle>(sourceOptions);
+  return await startAgentE2EDevMcp<TTypes, TStackHandle>({
+    ...config,
+    harness: () => source.currentHarness(),
+    ...(artifactRoot ? { artifactRoot } : {}),
+    ...(options.host ? { host: options.host } : {}),
+    ...(options.port !== undefined ? { port: options.port } : {}),
+    ...(options.path ? { path: options.path } : {}),
+    ...(options.allowedOrigins ? { allowedOrigins: options.allowedOrigins } : {}),
+    ...(options.installSignalHandlers !== undefined ? { installSignalHandlers: options.installSignalHandlers } : {}),
+    ...(options.logger !== undefined ? { logger: options.logger } : {}),
+  });
+}
+
+export async function startAgentE2EDevMcp<
+  TTypes extends AnyHarnessTypes = AnyHarnessTypes,
+  TStackHandle = unknown,
+>(
+  config?: AgentE2EDevMcpConfig<TTypes, TStackHandle>,
+): Promise<AgentE2EDevMcpServerHandle> {
+  const resolvedConfig = config ?? await loadAgentE2EConfig<TTypes, TStackHandle>();
+  const artifactRoot = resolvedConfig.artifactRoot ?? process.env.AGENT_E2E_ARTIFACT_ROOT ?? DEFAULT_AGENT_E2E_ARTIFACT_ROOT;
+  const host = resolvedConfig.host ?? process.env.AGENT_E2E_MCP_HOST ?? DEFAULT_DEV_MCP_HOST;
+  const port = resolvedConfig.port ?? optionalPort(process.env.AGENT_E2E_MCP_PORT) ?? DEFAULT_DEV_MCP_PORT;
+  const path = resolvedConfig.path ?? process.env.AGENT_E2E_MCP_PATH ?? DEFAULT_DEV_MCP_PATH;
+  const harness = resolvedConfig.harness ?? createMcpHarnessServer<TTypes>({
+    journeys: resolvedConfig.journeys,
+    ...(resolvedConfig.resourceAdapters ? { resourceAdapters: resolvedConfig.resourceAdapters } : {}),
+    artifactRoot,
+  });
+  const browserSessions = resolvedConfig.browserSessions === false
+    ? undefined
+    : resolvedConfig.browserSessions ?? await createDefaultBrowserSessions(artifactRoot);
+
+  const serverOptions: DevMcpHttpServerOptions<TStackHandle> = {
+    harness,
+    host,
+    port,
+    path,
+    allowedOrigins: resolvedConfig.allowedOrigins ?? localDevOrigins(host),
+  };
+  if (resolvedConfig.stackProvider) serverOptions.stackProvider = resolvedConfig.stackProvider;
+  if (browserSessions) serverOptions.browserSessions = browserSessions;
+  const server = await startDevMcpStreamableHttpServer<TStackHandle>(serverOptions);
+  const manifest: AgentE2EDevMcpManifest = {
+    mcpUrl: server.url,
+    artifactRoot,
+    host: server.host,
+    port: server.port,
+    path: server.path,
+    ...(resolvedConfig.stackProvider
+      ? { stack: { startTool: "stack.start", statusTool: "stack.status", stopTool: "stack.stop" } }
+      : {}),
+  };
+
+  installDevMcpSignalHandlers(server, resolvedConfig);
+  logDevMcpReady(server, artifactRoot, resolvedConfig);
+
+  return {
+    ...server,
+    artifactRoot,
+    manifest,
+  };
+}
+
+async function createDefaultBrowserSessions(
+  artifactRoot: string,
+): Promise<DevMcpBrowserSessionController> {
+  const { createPlaywrightMcpBrowserSessionManager } =
+    (await import("../playwright-mcp/index.js")) as unknown as {
+      createPlaywrightMcpBrowserSessionManager: (options: { artifactRoot?: string }) => DevMcpBrowserSessionController;
+    };
+  return createPlaywrightMcpBrowserSessionManager({ artifactRoot });
+}
+
+interface ReloadingHarnessSourceOptions<
+  TTypes extends AnyHarnessTypes,
+  TStackHandle,
+> {
+  configPath: string;
+  artifactRoot?: string;
+}
+
+function createReloadingHarnessSource<
+  TTypes extends AnyHarnessTypes,
+  TStackHandle,
+>(options: ReloadingHarnessSourceOptions<TTypes, TStackHandle>) {
+  let cachedHarness: McpHarnessServer | undefined;
+  let cachedMtimeMs = -1;
+
+  return {
+    async currentHarness(): Promise<McpHarnessServer> {
+      const currentMtimeMs = await configMtime(options.configPath);
+      if (cachedHarness && currentMtimeMs === cachedMtimeMs)
+        return cachedHarness;
+
+      const config = await loadAgentE2EConfig<TTypes, TStackHandle>({
+        configPath: options.configPath,
+        cacheBust: true,
+      });
+      const harness = await resolveHarness(config.harness);
+      cachedHarness = harness ?? createMcpHarnessServer<TTypes>({
+        journeys: config.journeys,
+        ...(config.resourceAdapters ? { resourceAdapters: config.resourceAdapters } : {}),
+        ...(options.artifactRoot ?? config.artifactRoot ? { artifactRoot: options.artifactRoot ?? config.artifactRoot } : {}),
+      });
+      cachedMtimeMs = currentMtimeMs;
+      return cachedHarness;
+    },
+  };
+}
+
+async function configMtime(path: string): Promise<number> {
+  return (await stat(path)).mtimeMs;
+}
+
+function assertSupportedConfigRuntime(configPath: string): void {
+  const extension = extname(configPath);
+  if (![".ts", ".mts", ".cts"].includes(extension)) return;
+  if ("Bun" in globalThis) return;
+  throw new Error(
+    `TypeScript Agent E2E config files require Bun as the Dev MCP runtime. Run the Dev MCP entrypoint with Bun: ${configPath}`,
+  );
+}
+
+function installDevMcpSignalHandlers<
+  TTypes extends AnyHarnessTypes,
+  TStackHandle,
+>(
+  server: DevMcpHttpServerHandle,
+  config: AgentE2EDevMcpConfig<TTypes, TStackHandle>,
+): void {
+  if (config.installSignalHandlers === false) return;
+  const logger = config.logger === false ? undefined : config.logger ?? console;
+  const shutdown = (signal: NodeJS.Signals) => {
+    void (async () => {
+      logger?.log(`\n${signal} received; stopping Agent E2E Dev MCP...`);
+      try {
+        await server.close();
+        process.exit(0);
+      } catch (error) {
+        logger?.error(error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    })();
+  };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
+}
+
+function logDevMcpReady<
+  TTypes extends AnyHarnessTypes,
+  TStackHandle,
+>(
+  server: DevMcpHttpServerHandle,
+  artifactRoot: string,
+  config: AgentE2EDevMcpConfig<TTypes, TStackHandle>,
+): void {
+  if (config.logger === false) return;
+  const logger = config.logger ?? console;
+  logger.log("Agent E2E Dev MCP ready");
+  logger.log(`  MCP:       ${server.url}`);
+  logger.log(`  Stack:     ${config.stackProvider ? "call stack.start; use returned service URLs as browser targets" : "not configured"}`);
+  logger.log("  Browser:   Playwright-owned MCP sessions enabled");
+  logger.log(`  Artifacts: ${artifactRoot}`);
+}
+
+function localDevOrigins(host: string): readonly string[] {
+  return [
+    `http://${host}`,
+    `http://${host}:0`,
+    "http://localhost",
+    "http://localhost:0",
+  ];
+}
+
+function optionalPort(value: string | number | undefined | null): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65_535)
+    throw new Error(`Invalid port: ${value}`);
+  return parsed;
+}
 
 export function createDevMcpToolRouter<TStackHandle = unknown>(
   options: DevMcpToolRouterOptions<TStackHandle> = {},
@@ -145,7 +460,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             ready: true,
           });
         case "journey.list":
-          return fromHarness(name, options.harness, "listJourneys", args);
+          return fromHarness(name, await resolveHarness(options.harness), "listJourneys", args);
         case "journey.validate":
         case "journey.prompt":
           return ok(name, {
@@ -153,20 +468,30 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             next: { actions: [{ id: "list-journeys", tool: "journey.list" }] },
           });
         case "run.begin":
-          return fromHarness(name, options.harness, "beginRun", withBrowserExecution(args, options.browserSessions));
+          return fromHarness(
+            name,
+            await resolveHarness(options.harness),
+            "beginRun",
+            withDevExecution(args, options.browserSessions, await currentStackStatus()),
+          );
         case "run.reseed":
-          return fromHarness(name, options.harness, "reseedRun", args);
+          return fromHarness(name, await resolveHarness(options.harness), "reseedRun", args);
         case "run.teardown":
-          return fromHarness(name, options.harness, "teardown", args);
+          return fromHarness(name, await resolveHarness(options.harness), "teardown", args);
         case "cleanup.plan":
-          return fromHarness(name, options.harness, "cleanupPlan", args);
+          return fromHarness(name, await resolveHarness(options.harness), "cleanupPlan", args);
         case "artifact.read":
-          return fromHarness(name, options.harness, "readArtifact", args);
+          return fromHarness(name, await resolveHarness(options.harness), "readArtifact", args);
         case "journey.step":
-          return fromHarness(name, options.harness, "runStep", withBrowserExecution(args, options.browserSessions));
+          return fromHarness(
+            name,
+            await resolveHarness(options.harness),
+            "runStep",
+            withDevExecution(args, options.browserSessions, await currentStackStatus()),
+          );
         case "journey.phase":
         case "journey.untilPhase":
-          return fromHarness(name, options.harness, "runPhase", args);
+          return fromHarness(name, await resolveHarness(options.harness), "runPhase", args);
         case "journey.run":
           return blocked(
             name,
@@ -306,6 +631,11 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
     }
   }
 
+  async function currentStackStatus(): Promise<StackStatusPacket | undefined> {
+    if (!options.stackProvider || stackHandle === undefined) return undefined;
+    return await options.stackProvider.status(stackHandle);
+  }
+
   async function dispose(): Promise<DevMcpDisposeResult> {
     const errors: string[] = [];
     let stack: StackStatusPacket | undefined;
@@ -441,14 +771,31 @@ async function fromHarness(
   return { ...normalized, tool };
 }
 
-function withBrowserExecution(
+async function resolveHarness(
+  harness: DevMcpToolRouterOptions["harness"],
+): Promise<McpHarnessServer | undefined> {
+  return typeof harness === "function" ? await harness() : harness;
+}
+
+function withDevExecution(
   args: Record<string, unknown>,
   browserSessions: DevMcpBrowserSessionController | undefined,
+  stack: StackStatusPacket | undefined,
 ): Record<string, unknown> {
-  if (args.execution !== undefined) return args;
-  if (typeof args.browserSessionId !== "string") return args;
-  const execution = browserSessions?.execution?.(args.browserSessionId);
+  if (args.execution !== undefined)
+    return stack ? { ...args, execution: withStackStatus(args.execution, stack) } : args;
+  const browserExecution = typeof args.browserSessionId === "string"
+    ? browserSessions?.execution?.(args.browserSessionId)
+    : undefined;
+  const execution = stack ? withStackStatus(browserExecution, stack) : browserExecution;
   return execution === undefined ? args : { ...args, execution };
+}
+
+function withStackStatus(execution: unknown, stack: StackStatusPacket): unknown {
+  if (execution === undefined) return { stack };
+  if (!isRecord(execution)) return execution;
+  if ("stack" in execution) return execution;
+  return { ...execution, stack };
 }
 
 function normalizeHarnessResponse(response: McpToolResponse): {

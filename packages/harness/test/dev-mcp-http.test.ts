@@ -1,9 +1,18 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { defineJourney, type HarnessTypes } from "@agent-e2e/harness/core";
 import {
+  defineAgentE2EConfig,
+  loadAgentE2EConfig,
+  startAgentE2EDevMcpFromConfig,
+  startAgentE2EDevMcp,
   startDevMcpStreamableHttpServer,
+  DEFAULT_DEV_MCP_PORT,
   type DevMcpHttpServerHandle,
 } from "@agent-e2e/harness/dev-mcp";
 import { createMcpHarnessServer } from "@agent-e2e/harness/mcp";
@@ -185,4 +194,132 @@ describe("Dev MCP Streamable HTTP server", () => {
     }
     expect(events).toEqual(["start", "stop:stack-1"]);
   });
+
+  it("starts a convention-based Dev MCP server without requiring a manifest file", async () => {
+    const tmpRoot = await mkdtemp(join(tmpdir(), "agent-e2e-dev-mcp-"));
+    const artifactRoot = join(tmpRoot, ".agents-e2e", "artifacts");
+    const config = defineAgentE2EConfig<HttpHarness>({
+      journeys: [makeHttpJourney()],
+      artifactRoot,
+      port: 0,
+      browserSessions: false,
+      installSignalHandlers: false,
+      logger: false,
+    });
+
+    const server = await startAgentE2EDevMcp(config);
+    handles.push(server);
+
+    expect(server.manifest).toMatchObject({
+      mcpUrl: server.url,
+      artifactRoot,
+      path: "/mcp",
+    });
+    expect(server.manifest).not.toHaveProperty("appUrl");
+
+    const client = new Client({
+      name: "agent-e2e-convention-client",
+      version: "0.0.0",
+    });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(server.url)),
+    );
+    try {
+      const list = await client.callTool({
+        name: "journey.list",
+        arguments: {},
+      });
+      const text = list.content[0]?.type === "text" ? list.content[0].text : "";
+      expect(JSON.parse(text)).toMatchObject({
+        status: "ok",
+        journeys: [{ id: "journey:http" }],
+      });
+    } finally {
+      await client.close();
+      await server.close();
+      handles = handles.filter((handle) => handle !== server);
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("loads conventional Agent E2E config modules", async () => {
+    const tmpRoot = await mkdtemp(join(tmpdir(), "agent-e2e-config-"));
+    const configPath = join(tmpRoot, "agent-e2e.config.mjs");
+    await writeFile(configPath, "export default { journeys: [] };\n");
+
+    await expect(loadAgentE2EConfig({ cwd: tmpRoot })).resolves.toMatchObject({
+      journeys: [],
+    });
+    expect(DEFAULT_DEV_MCP_PORT).toBe(3766);
+
+    await rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("requires Bun for TypeScript Agent E2E config modules", async () => {
+    if ("Bun" in globalThis) return;
+    const tmpRoot = await mkdtemp(join(tmpdir(), "agent-e2e-ts-config-"));
+    const configPath = join(tmpRoot, "agent-e2e.config.ts");
+    await writeFile(configPath, "export default { journeys: [] };\n");
+
+    await expect(loadAgentE2EConfig({ cwd: tmpRoot })).rejects.toThrow("require Bun");
+
+    await rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("reloads journey config without restarting the Dev MCP endpoint", async () => {
+    const tmpRoot = await mkdtemp(join(tmpdir(), "agent-e2e-reload-"));
+    const configPath = join(tmpRoot, "agent-e2e.config.mjs");
+    await writeConfig(configPath, "journey:one");
+
+    const server = await startAgentE2EDevMcpFromConfig({
+      configPath,
+      port: 0,
+      installSignalHandlers: false,
+      logger: false,
+    });
+    handles.push(server);
+    const client = new Client({
+      name: "agent-e2e-reload-client",
+      version: "0.0.0",
+    });
+    await client.connect(new StreamableHTTPClientTransport(new URL(server.url)));
+
+    try {
+      await expect(listJourneyIds(client)).resolves.toEqual(["journey:one"]);
+      await delay(20);
+      await writeConfig(configPath, "journey:two");
+      await expect(listJourneyIds(client)).resolves.toEqual(["journey:two"]);
+    } finally {
+      await client.close();
+      await server.close();
+      handles = handles.filter((handle) => handle !== server);
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });
+
+async function listJourneyIds(client: Client): Promise<string[]> {
+  const list = await client.callTool({ name: "journey.list", arguments: {} });
+  const text = list.content[0]?.type === "text" ? list.content[0].text : "";
+  const payload = JSON.parse(text) as { journeys: Array<{ id: string }> };
+  return payload.journeys.map((journey) => journey.id);
+}
+
+async function writeConfig(path: string, journeyId: string): Promise<void> {
+  await writeFile(
+    path,
+    `import { defineJourney } from '@agent-e2e/harness/core';
+export default {
+  browserSessions: false,
+  journeys: [
+    defineJourney({
+      id: ${JSON.stringify(journeyId)},
+      title: 'Reloaded journey',
+      profiles: [{ id: 'default', data: {}, isDefault: true }],
+      phases: [{ id: 'phase:reload', title: 'Reload', steps: [{ id: 'step:reload', title: 'Reload step', execute: async () => ({ status: 'passed' }) }] }]
+    })
+  ]
+};
+`,
+  );
+}
