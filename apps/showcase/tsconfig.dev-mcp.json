@@ -33,6 +33,7 @@
     }
   },
   "include": [
+    "agent-e2e.config.ts",
     "scripts/dev-mcp.ts",
     "src/harness/**/*.ts",
     "src/proof-notes-contract.ts"

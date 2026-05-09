@@ -1,6 +1,6 @@
 # Dev MCP proof transcript
 
-Captured on 2026-05-07 against the local showcase Dev MCP endpoint using the public user path. This transcript intentionally pins ports for reproducible reading; the current default Dev MCP path dynamically allocates ports and writes `.agents-e2e/dev-mcp.json`. The transcript preserves the proof shape without committing generated `.agents-e2e/` binaries.
+Captured on 2026-05-07 against the local showcase Dev MCP endpoint using the public user path. This transcript intentionally pins ports for reproducible reading; the current default Dev MCP path uses a stable MCP port and writes `.agents-e2e/dev-mcp.json`. App URLs are returned by stack tools. The transcript preserves the proof shape without committing generated `.agents-e2e/` binaries.
 
 ## Command path
 

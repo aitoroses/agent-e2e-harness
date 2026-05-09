@@ -1,5 +1,5 @@
 import { allocateTcpPort, type AgentE2EStackApiContract, type StackProvider } from '@agent-e2e/harness/stack';
-import type { AgentE2EDevMcpApiContract, DevMcpToolName } from '@agent-e2e/harness/dev-mcp';
+import { defineAgentE2EConfig, DEFAULT_DEV_MCP_PORT, type AgentE2EDevMcpApiContract, type DevMcpToolName } from '@agent-e2e/harness/dev-mcp';
 import type { AgentE2EPlaywrightMcpApiContract, BrowserSnapshotPacket } from '@agent-e2e/harness/playwright-mcp';
 import type { RunArtifacts } from '@agent-e2e/harness/artifacts';
 
@@ -23,6 +23,12 @@ const stackProvider: StackProvider<{ id: string }> = {
     return { status: 'stopped', summary: 'stopped', services: [], artifacts: [], warnings: [], errors: [] };
   }
 };
+const devMcpConfig = defineAgentE2EConfig({
+  journeys: [],
+  stackProvider,
+  port: DEFAULT_DEV_MCP_PORT,
+  browserSessions: false
+});
 const snapshot: BrowserSnapshotPacket = {
   status: 'ok',
   browserSessionId: 'browser-1',
@@ -43,6 +49,7 @@ const runArtifacts: RunArtifacts = {
 };
 void toolName;
 void stackProvider;
+void devMcpConfig;
 void allocateTcpPort;
 void snapshot;
 void runArtifacts;

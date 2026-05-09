@@ -47,7 +47,7 @@ npm run dev:mcp --workspace @agent-e2e/showcase
 cat .agents-e2e/dev-mcp.json
 ```
 
-`dev:mcp` is the canonical Dev MCP entrypoint. It allocates non-conflicting MCP/app ports by default and writes `mcpUrl` plus `appUrl` to `.agents-e2e/dev-mcp.json`; fixed ports are explicit opt-in via `AGENT_E2E_MCP_PORT` / `AGENT_E2E_SHOWCASE_PORT`. Consumer usage should connect a standard MCP client to `mcpUrl`. Dev MCP/server/browser sessions must be managed by documented commands with clear start/status/stop behavior. A browser session must not depend on a temporary shell or hidden `.scratch` process staying alive.
+`dev:mcp` is the canonical Dev MCP entrypoint. It uses a stable MCP port by default, writes `mcpUrl` to `.agents-e2e/dev-mcp.json`, and keeps app URLs as stack-owned data returned by `stack.start` / `stack.status`. Fixed MCP ports are configured with `AGENT_E2E_MCP_PORT`. Consumer usage should connect a standard MCP client to `mcpUrl`. Dev MCP/server/browser sessions must be managed by documented commands with clear start/status/stop behavior. A browser session must not depend on a temporary shell or hidden `.scratch` process staying alive.
 
 ### Browser proof expectation
 

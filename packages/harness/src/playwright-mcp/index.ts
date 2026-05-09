@@ -1,4 +1,5 @@
 import type { Browser, Page } from "playwright";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   createRunArtifacts,
   forensicsRelativePath,
@@ -113,6 +114,8 @@ export const PLAYWRIGHT_MCP_DEFAULT_BROWSER_MODE: BrowserSessionMode = {
 export const playwrightMcpApiContract: AgentE2EPlaywrightMcpApiContract = {
   surface: "playwright-backed-mcp-contracts",
 };
+
+const BROWSER_CLOSE_TIMEOUT_MS = 1_000;
 
 export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot?: string } = {}) {
   const sessions = new Map<string, BrowserSession>();
@@ -463,8 +466,8 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
   async function close(browserSessionId: string): Promise<BrowserCloseResult> {
     const session = sessions.get(browserSessionId);
     if (!session) return { status: "not-found", browserSessionId };
-    await session.browser.close();
     sessions.delete(browserSessionId);
+    await closeBrowserBounded(session.browser);
     return { status: "closed", browserSessionId };
   }
 
@@ -493,6 +496,15 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
   }
 
   return { open, snapshot, act, screenshot, close, closeAll, list, execution };
+}
+
+async function closeBrowserBounded(browser: Browser): Promise<void> {
+  const close = browser.close();
+  await Promise.race([
+    close,
+    delay(BROWSER_CLOSE_TIMEOUT_MS).then(() => undefined),
+  ]);
+  void close.catch(() => undefined);
 }
 
 function screenshotFilename(value: string): string {

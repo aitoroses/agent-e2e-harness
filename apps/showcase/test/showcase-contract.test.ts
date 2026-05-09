@@ -17,10 +17,12 @@ describe("showcase journey contracts", () => {
   it("keeps the Dev MCP and CI journey contracts aligned", () => {
     const baseUrl = "http://127.0.0.1:3000";
     const ciContract = createShowcaseJourney(baseUrl).toInspectableContract();
-    const devMcpContract = createShowcaseMcpJourney(baseUrl).toInspectableContract();
+    const devMcpContract = createShowcaseMcpJourney().toInspectableContract();
 
     expect(devMcpContract.id).toBe(ciContract.id);
-    expect(devMcpContract.profiles).toEqual(ciContract.profiles);
+    expect(devMcpContract.profiles.map((profile) => profile.id)).toEqual(
+      ciContract.profiles.map((profile) => profile.id),
+    );
     expect(devMcpContract.phases.map((phase) => phase.id)).toEqual(
       ciContract.phases.map((phase) => phase.id),
     );
@@ -43,9 +45,9 @@ describe("showcase journey contracts", () => {
       },
     ]);
 
-    const journey = createShowcaseMcpJourney("http://showcase.local");
+    const journey = createShowcaseMcpJourney();
     const begin = await beginJourneyRun(journey, {
-      execution: {},
+      execution: showcaseStackExecution(),
       runId: "showcase-dev",
     });
     expect(begin.status).toBe("running");
@@ -77,9 +79,9 @@ describe("showcase journey contracts", () => {
       },
     ]);
 
-    const journey = createShowcaseMcpJourney("http://showcase.local");
+    const journey = createShowcaseMcpJourney();
     const begin = await beginJourneyRun(journey, {
-      execution: {},
+      execution: showcaseStackExecution(),
       runId: "showcase-dev",
     });
     expect(begin.status).toBe("running");
@@ -96,10 +98,23 @@ describe("showcase journey contracts", () => {
       noteOwnedByRun: "showcase-dev",
     });
     expect(result.ownedResources).toEqual([
-      { kind: "proof-note", id: "proof-note:current" },
+      { kind: "proof-note", id: "proof-note:current", baseUrl: "http://showcase.local" },
     ]);
   });
 });
+
+function showcaseStackExecution() {
+  return {
+    stack: {
+      status: "ready" as const,
+      summary: "ready",
+      services: [{ id: "showcase-next-dev", status: "ready" as const, url: "http://showcase.local" }],
+      artifacts: [],
+      warnings: [],
+      errors: [],
+    },
+  };
+}
 
 function stubShowcaseApi(
   notes: Array<{ id: string; body: string; ownedByRun: string }>,

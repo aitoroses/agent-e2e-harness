@@ -32,43 +32,30 @@ Install database clients, containers, queues, or other infrastructure packages i
 
 ## Quick Start
 
-Create an app-owned Dev MCP command, usually `npm run dev:mcp`, that composes your app stack, seed, journeys, browser sessions, and artifact store:
+Create a conventional `agent-e2e.config.ts` at the app root:
 
 ```ts
-import { mkdir, writeFile } from 'node:fs/promises';
-import { createMcpHarnessServer } from '@agent-e2e/harness/mcp';
-import { startDevMcpStreamableHttpServer } from '@agent-e2e/harness/dev-mcp';
-import { createPlaywrightMcpBrowserSessionManager } from '@agent-e2e/harness/playwright-mcp';
+import { defineAgentE2EConfig } from '@agent-e2e/harness/dev-mcp';
 
-const artifactRoot = '.agents-e2e/artifacts';
-const appUrl = 'http://127.0.0.1:3000';
-
-const harness = createMcpHarnessServer({
-  journeys: [myJourney],
-  resourceAdapters: [myResourceAdapter],
-  artifactRoot
-});
-
-const browserSessions = createPlaywrightMcpBrowserSessionManager({
-  artifactRoot
-});
-
-const server = await startDevMcpStreamableHttpServer({
-  harness,
+export default defineAgentE2EConfig({
   stackProvider: myStackProvider,
-  browserSessions,
-  host: '127.0.0.1',
-  port: 0
+  journeys: [myJourney],
+  resourceAdapters: [myResourceAdapter]
 });
-
-await mkdir('.agents-e2e', { recursive: true });
-await writeFile(
-  '.agents-e2e/dev-mcp.json',
-  `${JSON.stringify({ mcpUrl: server.url, appUrl, artifactRoot }, null, 2)}\n`
-);
 ```
 
-Start the Dev MCP command and register the emitted URL in your MCP client:
+Then make `npm run dev:mcp` start the framework-owned Dev MCP server:
+
+```ts
+import { startAgentE2EDevMcp } from '@agent-e2e/harness/dev-mcp';
+import config from '../agent-e2e.config.js';
+
+await startAgentE2EDevMcp(config);
+```
+
+`startAgentE2EDevMcp` creates the in-process harness server, Playwright-owned browser sessions, `.agents-e2e/artifacts`, and `.agents-e2e/dev-mcp.json` for you. It uses `127.0.0.1:3766/mcp` by default; override with `AGENT_E2E_MCP_PORT` when needed.
+
+Start the Dev MCP command and register the emitted `mcpUrl` in your MCP client:
 
 ```sh
 npm run dev:mcp
@@ -88,6 +75,8 @@ Configure a standard Streamable HTTP MCP server using the `mcpUrl` from that man
 ```
 
 Then drive the tool loop from the agent's MCP tool picker: `stack.start`, `run.begin`, `browser.open`, `browser.snapshot`, `browser.act`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.reseed`, and `stack.stop`.
+
+The app URL is not a Dev MCP setting. Call `stack.start` or `stack.status` and use the returned `services[].url` as the `browser.open` target.
 
 `mcporter` is useful for developing or debugging this repository's MCP server, but it is not required for a consumer app.
 
