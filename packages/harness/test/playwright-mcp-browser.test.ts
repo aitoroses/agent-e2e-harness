@@ -33,10 +33,10 @@ describe('Playwright MCP browser session manager', () => {
 
     const pageHtml = encodeURIComponent(`<!doctype html>
       <html>
-        <head><title>Proof Notes</title></head>
+        <head><title>Example Browser</title></head>
         <body>
-          <h1>Proof Notes</h1>
-          <button>Create proof note</button>
+          <h1>Example Browser</h1>
+          <button>Create record</button>
           <p role="alert">Seed warning is visible</p>
         </body>
       </html>`);
@@ -52,10 +52,10 @@ describe('Playwright MCP browser session manager', () => {
 
     expect(snapshot).toMatchObject({
       status: 'ok',
-      title: 'Proof Notes',
+      title: 'Example Browser',
       refs: expect.arrayContaining([
-        expect.objectContaining({ ref: '@e1', role: 'heading', name: 'Proof Notes' }),
-        expect.objectContaining({ role: 'button', name: 'Create proof note' })
+        expect.objectContaining({ ref: '@e1', role: 'heading', name: 'Example Browser' }),
+        expect.objectContaining({ role: 'button', name: 'Create record' })
       ]),
       errors: [{ code: 'visible-error-1', message: 'Seed warning is visible' }]
     });
@@ -82,8 +82,8 @@ describe('Playwright MCP browser session manager', () => {
         <head><title>Browser Act</title></head>
         <body>
           <h1>Browser Act</h1>
-          <button onclick="document.querySelector('[data-note-id]').textContent = 'created through act'">Create proof note</button>
-          <p data-note-id="proof-note:test">empty</p>
+          <button onclick="document.querySelector('[data-testid]').textContent = 'created through act'">Create record</button>
+          <p data-testid="record:test">empty</p>
         </body>
       </html>`);
     const open = await manager.open({
@@ -93,7 +93,7 @@ describe('Playwright MCP browser session manager', () => {
       runId: 'browser-act-run',
     });
     const before = await manager.snapshot(open.browserSessionId);
-    const button = before.refs.find((ref) => ref.role === 'button' && ref.name === 'Create proof note');
+    const button = before.refs.find((ref) => ref.role === 'button' && ref.name === 'Create record');
 
     expect(button?.ref).toBeTruthy();
     const action = await manager.act({
@@ -104,7 +104,7 @@ describe('Playwright MCP browser session manager', () => {
     expect(action).toMatchObject({
       status: 'ok',
       action: 'click',
-      target: { role: 'button', name: 'Create proof note' },
+      target: { role: 'button', name: 'Create record' },
       artifact: expect.objectContaining({
         kind: 'screenshot',
         name: 'screenshot',
@@ -120,10 +120,39 @@ describe('Playwright MCP browser session manager', () => {
         expect.objectContaining({
           role: 'p',
           name: 'created through act',
-          selector: expect.stringContaining('proof-note'),
+          selector: expect.stringContaining('record'),
         }),
       ]),
     );
+    await rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('keeps requested screenshot paths inside the run forensics directory', async () => {
+    const tmpRoot = await mkdtemp(join(tmpdir(), 'agent-e2e-browser-path-'));
+    const artifactRoot = join(tmpRoot, '.agents-e2e', 'artifacts');
+    const manager = createPlaywrightMcpBrowserSessionManager({ artifactRoot });
+    managers.push(manager);
+
+    const open = await manager.open({
+      headed: false,
+      targetUrl: 'data:text/html,<h1>Contained screenshot</h1>',
+      journeyId: 'journey:screenshot',
+      runId: 'run:screenshot',
+    });
+    const screenshot = await manager.screenshot({
+      browserSessionId: open.browserSessionId,
+      path: '../../outside.png',
+    });
+
+    expect(screenshot).toMatchObject({
+      status: 'ok',
+      artifact: expect.objectContaining({
+        path: expect.stringContaining('.agents-e2e/artifacts/journey-screenshot/run-screenshot/forensics/outside.png'),
+      }),
+    });
+    expect(screenshot.artifact?.path).not.toContain('../../outside.png');
+    expect(existsSync(screenshot.artifact?.path ?? '')).toBe(true);
+    expect(existsSync(join(tmpRoot, 'outside.png'))).toBe(false);
     await rm(tmpRoot, { recursive: true, force: true });
   });
 

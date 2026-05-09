@@ -51,16 +51,16 @@ describe('Dev MCP Tool Grammar contracts', () => {
       status: 'ok',
       browserSessionId: 'browser-visible-dev',
       url: 'http://127.0.0.1:3000',
-      title: 'Proof Notes',
-      summary: 'Proof Notes is ready for the next action.',
-      refs: [{ ref: '@e1', role: 'button', name: 'Create proof note' }],
+      title: 'Example App',
+      summary: 'Example App is ready for the next action.',
+      refs: [{ ref: '@e1', role: 'button', name: 'Create record' }],
       artifacts: [{ id: 'artifact:snapshot', kind: 'json', uri: 'artifact://snapshot.json' }],
       warnings: [],
       errors: [],
-      next: { actions: [{ id: 'create-note', tool: 'browser.act', why: 'Exercise the next visible UI affordance.' }] }
+      next: { actions: [{ id: 'create-record', tool: 'browser.act', why: 'Exercise the next visible UI affordance.' }] }
     };
 
-    expect(packet.refs[0]).toEqual({ ref: '@e1', role: 'button', name: 'Create proof note' });
+    expect(packet.refs[0]).toEqual({ ref: '@e1', role: 'button', name: 'Create record' });
     expect(packet.next.actions[0]).toMatchObject({ tool: 'browser.act' });
   });
 });

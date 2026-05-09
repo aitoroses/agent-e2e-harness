@@ -35,27 +35,37 @@ Install database clients, containers, queues, or other infrastructure packages i
 Create an app-owned Dev MCP command, usually `npm run dev:mcp`, that composes your app stack, seed, journeys, browser sessions, and artifact store:
 
 ```ts
+import { mkdir, writeFile } from 'node:fs/promises';
 import { createMcpHarnessServer } from '@agent-e2e/harness/mcp';
 import { startDevMcpStreamableHttpServer } from '@agent-e2e/harness/dev-mcp';
 import { createPlaywrightMcpBrowserSessionManager } from '@agent-e2e/harness/playwright-mcp';
 
+const artifactRoot = '.agents-e2e/artifacts';
+const appUrl = 'http://127.0.0.1:3000';
+
 const harness = createMcpHarnessServer({
   journeys: [myJourney],
   resourceAdapters: [myResourceAdapter],
-  artifactRoot: '.agents-e2e/artifacts'
+  artifactRoot
 });
 
 const browserSessions = createPlaywrightMcpBrowserSessionManager({
-  artifactRoot: '.agents-e2e/artifacts'
+  artifactRoot
 });
 
-await startDevMcpStreamableHttpServer({
+const server = await startDevMcpStreamableHttpServer({
   harness,
   stackProvider: myStackProvider,
   browserSessions,
   host: '127.0.0.1',
   port: 0
 });
+
+await mkdir('.agents-e2e', { recursive: true });
+await writeFile(
+  '.agents-e2e/dev-mcp.json',
+  `${JSON.stringify({ mcpUrl: server.url, appUrl, artifactRoot }, null, 2)}\n`
+);
 ```
 
 Start the Dev MCP command and register the emitted URL in your MCP client:

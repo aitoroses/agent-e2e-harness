@@ -5,7 +5,7 @@ This repo is both a reusable library and a dogfood showcase. The organization ru
 ## Standard layout
 
 - `packages/harness/src/core` — generic contracts only. No Playwright, MCP transport, consumer infrastructure, app, React, or DB imports.
-- `packages/harness/src/mcp` — protocol-neutral harness control surface. It may accept execution surfaces but must not import Playwright or MCP HTTP transport.
+- `packages/harness/src/mcp` — protocol-neutral harness control surface and artifact orchestration. It may record generic artifacts from injected execution surfaces, but must not import Playwright or MCP HTTP transport.
 - `packages/harness/src/dev-mcp` — local HTTP MCP tool grammar/router/server.
 - `packages/harness/src/playwright-mcp` — MCP-owned Playwright browser sessions and forensics.
 - `packages/harness/src/stack` — generic managed-stack contracts/process provider.

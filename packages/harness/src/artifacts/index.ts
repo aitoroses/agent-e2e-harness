@@ -147,6 +147,22 @@ export async function writeTextArtifact(
   });
 }
 
+export async function writeBinaryArtifact(
+  run: RunArtifacts,
+  relativePath: string,
+  value: Uint8Array,
+  metadata: { name?: string; kind?: string; description?: string | undefined } = {},
+): Promise<ArtifactRef> {
+  const absPath = resolveSafeRunPath(run, relativePath);
+  await mkdir(dirname(absPath), { recursive: true });
+  await writeFile(absPath, value);
+  return artifactRef(run, absPath, {
+    kind: metadata.kind ?? "binary",
+    name: metadata.name ?? basenameWithoutExtension(relativePath),
+    description: metadata.description,
+  });
+}
+
 export function artifactRef(
   run: RunArtifacts,
   absPath: string,

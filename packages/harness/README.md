@@ -92,22 +92,25 @@ The seed prepares prerequisites. It should not pre-create the behavior the journ
 Create an app-owned command such as `npm run dev:mcp`:
 
 ```ts
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { createMcpHarnessServer } from '@agent-e2e/harness/mcp';
 import { startDevMcpStreamableHttpServer } from '@agent-e2e/harness/dev-mcp';
 import { createPlaywrightMcpBrowserSessionManager } from '@agent-e2e/harness/playwright-mcp';
 
+const artifactRoot = '.agents-e2e/artifacts';
+const appUrl = 'http://127.0.0.1:3000';
+
 const harness = createMcpHarnessServer({
   journeys: [checkoutJourney],
   resourceAdapters: [orderResourceAdapter],
-  artifactRoot: '.agents-e2e/artifacts'
+  artifactRoot
 });
 
 const browserSessions = createPlaywrightMcpBrowserSessionManager({
-  artifactRoot: '.agents-e2e/artifacts'
+  artifactRoot
 });
 
-const manifest = await startDevMcpStreamableHttpServer({
+const server = await startDevMcpStreamableHttpServer({
   harness,
   stackProvider: appStackProvider,
   browserSessions,
@@ -115,7 +118,11 @@ const manifest = await startDevMcpStreamableHttpServer({
   port: 0
 });
 
-await writeFile('.agents-e2e/dev-mcp.json', JSON.stringify(manifest, null, 2));
+await mkdir('.agents-e2e', { recursive: true });
+await writeFile(
+  '.agents-e2e/dev-mcp.json',
+  `${JSON.stringify({ mcpUrl: server.url, appUrl, artifactRoot }, null, 2)}\n`
+);
 ```
 
 The command should keep running during development, write a manifest with `mcpUrl` and app URLs, and shut down cleanly on `SIGINT`/`SIGTERM`.

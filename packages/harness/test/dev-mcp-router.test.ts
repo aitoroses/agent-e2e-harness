@@ -271,9 +271,13 @@ describe("Dev MCP Tool Router", () => {
   });
 
   it("controls stack lifecycle through an injected provider without importing Testcontainers", async () => {
+    const events: string[] = [];
     const provider: StackProvider<{ id: string }> = {
       id: "fake-stack",
-      start: async () => ({ id: "stack-1" }),
+      start: async () => {
+        events.push("start");
+        return { id: "stack-1" };
+      },
       status: (handle) => ({
         status: "ready",
         summary: `ready:${handle.id}`,
@@ -284,14 +288,17 @@ describe("Dev MCP Tool Router", () => {
         warnings: [],
         errors: [],
       }),
-      stop: (handle) => ({
-        status: "stopped",
-        summary: `stopped:${handle.id}`,
-        services: [],
-        artifacts: [],
-        warnings: [],
-        errors: [],
-      }),
+      stop: (handle) => {
+        events.push(`stop:${handle.id}`);
+        return {
+          status: "stopped",
+          summary: `stopped:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        };
+      },
     };
     const router = createDevMcpToolRouter({ stackProvider: provider });
 
@@ -307,9 +314,64 @@ describe("Dev MCP Tool Router", () => {
       handle: { id: "stack-1" },
       stack: { status: "ready" },
     });
+    await expect(router.callTool("stack.start")).resolves.toMatchObject({
+      status: "blocked",
+      code: "stack-already-running",
+    });
     await expect(router.callTool("stack.stop")).resolves.toMatchObject({
       status: "ok",
       stack: { status: "stopped", summary: "stopped:stack-1" },
+    });
+    expect(events).toEqual(["start", "stop:stack-1"]);
+  });
+
+  it("disposes active stack and browser sessions", async () => {
+    const events: string[] = [];
+    const provider: StackProvider<{ id: string }> = {
+      id: "fake-stack",
+      start: async () => ({ id: "stack-1" }),
+      status: () => ({
+        status: "ready",
+        summary: "ready",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+      stop: async (handle) => {
+        events.push(`stack:${handle.id}`);
+        return {
+          status: "stopped",
+          summary: "stopped",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        };
+      },
+    };
+    const router = createDevMcpToolRouter({
+      stackProvider: provider,
+      browserSessions: {
+        open: async () => ({ browserSessionId: "browser-1" }),
+        snapshot: async (browserSessionId) => ({ browserSessionId, refs: [] }),
+        close: async (browserSessionId) => {
+          events.push(`browser:${browserSessionId}`);
+          return { status: "closed", browserSessionId };
+        },
+        list: () => [{ browserSessionId: "browser-1" }],
+      },
+    });
+
+    await router.callTool("stack.start");
+    await expect(router.dispose()).resolves.toMatchObject({
+      stack: { status: "stopped" },
+      errors: [],
+    });
+    expect(events).toEqual(["stack:stack-1", "browser:browser-1"]);
+    await expect(router.callTool("stack.status")).resolves.toMatchObject({
+      status: "ok",
+      stack: { status: "stopped" },
     });
   });
 

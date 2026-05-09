@@ -78,6 +78,7 @@ export interface DevMcpBrowserSessionController {
   snapshot: (browserSessionId: string) => Promise<unknown>;
   act?: (input: Record<string, unknown>) => Promise<unknown>;
   close: (browserSessionId: string) => Promise<unknown>;
+  closeAll?: () => Promise<unknown>;
   screenshot?: (input: Record<string, unknown>) => Promise<unknown>;
   execution?: (browserSessionId: string) => unknown;
   list: () => unknown;
@@ -95,6 +96,13 @@ export interface DevMcpToolRouter {
     name: DevMcpToolName | string,
     args?: Record<string, unknown>,
   ) => Promise<DevMcpToolResponse>;
+  dispose: () => Promise<DevMcpDisposeResult>;
+}
+
+export interface DevMcpDisposeResult {
+  stack?: StackStatusPacket | undefined;
+  browsers?: unknown;
+  errors: string[];
 }
 
 export interface DevMcpHttpServerOptions<
@@ -122,6 +130,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
   options: DevMcpToolRouterOptions<TStackHandle> = {},
 ): DevMcpToolRouter {
   let stackHandle: TStackHandle | undefined;
+  let stoppingStack = false;
 
   async function callTool(
     name: DevMcpToolName | string,
@@ -173,6 +182,12 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
         case "stack.start": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
+          if (stackHandle !== undefined)
+            return blocked(
+              name,
+              "stack-already-running",
+              "A managed stack is already active. Call stack.stop before starting another stack.",
+            );
           stackHandle = await options.stackProvider.start();
           const status = await options.stackProvider.status(stackHandle);
           return ok(name, {
@@ -194,8 +209,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             return missingDependency(name, "stackProvider");
           if (stackHandle === undefined)
             return ok(name, { stack: stoppedStackStatus() });
-          const stopped = await options.stackProvider.stop(stackHandle);
-          stackHandle = undefined;
+          const stopped = await stopActiveStack();
           return ok(name, { stack: stopped });
         }
         case "browser.open":
@@ -269,7 +283,68 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
     }
   }
 
-  return { listTools: () => listTools(options), callTool };
+  async function stopActiveStack(): Promise<StackStatusPacket> {
+    if (!options.stackProvider || stackHandle === undefined)
+      return stoppedStackStatus();
+    if (stoppingStack)
+      return {
+        status: "degraded",
+        summary: "Managed stack stop is already in progress.",
+        services: [],
+        artifacts: [],
+        warnings: [{ code: "stack-stop-in-progress", message: "Managed stack stop is already in progress." }],
+        errors: [],
+      };
+
+    stoppingStack = true;
+    const handle = stackHandle;
+    stackHandle = undefined;
+    try {
+      return await options.stackProvider.stop(handle);
+    } finally {
+      stoppingStack = false;
+    }
+  }
+
+  async function dispose(): Promise<DevMcpDisposeResult> {
+    const errors: string[] = [];
+    let stack: StackStatusPacket | undefined;
+    let browsers: unknown;
+
+    try {
+      stack = await stopActiveStack();
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+
+    try {
+      browsers = await closeBrowserSessions(options.browserSessions);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+
+    return { stack, browsers, errors };
+  }
+
+  return { listTools: () => listTools(options), callTool, dispose };
+}
+
+async function closeBrowserSessions(
+  browserSessions: DevMcpBrowserSessionController | undefined,
+): Promise<unknown> {
+  if (!browserSessions) return undefined;
+  if (browserSessions.closeAll) return await browserSessions.closeAll();
+
+  const sessions = browserSessions.list();
+  if (!Array.isArray(sessions)) return undefined;
+
+  const results = [];
+  for (const session of sessions) {
+    if (isRecord(session) && typeof session.browserSessionId === "string") {
+      results.push(await browserSessions.close(session.browserSessionId));
+    }
+  }
+  return results;
 }
 
 function listTools(
@@ -585,12 +660,16 @@ export async function startDevMcpStreamableHttpServer<TStackHandle = unknown>(
     port,
     path,
     url: `http://${host}:${port}${path}`,
-    close: () =>
-      new Promise<void>((resolve, reject) => {
+    close: async () => {
+      const disposal = await router.dispose();
+      await new Promise<void>((resolve, reject) => {
         nodeServer.close((error: Error | undefined) =>
           error ? reject(error) : resolve(),
         );
-      }),
+      });
+      if (disposal.errors.length > 0)
+        throw new Error(`Dev MCP cleanup failed: ${disposal.errors.join("; ")}`);
+    },
   };
 }
 

@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const repoRoot = resolve(process.cwd(), '../..');
+const harnessPackage = JSON.parse(
+  readFileSync(resolve(repoRoot, 'packages/harness/package.json'), 'utf8'),
+) as {
+  exports: Record<string, unknown>;
+  peerDependencies: Record<string, string>;
+};
 
 function entries(path: string): string[] {
   return existsSync(path) ? readdirSync(path).sort() : [];
@@ -32,5 +38,13 @@ describe('repository organization contract', () => {
 
   it('uses showcase scripts only as runnable entrypoints, with reusable code under src', () => {
     expect(entries(resolve(repoRoot, 'apps/showcase/scripts'))).toEqual(['dev-mcp.ts']);
+  });
+
+  it('keeps consumer infrastructure providers out of the published harness package', () => {
+    expect(Object.keys(harnessPackage.exports)).not.toContain('./testcontainers');
+    expect(Object.keys(harnessPackage.peerDependencies)).not.toEqual(
+      expect.arrayContaining(['@testcontainers/postgresql', 'pg']),
+    );
+    expect(existsSync(resolve(repoRoot, 'packages/harness/dist/testcontainers'))).toBe(false);
   });
 });

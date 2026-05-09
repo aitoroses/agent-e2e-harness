@@ -33,6 +33,38 @@ const boundaryScopes = [
     ]
   },
   {
+    label: 'artifacts',
+    description: 'packages/harness/src/artifacts has no adapter, app, React, or DB imports',
+    dir: resolve(repoRoot, 'packages/harness/src/artifacts'),
+    forbiddenSpecifierPatterns: adapterForbiddenSpecifierPatterns,
+    negativeFixtures: []
+  },
+  {
+    label: 'stack',
+    description: 'packages/harness/src/stack has no provider-specific adapter, app, React, or DB imports',
+    dir: resolve(repoRoot, 'packages/harness/src/stack'),
+    forbiddenSpecifierPatterns: adapterForbiddenSpecifierPatterns,
+    negativeFixtures: []
+  },
+  {
+    label: 'dev-mcp',
+    description: 'packages/harness/src/dev-mcp has no Playwright, Testcontainers, app, React, or DB imports',
+    dir: resolve(repoRoot, 'packages/harness/src/dev-mcp'),
+    forbiddenSpecifierPatterns: adapterForbiddenSpecifierPatterns.filter(
+      (pattern) => String(pattern) !== String(/^@modelcontextprotocol\/sdk($|\/)/i),
+    ),
+    negativeFixtures: []
+  },
+  {
+    label: 'playwright-mcp',
+    description: 'packages/harness/src/playwright-mcp has no MCP SDK, Testcontainers, app, React, or DB imports',
+    dir: resolve(repoRoot, 'packages/harness/src/playwright-mcp'),
+    forbiddenSpecifierPatterns: adapterForbiddenSpecifierPatterns.filter(
+      (pattern) => String(pattern) !== String(/(^|[/@])playwright($|[-/])/i),
+    ),
+    negativeFixtures: []
+  },
+  {
     label: 'mcp',
     description: 'packages/harness/src/mcp stays execution-neutral and has no Playwright, HTTP MCP transport, Testcontainers, app, React, or DB imports',
     dir: resolve(repoRoot, 'packages/harness/src/mcp'),

@@ -17,7 +17,7 @@ Rejected alternatives:
 | --- | --- | --- | --- | --- |
 | `@agent-e2e/harness/core` | Generic harness contracts, journeys, seed, feedback, closure, ownership, resource/reseed semantics | TypeScript/Node-free generic utilities | Playwright, MCP SDK/transports, consumer infrastructure, Next/React/showcase app, DB clients | No adapter dependencies. |
 | `@agent-e2e/harness` | Default Playwright-specialized ergonomics | Core, Playwright types | MCP SDK/transports, consumer infrastructure, showcase app | Playwright peer may remain because package root is the default Playwright surface. |
-| `@agent-e2e/harness/mcp` | Execution-neutral in-process compatibility seam and protocol-neutral tool contracts | Core | Playwright, HTTP MCP SDK/transports, consumer infrastructure, Next/React/showcase app | No browser/protocol runtime dependency. |
+| `@agent-e2e/harness/mcp` | Execution-neutral in-process control surface, artifact recording, and protocol-neutral tool contracts | Core, artifacts | Playwright, HTTP MCP SDK/transports, consumer infrastructure, Next/React/showcase app | May record artifacts from injected execution surfaces; must not own concrete browser sessions or protocol transports. |
 | `@agent-e2e/harness/stack` | Generic managed stack contracts outside core | Generic types | Testcontainers, DB clients, Next/React/showcase app, Playwright, MCP transports | No provider-specific dependencies. |
 | `@agent-e2e/harness/dev-mcp` | HTTP Dev MCP server contracts and local-dev server entrypoints | Stack contracts, protocol-neutral MCP contracts | Core-forbidden deps inside core; hard package-level MCP SDK dependency | MCP SDK must be optional peer + dynamic import, or this subpath moves to split package first. |
 | `@agent-e2e/harness/playwright-mcp` | Playwright-backed MCP browser/session tool handlers | Core, stack/dev-mcp contracts, Playwright via adapter boundary | consumer infrastructure, showcase app | Playwright peer + dynamic import for runtime handlers where needed. |
@@ -40,6 +40,6 @@ If a selected adapter cannot work with optional peer + dynamic import isolation,
 Phase 0 must enforce two static boundaries:
 
 1. `packages/harness/src/core/**` rejects Playwright, MCP SDK/transports, consumer infrastructure, Next/React/showcase app, and selected DB clients.
-2. `packages/harness/src/mcp/**` rejects Playwright, HTTP MCP SDK/transports, consumer infrastructure, Next/React/showcase app, and selected DB clients.
+2. `packages/harness/src/mcp/**` may import `artifacts`, but rejects Playwright, HTTP MCP SDK/transports, consumer infrastructure, Next/React/showcase app, and selected DB clients.
 
 Public type fixtures under `packages/harness/test-d/` must cover every exported subpath.

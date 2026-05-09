@@ -7,6 +7,7 @@ import {
   type DevMcpHttpServerHandle,
 } from "@agent-e2e/harness/dev-mcp";
 import { createMcpHarnessServer } from "@agent-e2e/harness/mcp";
+import type { StackProvider } from "@agent-e2e/harness/stack";
 
 type HttpHarness = HarnessTypes<
   { runId: string },
@@ -135,5 +136,53 @@ describe("Dev MCP Streamable HTTP server", () => {
     await expect(response.json()).resolves.toEqual({
       error: "forbidden-local-dev-origin",
     });
+  });
+
+  it("stops an active stack when the HTTP server closes", async () => {
+    const events: string[] = [];
+    const stackProvider: StackProvider<{ id: string }> = {
+      id: "http-stack",
+      start: async () => {
+        events.push("start");
+        return { id: "stack-1" };
+      },
+      status: () => ({
+        status: "ready",
+        summary: "ready",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+      stop: async (handle) => {
+        events.push(`stop:${handle.id}`);
+        return {
+          status: "stopped",
+          summary: "stopped",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        };
+      },
+    };
+    const server = await startDevMcpStreamableHttpServer({ stackProvider });
+    handles.push(server);
+    const client = new Client({
+      name: "agent-e2e-stack-cleanup-test-client",
+      version: "0.0.0",
+    });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(server.url)),
+    );
+
+    try {
+      await client.callTool({ name: "stack.start", arguments: {} });
+    } finally {
+      await client.close();
+      await server.close();
+      handles = handles.filter((handle) => handle !== server);
+    }
+    expect(events).toEqual(["start", "stop:stack-1"]);
   });
 });

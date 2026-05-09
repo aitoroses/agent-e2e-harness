@@ -1,11 +1,10 @@
-import { mkdir } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 import {
-  artifactRef,
   createRunArtifacts,
   forensicsRelativePath,
+  safePathSegment,
   timestampSegment,
+  writeBinaryArtifact,
   writeJsonArtifact,
   type RunArtifacts,
 } from "../artifacts/index.js";
@@ -60,6 +59,10 @@ export interface BrowserCloseResult {
 
 export interface BrowserScreenshotInput {
   browserSessionId: string;
+  /**
+   * Optional screenshot filename. It is always written under this run's
+   * forensics directory; path separators and unsafe characters are sanitized.
+   */
   path?: string;
   fullPage?: boolean;
 }
@@ -330,20 +333,22 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
     if (!session)
       return { status: "not-found", browserSessionId: input.browserSessionId };
     session.lastUsedAt = new Date().toISOString();
-    const path = resolve(
-      input.path ??
-        resolve(
-          session.run.absDir,
-          forensicsRelativePath(`screenshot-${timestampSegment()}.png`),
-        ),
+    const filename = screenshotFilename(
+      input.path ?? `screenshot-${timestampSegment()}.png`,
     );
-    await mkdir(dirname(path), { recursive: true });
-    await session.page.screenshot({ path, fullPage: input.fullPage ?? true });
-    const artifact = artifactRef(session.run, path, {
+    const buffer = await session.page.screenshot({
+      fullPage: input.fullPage ?? true,
+    });
+    const artifact = await writeBinaryArtifact(
+      session.run,
+      forensicsRelativePath(filename),
+      buffer,
+      {
       kind: "screenshot",
       name: "screenshot",
       description: "Browser screenshot captured from an MCP-owned session.",
-    });
+      },
+    );
     return {
       status: "ok",
       browserSessionId: input.browserSessionId,
@@ -413,10 +418,7 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
       await session.page.waitForTimeout(250);
       const actionScreenshot = await screenshot({
         browserSessionId: input.browserSessionId,
-        path: resolve(
-          session.run.absDir,
-          forensicsRelativePath(`action-${input.action}-${timestampSegment()}.png`),
-        ),
+        path: `action-${input.action}-${timestampSegment()}.png`,
       });
       session.lastUsedAt = new Date().toISOString();
       return {
@@ -466,6 +468,15 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
     return { status: "closed", browserSessionId };
   }
 
+  async function closeAll(): Promise<BrowserCloseResult[]> {
+    const ids = [...sessions.keys()];
+    const results: BrowserCloseResult[] = [];
+    for (const id of ids) {
+      results.push(await close(id));
+    }
+    return results;
+  }
+
   function list() {
     return [...sessions.values()].map((session) => ({
       browserSessionId: session.id,
@@ -481,7 +492,12 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
     return session ? { browser: session.browser, page: session.page } : undefined;
   }
 
-  return { open, snapshot, act, screenshot, close, list, execution };
+  return { open, snapshot, act, screenshot, close, closeAll, list, execution };
+}
+
+function screenshotFilename(value: string): string {
+  const leaf = value.split(/[\\/]/).filter(Boolean).at(-1) ?? value;
+  return `${safePathSegment(leaf.replace(/\.png$/i, ""))}.png`;
 }
 
 function resolveActTarget(
