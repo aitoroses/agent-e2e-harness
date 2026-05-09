@@ -3,15 +3,26 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
-import { existsSync } from "node:fs";
-import { stat } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
-import { extname, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import type { AnyHarnessTypes, ExecutableJourney, ResourceAdapter } from "../core/index.js";
 import { createMcpHarnessServer, type McpHarnessServer } from "../mcp/index.js";
 import type { McpToolResponse } from "../mcp/index.js";
+import { normalizeToolResponse, type ToolStatus } from "../mcp/response.js";
 import type { StackProvider, StackStatusPacket } from "../stack/index.js";
+import {
+  DEFAULT_DEV_MCP_CONFIG_FILES,
+  loadAgentE2EConfig,
+  resolveAgentE2EConfigPath,
+  type LoadAgentE2EConfigOptions,
+} from "./config-loader.js";
+import { createReloadingHarnessSource, type ReloadingHarnessSourceOptions } from "./reloading-harness.js";
+
+export {
+  DEFAULT_DEV_MCP_CONFIG_FILES,
+  loadAgentE2EConfig,
+  resolveAgentE2EConfigPath,
+  type LoadAgentE2EConfigOptions,
+};
 
 export interface AgentE2EDevMcpApiContract {
   surface: "dev-mcp-http-server-contracts";
@@ -71,21 +82,13 @@ export const FUTURE_DEV_MCP_TOOLS = [
 
 export type DevMcpToolName = (typeof DEV_MCP_TOOL_GRAMMAR)[number] | (typeof FUTURE_DEV_MCP_TOOLS)[number];
 
-export type DevMcpToolStatus = "ok" | "not-found" | "blocked" | "error";
+export type DevMcpToolStatus = ToolStatus;
 
 export const DEFAULT_DEV_MCP_HOST = "127.0.0.1";
 export const DEFAULT_DEV_MCP_PORT = 3766;
 export const DEFAULT_DEV_MCP_PATH = "/mcp";
 export const DEFAULT_AGENT_E2E_DIR = ".agents-e2e";
 export const DEFAULT_AGENT_E2E_ARTIFACT_ROOT = ".agents-e2e/artifacts";
-export const DEFAULT_DEV_MCP_CONFIG_FILES = [
-  "agent-e2e.config.ts",
-  "agent-e2e.config.mts",
-  "agent-e2e.config.js",
-  "agent-e2e.config.mjs",
-  "agent-e2e.config.cjs",
-] as const;
-
 export interface DevMcpToolResponse {
   status: DevMcpToolStatus;
   tool: DevMcpToolName | string;
@@ -179,12 +182,6 @@ export interface AgentE2EDevMcpServerHandle extends DevMcpHttpServerHandle {
   manifest: AgentE2EDevMcpManifest;
 }
 
-export interface LoadAgentE2EConfigOptions {
-  cwd?: string;
-  configPath?: string;
-  cacheBust?: boolean;
-}
-
 export interface StartAgentE2EDevMcpFromConfigOptions {
   cwd?: string;
   configPath?: string;
@@ -208,37 +205,6 @@ export function defineAgentE2EConfig<
   config: AgentE2EDevMcpConfig<TTypes, TStackHandle>,
 ): AgentE2EDevMcpConfig<TTypes, TStackHandle> {
   return config;
-}
-
-export async function loadAgentE2EConfig<
-  TTypes extends AnyHarnessTypes = AnyHarnessTypes,
-  TStackHandle = unknown,
->(
-  options: LoadAgentE2EConfigOptions = {},
-): Promise<AgentE2EDevMcpConfig<TTypes, TStackHandle>> {
-  const configPath = resolveAgentE2EConfigPath(options);
-  assertSupportedConfigRuntime(configPath);
-
-  const href = pathToFileURL(configPath).href;
-  const imported = await import(options.cacheBust ? `${href}?mtime=${Date.now()}` : href);
-  const config = (imported.default ?? imported.config ?? imported) as AgentE2EDevMcpConfig<TTypes, TStackHandle>;
-  if (!config || !Array.isArray(config.journeys))
-    throw new Error(`Agent E2E config must export { journeys } from ${configPath}`);
-  return config;
-}
-
-export function resolveAgentE2EConfigPath(options: LoadAgentE2EConfigOptions = {}): string {
-  const cwd = options.cwd ?? process.cwd();
-  const configPath = options.configPath
-    ? resolve(cwd, options.configPath)
-    : DEFAULT_DEV_MCP_CONFIG_FILES
-      .map((candidate) => resolve(cwd, candidate))
-      .find((candidate) => existsSync(candidate));
-  if (!configPath)
-    throw new Error(
-      `Could not find Agent E2E config. Expected one of: ${DEFAULT_DEV_MCP_CONFIG_FILES.join(", ")}`,
-    );
-  return configPath;
 }
 
 export async function startAgentE2EDevMcpFromConfig<
@@ -330,56 +296,6 @@ async function createDefaultBrowserSessions(
       createPlaywrightMcpBrowserSessionManager: (options: { artifactRoot?: string }) => DevMcpBrowserSessionController;
     };
   return createPlaywrightMcpBrowserSessionManager({ artifactRoot });
-}
-
-interface ReloadingHarnessSourceOptions<
-  TTypes extends AnyHarnessTypes,
-  TStackHandle,
-> {
-  configPath: string;
-  artifactRoot?: string;
-}
-
-function createReloadingHarnessSource<
-  TTypes extends AnyHarnessTypes,
-  TStackHandle,
->(options: ReloadingHarnessSourceOptions<TTypes, TStackHandle>) {
-  let cachedHarness: McpHarnessServer | undefined;
-  let cachedMtimeMs = -1;
-
-  return {
-    async currentHarness(): Promise<McpHarnessServer> {
-      const currentMtimeMs = await configMtime(options.configPath);
-      if (cachedHarness && currentMtimeMs === cachedMtimeMs)
-        return cachedHarness;
-
-      const config = await loadAgentE2EConfig<TTypes, TStackHandle>({
-        configPath: options.configPath,
-        cacheBust: true,
-      });
-      const harness = await resolveHarness(config.harness);
-      cachedHarness = harness ?? createMcpHarnessServer<TTypes>({
-        journeys: config.journeys,
-        ...(config.resourceAdapters ? { resourceAdapters: config.resourceAdapters } : {}),
-        ...(options.artifactRoot ?? config.artifactRoot ? { artifactRoot: options.artifactRoot ?? config.artifactRoot } : {}),
-      });
-      cachedMtimeMs = currentMtimeMs;
-      return cachedHarness;
-    },
-  };
-}
-
-async function configMtime(path: string): Promise<number> {
-  return (await stat(path)).mtimeMs;
-}
-
-function assertSupportedConfigRuntime(configPath: string): void {
-  const extension = extname(configPath);
-  if (![".ts", ".mts", ".cts"].includes(extension)) return;
-  if ("Bun" in globalThis) return;
-  throw new Error(
-    `TypeScript Agent E2E config files require Bun as the Dev MCP runtime. Run the Dev MCP entrypoint with Bun: ${configPath}`,
-  );
 }
 
 function installDevMcpSignalHandlers<
@@ -802,18 +718,7 @@ function normalizeHarnessResponse(response: McpToolResponse): {
   status: DevMcpToolStatus;
   [key: string]: unknown;
 } {
-  if (
-    response.status === "ok" ||
-    response.status === "blocked" ||
-    response.status === "not-found" ||
-    response.status === "error"
-  ) {
-    return response as { status: DevMcpToolStatus; [key: string]: unknown };
-  }
-  return {
-    status: "error",
-    error: `Unsupported harness response status: ${response.status}`,
-  };
+  return normalizeToolResponse(response);
 }
 
 function ok(

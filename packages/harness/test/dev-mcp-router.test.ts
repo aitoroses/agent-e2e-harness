@@ -197,6 +197,20 @@ describe("Dev MCP Tool Router", () => {
     await rm(artifactRoot, { recursive: true, force: true });
   });
 
+  it("normalizes unsupported harness response status at the Dev MCP seam", async () => {
+    const router = createDevMcpToolRouter({
+      harness: {
+        callTool: async () => ({ status: "mystery" }) as never,
+      },
+    });
+
+    await expect(router.callTool("journey.list")).resolves.toMatchObject({
+      status: "error",
+      tool: "journey.list",
+      error: "Unsupported tool response status: mystery",
+    });
+  });
+
   it("returns first-class failure artifacts when a journey step fails", async () => {
     const artifactRoot = await mkdtemp(join(tmpdir(), "agent-e2e-router-failure-"));
     const harness = createMcpHarnessServer({

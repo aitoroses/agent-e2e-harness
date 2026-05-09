@@ -197,10 +197,15 @@ _Avoid_: manual prompt copy-paste, undocumented local setup, repo-specific ritua
 The Model Context Protocol interface that lets agents inspect, run, pause, debug, and tear down journeys.
 _Avoid_: harness, transport layer
 
+**Tool Response Contract**:
+The shared status, guidance, error, and payload shape returned by harness tools before any transport-specific wrapping, used by both the **MCP Control Surface** and **Dev MCP Server**.
+_Avoid_: per-adapter status enum, tool-specific response shape, unchecked response cast
+
 ## Relationships
 
 - The **Agent E2E Harness** includes the **Harness Core**, **Reference Harness Server**, and **Reference CLI**.
 - The **Reference Harness Server** exposes the **Harness Core** through an **MCP Control Surface**.
+- The **Reference Harness Server** and **Dev MCP Server** share the **Tool Response Contract** so tool status semantics stay consistent across adapters.
 - An **Executable Journey** produces **Deterministic Proof** during development and should consolidate into the same **CI E2E Test** instead of being rewritten.
 - An **Executable Journey** exposes an **Inspectable Journey Contract** while allowing steps and proofs to bind executable handlers.
 - The **Minimal Core Contract** should only predefine structure that agents, CI, artifact readers, or teardown safety need to coordinate.
@@ -316,3 +321,4 @@ _Avoid_: harness, transport layer
 - Dev MCP ergonomics resolved: consumers should use `agent-e2e.config.ts` plus `agent-e2e-harness dev-mcp` so journeys, resource adapters, browser sessions, artifacts, and signal handling are convention-based rather than README wiring.
 - Dev MCP port policy resolved: the Dev MCP endpoint uses a stable default URL, `http://127.0.0.1:3766/mcp`; `AGENT_E2E_MCP_PORT` overrides it. App URLs are stack-owned data returned by `stack.start` / `stack.status`, not manifest configuration.
 - Dev MCP runtime resolved: Bun is the required runtime for Dev MCP entrypoints so TypeScript config can be executed and reloaded directly without a Node compile/watch bridge.
+- Tool response contract resolved: MCP and Dev MCP adapters share one **Tool Response Contract** so `ok`, `blocked`, `not-found`, `error`, guidance, and error payload semantics do not drift between modules.

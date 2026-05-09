@@ -9,7 +9,6 @@ import {
   type ArtifactRef,
   type BeginJourneyRunResult,
   type ExecutableJourney,
-  type GuidanceAction,
   type JourneyRun,
   type ResourceAdapter,
   type StepRunResult
@@ -25,6 +24,7 @@ import {
   type RunArtifactRecorder,
   type RunArtifacts
 } from '../artifacts/index.js';
+import type { ToolResponse, ToolStatus } from './response.js';
 
 export interface AgentE2EMcpApiContract {
   surface: 'mcp-control-surface';
@@ -32,13 +32,9 @@ export interface AgentE2EMcpApiContract {
 
 export const mcpApiContract: AgentE2EMcpApiContract = { surface: 'mcp-control-surface' };
 
-export type McpToolStatus = 'ok' | 'not-found' | 'blocked' | 'error';
+export type McpToolStatus = ToolStatus;
 
-export interface McpToolResponse {
-  status: McpToolStatus;
-  guidance?: readonly GuidanceAction[];
-  [key: string]: unknown;
-}
+export interface McpToolResponse extends ToolResponse {}
 
 export interface McpHarnessServerOptions<TTypes extends AnyHarnessTypes = AnyHarnessTypes> {
   journeys: readonly ExecutableJourney<TTypes>[];

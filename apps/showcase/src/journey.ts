@@ -16,6 +16,7 @@ import {
   SHOWCASE_STEP_ID,
   createShowcaseResourceAdapter as createShowcaseApiResourceAdapter,
   notesApiUrl,
+  type ShowcaseResource,
 } from "./proof-notes-contract.js";
 
 export interface ShowcaseProfileData {
@@ -31,10 +32,7 @@ export interface ShowcaseObserved {
   baselineUserId: string;
 }
 
-export interface ShowcaseOwnedResource {
-  kind: "proof-note" | "proof-baseline";
-  id: string;
-}
+export type ShowcaseOwnedResource = ShowcaseResource;
 
 export function createShowcaseJourney(
   baseUrl: string,
@@ -167,5 +165,5 @@ export type ShowcaseHarnessTypes = PlaywrightHarnessTypes<
 
 export function createShowcaseResourceAdapter(
 ): ResourceAdapter<ShowcaseHarnessTypes> {
-  return createShowcaseApiResourceAdapter() as unknown as ResourceAdapter<ShowcaseHarnessTypes>;
+  return createShowcaseApiResourceAdapter<ShowcaseHarnessTypes>();
 }
