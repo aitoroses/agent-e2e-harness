@@ -258,6 +258,17 @@ describe("Dev MCP Streamable HTTP server", () => {
     await rm(tmpRoot, { recursive: true, force: true });
   });
 
+  it("requires Bun for TypeScript Agent E2E config modules", async () => {
+    if ("Bun" in globalThis) return;
+    const tmpRoot = await mkdtemp(join(tmpdir(), "agent-e2e-ts-config-"));
+    const configPath = join(tmpRoot, "agent-e2e.config.ts");
+    await writeFile(configPath, "export default { journeys: [] };\n");
+
+    await expect(loadAgentE2EConfig({ cwd: tmpRoot })).rejects.toThrow("require Bun");
+
+    await rm(tmpRoot, { recursive: true, force: true });
+  });
+
   it("reloads journey config without restarting the Dev MCP endpoint", async () => {
     const tmpRoot = await mkdtemp(join(tmpdir(), "agent-e2e-reload-"));
     const configPath = join(tmpRoot, "agent-e2e.config.mjs");

@@ -16,7 +16,7 @@ The showcase intentionally uses a database in the managed stack so seed, reseed,
 
 ## Real proof path
 
-Start Dev MCP. The showcase uses `agent-e2e.config.ts`, starts the framework-owned Dev MCP server at `127.0.0.1:3766/mcp` by default, watches the compiled config output for journey changes, and writes `.agents-e2e/dev-mcp.json`. Set `AGENT_E2E_MCP_PORT` only when you intentionally need a different MCP port.
+Start Dev MCP. The showcase uses Bun to run `scripts/dev-mcp.ts` and `agent-e2e.config.ts` directly, starts the framework-owned Dev MCP server at `127.0.0.1:3766/mcp` by default, hot-reloads the journey registry when the config changes, and writes `.agents-e2e/dev-mcp.json`. Set `AGENT_E2E_MCP_PORT` only when you intentionally need a different MCP port.
 
 ```sh
 npm run dev:mcp --workspace @agent-e2e/showcase
@@ -63,7 +63,7 @@ Artifacts are generated under `.agents-e2e/artifacts/<journey>/<run>/`. The harn
 - `@agent-e2e/harness/playwright-mcp`: headed browser sessions, snapshots, actions, screenshots.
 - `@agent-e2e/harness/mcp`: run, step, cleanup, reseed control surface.
 
-`agent-e2e.config.ts` is the conventional integration point for journeys, resource adapters, and the showcase stack provider. `scripts/dev-mcp.ts` is only the runnable entrypoint and is compiled to ignored `.agents-e2e/dev-mcp-runtime/` output before Node runs it. Showcase-specific harness composition lives in `src/harness/`; shared ids, schema SQL, proof body, and resource-adapter behavior live in `src/proof-notes-contract.ts`; lifecycle mechanics belong in the framework.
+`agent-e2e.config.ts` is the conventional integration point for journeys, resource adapters, and the showcase stack provider. `scripts/dev-mcp.ts` is only the runnable entrypoint, executed directly by Bun. Showcase-specific harness composition lives in `src/harness/`; shared ids, schema SQL, proof body, and resource-adapter behavior live in `src/proof-notes-contract.ts`; lifecycle mechanics belong in the framework.
 
 ## Validation
 

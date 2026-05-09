@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { stat } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
-import { dirname, resolve } from "node:path";
+import { dirname, extname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { AnyHarnessTypes, ExecutableJourney, ResourceAdapter } from "../core/index.js";
 import { createMcpHarnessServer, type McpHarnessServer } from "../mcp/index.js";
@@ -81,6 +81,8 @@ export const DEFAULT_AGENT_E2E_DIR = ".agents-e2e";
 export const DEFAULT_AGENT_E2E_ARTIFACT_ROOT = ".agents-e2e/artifacts";
 export const DEFAULT_DEV_MCP_MANIFEST_PATH = ".agents-e2e/dev-mcp.json";
 export const DEFAULT_DEV_MCP_CONFIG_FILES = [
+  "agent-e2e.config.ts",
+  "agent-e2e.config.mts",
   "agent-e2e.config.js",
   "agent-e2e.config.mjs",
   "agent-e2e.config.cjs",
@@ -221,6 +223,7 @@ export async function loadAgentE2EConfig<
   options: LoadAgentE2EConfigOptions = {},
 ): Promise<AgentE2EDevMcpConfig<TTypes, TStackHandle>> {
   const configPath = resolveAgentE2EConfigPath(options);
+  assertSupportedConfigRuntime(configPath);
 
   const href = pathToFileURL(configPath).href;
   const imported = await import(options.cacheBust ? `${href}?mtime=${Date.now()}` : href);
@@ -380,6 +383,15 @@ function createReloadingHarnessSource<
 
 async function configMtime(path: string): Promise<number> {
   return (await stat(path)).mtimeMs;
+}
+
+function assertSupportedConfigRuntime(configPath: string): void {
+  const extension = extname(configPath);
+  if (![".ts", ".mts", ".cts"].includes(extension)) return;
+  if ("Bun" in globalThis) return;
+  throw new Error(
+    `TypeScript Agent E2E config files require Bun as the Dev MCP runtime. Run the Dev MCP entrypoint with Bun: ${configPath}`,
+  );
 }
 
 async function writeDevMcpManifest(

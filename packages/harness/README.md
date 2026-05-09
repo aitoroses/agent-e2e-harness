@@ -14,7 +14,7 @@ Add optional peers for the integrations you use:
 npm install -D @modelcontextprotocol/sdk playwright
 ```
 
-`@modelcontextprotocol/sdk` is needed for the local Dev MCP HTTP server. `playwright` is needed for browser sessions. Database clients, containers, queues, and other infrastructure dependencies belong in the consumer app that implements a stack provider.
+`@modelcontextprotocol/sdk` is needed for the local Dev MCP HTTP server. `playwright` is needed for browser sessions. Dev MCP uses Bun `>=1.3.0` as the TypeScript runtime for the config and entrypoint. Database clients, containers, queues, and other infrastructure dependencies belong in the consumer app that implements a stack provider.
 
 ## Public Exports
 
@@ -107,7 +107,15 @@ import { startAgentE2EDevMcpFromConfig } from '@agent-e2e/harness/dev-mcp';
 await startAgentE2EDevMcpFromConfig();
 ```
 
-The high-level factory creates the MCP harness, default Playwright browser sessions, `.agents-e2e/artifacts`, `.agents-e2e/dev-mcp.json`, signal handlers, and a hot-reloaded journey registry. When the compiled `agent-e2e.config` output changes, new MCP calls see the updated journeys without reconnecting the MCP client. It uses `127.0.0.1:3766/mcp` by default; set `AGENT_E2E_MCP_PORT` to override it. App URLs come from `stack.start` / `stack.status` service URLs, not from the Dev MCP manifest.
+```json
+{
+  "scripts": {
+    "dev:mcp": "bun scripts/dev-mcp.ts"
+  }
+}
+```
+
+The high-level factory creates the MCP harness, default Playwright browser sessions, `.agents-e2e/artifacts`, `.agents-e2e/dev-mcp.json`, signal handlers, and a hot-reloaded journey registry. Bun runs the TypeScript entrypoint and `agent-e2e.config.ts` directly; when the config file changes, new MCP calls see the updated journeys without reconnecting the MCP client. It uses `127.0.0.1:3766/mcp` by default; set `AGENT_E2E_MCP_PORT` to override it. App URLs come from `stack.start` / `stack.status` service URLs, not from the Dev MCP manifest.
 
 ## Proof Loop
 

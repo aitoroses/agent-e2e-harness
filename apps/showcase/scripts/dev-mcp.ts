@@ -2,5 +2,5 @@
 import { startAgentE2EDevMcpFromConfig } from "@agent-e2e/harness/dev-mcp";
 
 await startAgentE2EDevMcpFromConfig({
-  configPath: new URL("../agent-e2e.config.js", import.meta.url).pathname,
+  configPath: new URL("../agent-e2e.config.ts", import.meta.url).pathname,
 });

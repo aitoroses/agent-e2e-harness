@@ -28,6 +28,8 @@ Add optional runtime dependencies for the surfaces you use:
 npm install -D playwright @modelcontextprotocol/sdk
 ```
 
+Dev MCP uses Bun as its TypeScript runtime. Install Bun `>=1.3.0` before adding the `dev:mcp` command.
+
 Install database clients, containers, queues, or other infrastructure packages in the consumer app that owns that stack provider.
 
 ## Quick Start
@@ -52,7 +54,15 @@ import { startAgentE2EDevMcpFromConfig } from '@agent-e2e/harness/dev-mcp';
 await startAgentE2EDevMcpFromConfig();
 ```
 
-`startAgentE2EDevMcpFromConfig` / `startAgentE2EDevMcp` create the in-process harness server, Playwright-owned browser sessions, `.agents-e2e/artifacts`, and `.agents-e2e/dev-mcp.json` for you. The config-based entrypoint reloads the compiled `agent-e2e.config` output when it changes, so new MCP calls see updated journeys without reconnecting the MCP client. It uses `127.0.0.1:3766/mcp` by default; override with `AGENT_E2E_MCP_PORT` when needed.
+```json
+{
+  "scripts": {
+    "dev:mcp": "bun scripts/dev-mcp.ts"
+  }
+}
+```
+
+`startAgentE2EDevMcpFromConfig` / `startAgentE2EDevMcp` create the in-process harness server, Playwright-owned browser sessions, `.agents-e2e/artifacts`, and `.agents-e2e/dev-mcp.json` for you. The config-based entrypoint reloads `agent-e2e.config.ts` when it changes, so new MCP calls see updated journeys without reconnecting the MCP client. It uses `127.0.0.1:3766/mcp` by default; override with `AGENT_E2E_MCP_PORT` when needed.
 
 Start the Dev MCP command and register the emitted `mcpUrl` in your MCP client:
 
