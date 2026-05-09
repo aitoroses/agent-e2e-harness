@@ -4,10 +4,9 @@ import {
   type ServerResponse,
 } from "node:http";
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
 import { stat } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
-import { dirname, extname, resolve } from "node:path";
+import { extname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { AnyHarnessTypes, ExecutableJourney, ResourceAdapter } from "../core/index.js";
 import { createMcpHarnessServer, type McpHarnessServer } from "../mcp/index.js";
@@ -79,7 +78,6 @@ export const DEFAULT_DEV_MCP_PORT = 3766;
 export const DEFAULT_DEV_MCP_PATH = "/mcp";
 export const DEFAULT_AGENT_E2E_DIR = ".agents-e2e";
 export const DEFAULT_AGENT_E2E_ARTIFACT_ROOT = ".agents-e2e/artifacts";
-export const DEFAULT_DEV_MCP_MANIFEST_PATH = ".agents-e2e/dev-mcp.json";
 export const DEFAULT_DEV_MCP_CONFIG_FILES = [
   "agent-e2e.config.ts",
   "agent-e2e.config.mts",
@@ -155,7 +153,6 @@ export interface AgentE2EDevMcpConfig<
   browserSessions?: DevMcpBrowserSessionController | false;
   harness?: DevMcpHarnessProvider;
   artifactRoot?: string;
-  manifestPath?: string;
   host?: string;
   port?: number;
   path?: string;
@@ -179,7 +176,6 @@ export interface AgentE2EDevMcpManifest {
 
 export interface AgentE2EDevMcpServerHandle extends DevMcpHttpServerHandle {
   artifactRoot: string;
-  manifestPath: string;
   manifest: AgentE2EDevMcpManifest;
 }
 
@@ -192,9 +188,7 @@ export interface LoadAgentE2EConfigOptions {
 export interface StartAgentE2EDevMcpFromConfigOptions {
   cwd?: string;
   configPath?: string;
-  reload?: boolean;
   artifactRoot?: string;
-  manifestPath?: string;
   host?: string;
   port?: number;
   path?: string;
@@ -261,7 +255,6 @@ export async function startAgentE2EDevMcpFromConfig<
   const artifactRoot = options.artifactRoot ?? config.artifactRoot;
   const sourceOptions: ReloadingHarnessSourceOptions<TTypes, TStackHandle> = {
     configPath,
-    reload: options.reload ?? true,
   };
   if (artifactRoot) sourceOptions.artifactRoot = artifactRoot;
   const source = createReloadingHarnessSource<TTypes, TStackHandle>(sourceOptions);
@@ -269,7 +262,6 @@ export async function startAgentE2EDevMcpFromConfig<
     ...config,
     harness: () => source.currentHarness(),
     ...(artifactRoot ? { artifactRoot } : {}),
-    ...(options.manifestPath ? { manifestPath: options.manifestPath } : {}),
     ...(options.host ? { host: options.host } : {}),
     ...(options.port !== undefined ? { port: options.port } : {}),
     ...(options.path ? { path: options.path } : {}),
@@ -287,7 +279,6 @@ export async function startAgentE2EDevMcp<
 ): Promise<AgentE2EDevMcpServerHandle> {
   const resolvedConfig = config ?? await loadAgentE2EConfig<TTypes, TStackHandle>();
   const artifactRoot = resolvedConfig.artifactRoot ?? process.env.AGENT_E2E_ARTIFACT_ROOT ?? DEFAULT_AGENT_E2E_ARTIFACT_ROOT;
-  const manifestPath = resolvedConfig.manifestPath ?? process.env.AGENT_E2E_DEV_MCP_MANIFEST ?? DEFAULT_DEV_MCP_MANIFEST_PATH;
   const host = resolvedConfig.host ?? process.env.AGENT_E2E_MCP_HOST ?? DEFAULT_DEV_MCP_HOST;
   const port = resolvedConfig.port ?? optionalPort(process.env.AGENT_E2E_MCP_PORT) ?? DEFAULT_DEV_MCP_PORT;
   const path = resolvedConfig.path ?? process.env.AGENT_E2E_MCP_PATH ?? DEFAULT_DEV_MCP_PATH;
@@ -321,14 +312,12 @@ export async function startAgentE2EDevMcp<
       : {}),
   };
 
-  await writeDevMcpManifest(manifestPath, manifest);
   installDevMcpSignalHandlers(server, resolvedConfig);
-  logDevMcpReady(server, manifestPath, artifactRoot, resolvedConfig);
+  logDevMcpReady(server, artifactRoot, resolvedConfig);
 
   return {
     ...server,
     artifactRoot,
-    manifestPath,
     manifest,
   };
 }
@@ -349,7 +338,6 @@ interface ReloadingHarnessSourceOptions<
 > {
   configPath: string;
   artifactRoot?: string;
-  reload: boolean;
 }
 
 function createReloadingHarnessSource<
@@ -361,8 +349,8 @@ function createReloadingHarnessSource<
 
   return {
     async currentHarness(): Promise<McpHarnessServer> {
-      const currentMtimeMs = options.reload ? await configMtime(options.configPath) : cachedMtimeMs;
-      if (cachedHarness && (!options.reload || currentMtimeMs === cachedMtimeMs))
+      const currentMtimeMs = await configMtime(options.configPath);
+      if (cachedHarness && currentMtimeMs === cachedMtimeMs)
         return cachedHarness;
 
       const config = await loadAgentE2EConfig<TTypes, TStackHandle>({
@@ -392,14 +380,6 @@ function assertSupportedConfigRuntime(configPath: string): void {
   throw new Error(
     `TypeScript Agent E2E config files require Bun as the Dev MCP runtime. Run the Dev MCP entrypoint with Bun: ${configPath}`,
   );
-}
-
-async function writeDevMcpManifest(
-  path: string,
-  manifest: AgentE2EDevMcpManifest,
-): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 function installDevMcpSignalHandlers<
@@ -432,7 +412,6 @@ function logDevMcpReady<
   TStackHandle,
 >(
   server: DevMcpHttpServerHandle,
-  manifestPath: string,
   artifactRoot: string,
   config: AgentE2EDevMcpConfig<TTypes, TStackHandle>,
 ): void {
@@ -443,7 +422,6 @@ function logDevMcpReady<
   logger.log(`  Stack:     ${config.stackProvider ? "call stack.start; use returned service URLs as browser targets" : "not configured"}`);
   logger.log("  Browser:   Playwright-owned MCP sessions enabled");
   logger.log(`  Artifacts: ${artifactRoot}`);
-  logger.log(`  Manifest:  ${manifestPath}`);
 }
 
 function localDevOrigins(host: string): readonly string[] {

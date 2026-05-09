@@ -154,8 +154,8 @@ An HTTP MCP server mode for agent development where the endpoint stays stable wh
 _Avoid_: one-shot stdio runner, production server, static journey snapshot
 
 **Bun-Backed Dev MCP Runtime**:
-The required Dev MCP runtime shape where Bun executes the TypeScript entrypoint and `agent-e2e.config.ts` directly, allowing a stable MCP endpoint to refresh journey definitions without a separate TypeScript compile/watch bridge.
-_Avoid_: Node plus ad-hoc TS loader, precompiled dev-mcp runtime, endpoint restart
+The required Dev MCP runtime shape where the package CLI runs on Bun and loads `agent-e2e.config.ts` directly, allowing a stable MCP endpoint to refresh journey definitions without a consumer-owned TypeScript entrypoint or compile/watch bridge.
+_Avoid_: Node plus ad-hoc TS loader, app-owned Dev MCP script, precompiled dev-mcp runtime, endpoint restart
 
 **Hot-Reloaded Journey Registry**:
 The Dev MCP behavior where journey/resource config is reloaded behind a stable MCP endpoint when `agent-e2e.config.ts` changes. Reloading replaces the available journey registry for new runs; agents should start a new run after a registry change rather than continuing a stale active run.
@@ -312,7 +312,7 @@ _Avoid_: harness, transport layer
 - Showcase organization resolved: the showcase must model best-practice consumer-app layout, with app routes in `apps/showcase/app`, reusable product/harness integration code in `apps/showcase/src`, and app E2E tests in `apps/showcase/test` rather than inside `packages/harness/test`.
 - Public type fixture organization resolved: type-level public API fixtures live under `packages/harness/test-d`, close to the package they validate, instead of a repo-root `test-d` directory.
 - Showcase drift prevention resolved: shared showcase ids, proof body, baseline resources, schema SQL, URL helpers, and resource-adapter behavior live in `apps/showcase/src/proof-notes-contract.ts` so the typed Playwright journey, MCP journey, app routes, and stack provider do not duplicate those constants.
-- Showcase script boundary resolved: `apps/showcase/scripts/dev-mcp.ts` is only a Bun-run CLI entrypoint; reusable showcase-specific stack and Dev MCP journey composition live under `apps/showcase/src/harness/` so scripts do not become a parallel app architecture.
-- Dev MCP ergonomics resolved: consumers should use `agent-e2e.config.ts` plus `startAgentE2EDevMcpFromConfig` so journeys, resource adapters, browser sessions, artifacts, manifest writing, and signal handling are convention-based rather than README wiring.
-- Dev MCP port policy resolved: the Dev MCP endpoint uses a stable default port and writes `mcpUrl` to `.agents-e2e/dev-mcp.json`; `AGENT_E2E_MCP_PORT` overrides it. App URLs are stack-owned data returned by `stack.start` / `stack.status`, not manifest configuration.
+- Showcase script boundary resolved: the showcase has no app-owned Dev MCP script; reusable showcase-specific stack and Dev MCP journey composition live under `apps/showcase/src/harness/` so scripts do not become a parallel app architecture.
+- Dev MCP ergonomics resolved: consumers should use `agent-e2e.config.ts` plus `agent-e2e-harness dev-mcp` so journeys, resource adapters, browser sessions, artifacts, and signal handling are convention-based rather than README wiring.
+- Dev MCP port policy resolved: the Dev MCP endpoint uses a stable default URL, `http://127.0.0.1:3766/mcp`; `AGENT_E2E_MCP_PORT` overrides it. App URLs are stack-owned data returned by `stack.start` / `stack.status`, not manifest configuration.
 - Dev MCP runtime resolved: Bun is the required runtime for Dev MCP entrypoints so TypeScript config can be executed and reloaded directly without a Node compile/watch bridge.

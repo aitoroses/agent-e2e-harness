@@ -46,38 +46,31 @@ export default defineAgentE2EConfig({
 });
 ```
 
-Then make `npm run dev:mcp` start the framework-owned Dev MCP server:
-
-```ts
-import { startAgentE2EDevMcpFromConfig } from '@agent-e2e/harness/dev-mcp';
-
-await startAgentE2EDevMcpFromConfig();
-```
+Then make `npm run dev:mcp` start the framework-owned Dev MCP server through the package CLI:
 
 ```json
 {
   "scripts": {
-    "dev:mcp": "bun scripts/dev-mcp.ts"
+    "dev:mcp": "agent-e2e-harness dev-mcp"
   }
 }
 ```
 
-`startAgentE2EDevMcpFromConfig` / `startAgentE2EDevMcp` create the in-process harness server, Playwright-owned browser sessions, `.agents-e2e/artifacts`, and `.agents-e2e/dev-mcp.json` for you. The config-based entrypoint reloads `agent-e2e.config.ts` when it changes, so new MCP calls see updated journeys without reconnecting the MCP client. It uses `127.0.0.1:3766/mcp` by default; override with `AGENT_E2E_MCP_PORT` when needed.
+`agent-e2e-harness dev-mcp` creates the in-process harness server, Playwright-owned browser sessions, `.agents-e2e/artifacts`, signal handlers, and the hot-reloaded journey registry. It reloads `agent-e2e.config.ts` when it changes, so new MCP calls see updated journeys without reconnecting the MCP client. It uses `127.0.0.1:3766/mcp` by default; override with `AGENT_E2E_MCP_PORT` when needed.
 
-Start the Dev MCP command and register the emitted `mcpUrl` in your MCP client:
+Start the Dev MCP command:
 
 ```sh
 npm run dev:mcp
-cat .agents-e2e/dev-mcp.json
 ```
 
-Configure a standard Streamable HTTP MCP server using the `mcpUrl` from that manifest. Most MCP clients represent it like this:
+Configure a standard Streamable HTTP MCP server using the stable local URL:
 
 ```json
 {
   "mcpServers": {
     "agent-e2e": {
-      "url": "http://127.0.0.1:<port>/mcp"
+      "url": "http://127.0.0.1:3766/mcp"
     }
   }
 }
@@ -115,7 +108,6 @@ See `packages/harness/README.md` for API examples.
 
 ```sh
 npm run dev:mcp --workspace @agent-e2e/showcase
-cat .agents-e2e/dev-mcp.json
 ```
 
 See `apps/showcase/README.md` for the full walkthrough.

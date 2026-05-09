@@ -1,135 +1,117 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import {
-  defineJourney,
-  runClosure,
-  type HarnessTypes,
-  type ResourceAdapter
-} from '../core/index.js';
-import { createMcpHarnessServer } from '../mcp/index.js';
-
-type CliHarness = HarnessTypes<
-  { runId: string },
-  { failSeed?: boolean; failProof?: boolean },
-  { message: string },
-  { kind: 'record'; id: string }
->;
-
-const demoAdapter: ResourceAdapter<CliHarness> = {
-  id: 'demo-record-adapter',
-  supports: (resource) => resource.kind === 'record',
-  delete: async () => undefined
-};
-
-function createDemoJourney(profileData: CliHarness['profileData'] = {}) {
-  return defineJourney<CliHarness>({
-    id: 'demo',
-    title: 'CLI demo journey',
-    seed: ({ profile }) =>
-      profile.data.failSeed
-        ? { errors: [{ code: 'seed.failed', message: 'Demo seed failed' }] }
-        : {
-            environment: { created: [{ kind: 'record', id: 'demo:seed' }] },
-            artifacts: [{ id: 'artifact:demo-seed', kind: 'json', uri: 'artifact://demo/seed.json' }]
-          },
-    profiles: [{ id: 'default', data: profileData, isDefault: true }],
-    phases: [
-      {
-        id: 'main',
-        title: 'Main',
-        steps: [
-          {
-            id: 'message',
-            title: 'Message',
-            execute: async () => ({
-              status: 'passed',
-              observed: { message: 'demo' },
-              artifacts: [{ id: 'artifact:demo-step', kind: 'json', uri: 'artifact://demo/step.json' }]
-            }),
-            proofs: [{ id: 'message-proof', title: 'Message proof', check: async ({ profile }) => !profile.data.failProof }]
-          }
-        ]
-      }
-    ]
-  });
-}
+  startAgentE2EDevMcpFromConfig,
+  type StartAgentE2EDevMcpFromConfigOptions,
+} from "../dev-mcp/index.js";
 
 export async function runCli(argv = process.argv.slice(2)): Promise<number> {
   const [command, ...flags] = argv;
-  const failSeed = flags.includes('--fail-seed');
-  const failProof = flags.includes('--fail-proof');
-  const journey = createDemoJourney({ failSeed, failProof });
-  const server = createMcpHarnessServer({
-    journeys: [journey],
-    resourceAdapters: [demoAdapter],
-    artifactContents: {
-      'artifact:demo-seed': { seeded: true },
-      'artifact:demo-step': { message: 'demo' }
-    }
-  });
 
   switch (command) {
-    case 'mcp:start':
-      print({ status: 'ok', server: 'reference-mcp', tools: ['listJourneys', 'inspectJourney', 'seedJourney', 'beginRun', 'runStep', 'runPhase', 'readArtifact', 'cleanupPlan', 'teardown'] });
+    case undefined:
+    case "help":
+    case "--help":
+    case "-h":
+      printHelp();
       return 0;
-    case 'seed':
-      print(await server.callTool('seedJourney', { journeyId: 'demo', execution: { runId: 'cli-seed' } }));
-      return failSeed ? 1 : 0;
-    case 'run': {
-      const begin = await server.callTool('beginRun', { journeyId: 'demo', execution: { runId: 'cli-run' } });
-      if (begin.status !== 'ok') {
-        print(begin);
-        return 1;
-      }
-      const phase = await server.callTool('runPhase', { runId: 'cli-run', phaseId: 'main' });
-      print(phase);
-      return hasFailedStep(phase) ? 1 : 0;
-    }
-    case 'closure': {
-      const result = await runClosure(journey, { execution: { runId: 'cli-closure' } });
-      print(result);
-      return result.crystallized ? 0 : 1;
-    }
-    case 'artifacts': {
-      const begin = await server.callTool('beginRun', { journeyId: 'demo', execution: { runId: 'cli-artifacts' } });
-      if (begin.status === 'ok') await server.callTool('runPhase', { runId: 'cli-artifacts', phaseId: 'main' });
-      print({ status: 'ok', artifacts: [await server.callTool('readArtifact', { artifactId: 'artifact:demo-seed' }), await server.callTool('readArtifact', { artifactId: 'artifact:demo-step' })] });
-      return 0;
-    }
-    case 'cleanup-plan': {
-      const begin = await server.callTool('beginRun', { journeyId: 'demo', execution: { runId: 'cli-cleanup' } });
-      if (begin.status !== 'ok') {
-        print(begin);
-        return 1;
-      }
-      print(await server.callTool('cleanupPlan', { runId: 'cli-cleanup' }));
-      return 0;
-    }
-    case 'teardown': {
-      const begin = await server.callTool('beginRun', { journeyId: 'demo', execution: { runId: 'cli-teardown' } });
-      if (begin.status !== 'ok') {
-        print(begin);
-        return 1;
-      }
-      print(await server.callTool('teardown', { runId: 'cli-teardown' }));
-      return 0;
-    }
+    case "dev-mcp":
+      return await runDevMcpCommand(flags);
     default:
-      print({ status: 'error', error: `Unknown command: ${command ?? ''}` });
+      process.stderr.write(`Unknown command: ${command}\n\n`);
+      printHelp();
       return 1;
   }
 }
 
-function hasFailedStep(response: Record<string, unknown>): boolean {
-  const results = response.results;
-  return Array.isArray(results) && results.some((result) => typeof result === 'object' && result !== null && 'status' in result && (result as { status?: unknown }).status !== 'passed');
+async function runDevMcpCommand(flags: string[]): Promise<number> {
+  if (flags.includes("--help") || flags.includes("-h")) {
+    printDevMcpHelp();
+    return 0;
+  }
+
+  await startAgentE2EDevMcpFromConfig(parseDevMcpOptions(flags));
+  return 0;
 }
 
-function print(value: unknown): void {
-  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+function parseDevMcpOptions(flags: string[]): StartAgentE2EDevMcpFromConfigOptions {
+  const options: StartAgentE2EDevMcpFromConfigOptions = {};
+  for (let index = 0; index < flags.length; index += 1) {
+    const flag = flags[index];
+    if (!flag) continue;
+    const value = flags[index + 1];
+    switch (flag) {
+      case "--config":
+      case "-c":
+        options.configPath = requireValue(flag, value);
+        index += 1;
+        break;
+      case "--cwd":
+        options.cwd = requireValue(flag, value);
+        index += 1;
+        break;
+      case "--host":
+        options.host = requireValue(flag, value);
+        index += 1;
+        break;
+      case "--port":
+        options.port = parsePort(requireValue(flag, value));
+        index += 1;
+        break;
+      case "--path":
+        options.path = requireValue(flag, value);
+        index += 1;
+        break;
+      case "--artifact-root":
+        options.artifactRoot = requireValue(flag, value);
+        index += 1;
+        break;
+      default:
+        throw new Error(`Unknown dev-mcp option: ${flag}`);
+    }
+  }
+  return options;
+}
+
+function requireValue(flag: string, value: string | undefined): string {
+  if (!value || value.startsWith("--")) throw new Error(`${flag} requires a value`);
+  return value;
+}
+
+function parsePort(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65_535)
+    throw new Error(`Invalid --port value: ${value}`);
+  return parsed;
+}
+
+function printHelp(): void {
+  process.stdout.write(`agent-e2e-harness
+
+Commands:
+  dev-mcp   Start the Bun-backed Dev MCP server from agent-e2e.config.ts
+`);
+}
+
+function printDevMcpHelp(): void {
+  process.stdout.write(`agent-e2e-harness dev-mcp
+
+Starts the Bun-backed Agent E2E Dev MCP server from agent-e2e.config.ts.
+
+Options:
+  -c, --config <path>       Config path, defaults to agent-e2e.config.ts
+      --cwd <path>          Working directory for config resolution
+      --host <host>         MCP host, defaults to 127.0.0.1
+      --port <port>         MCP port, defaults to 3766
+      --path <path>         MCP HTTP path, defaults to /mcp
+      --artifact-root <dir> Artifact root, defaults to .agents-e2e/artifacts
+`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   runCli().then((code) => {
     process.exitCode = code;
+  }).catch((error: unknown) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
   });
 }

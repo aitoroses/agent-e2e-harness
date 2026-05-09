@@ -27,7 +27,7 @@ By the end, the app should have:
 
 - A package dependency on `@agent-e2e/harness` and any needed optional runtime deps such as Playwright or a stack provider.
 - Bun `>=1.3.0` available for the Dev MCP TypeScript runtime.
-- A conventional `agent-e2e.config.ts` plus public dev command, usually `npm run dev:mcp`, that starts the framework-owned Dev MCP server and writes a manifest containing `mcpUrl`.
+- A conventional `agent-e2e.config.ts` plus public dev command, usually `npm run dev:mcp`, that calls `agent-e2e-harness dev-mcp`.
 - At least one executable journey that proves a real user-visible behavior from seeded state.
 - A seed that prepares prerequisites without pre-creating the behavior under proof.
 - A stack provider that starts and stops required local services and app processes.
@@ -42,9 +42,9 @@ Use a tracer-bullet loop. One thin vertical proof is better than a broad incompl
 1. Pick one user-real path and write it as a short textual journey: seed state, browser/API action, expected proof, resources created, cleanup rule.
 2. Add the minimal stack provider needed to start the app and dependencies through the harness.
 3. Add the minimal seed and resource adapter. Cleanup must only delete resources recorded in the run ownership ledger.
-4. Add `agent-e2e.config.ts` with the stack provider, journeys, and resource adapters, then make the Bun-run Dev MCP entrypoint call `startAgentE2EDevMcpFromConfig`.
+4. Add `agent-e2e.config.ts` with the stack provider, journeys, and resource adapters, then make `npm run dev:mcp` call `agent-e2e-harness dev-mcp`.
 5. Start the Dev MCP server with the app's public command. It should keep running while code and journey files change so the agent can iterate without restarting hidden scratch scripts.
-6. Configure the agent's normal MCP client with the `mcpUrl` from the manifest as a Streamable HTTP MCP server.
+6. Configure the agent's normal MCP client with `http://127.0.0.1:3766/mcp` as a Streamable HTTP MCP server, unless the app intentionally overrides `AGENT_E2E_MCP_PORT`.
 7. Drive the proof through MCP tools: `stack.start`, `run.begin`, `browser.open`, `browser.snapshot`, `browser.act`, `journey.step` or `journey.phase`, `artifact.read`, `cleanup.plan`, `run.reseed`, `browser.close`, `stack.stop`.
 8. Use artifacts for time travel: inspect `seed-manifest.json`, snapshots, screenshots, console/network logs, `result.json`, `step-feedback.json`, cleanup, timeline, and metrics before changing code again.
 9. When the interactive loop passes, crystallize it into a normal test command that runs from clean seed in CI.
@@ -55,15 +55,14 @@ Prefer an app-owned command like:
 
 ```sh
 npm run dev:mcp
-cat .agents-e2e/dev-mcp.json
 ```
 
 The command should:
 
-- Build or resolve the harness package if needed.
+- Run `agent-e2e-harness dev-mcp`.
 - Start a local HTTP MCP endpoint for development. The default MCP port is stable; use `AGENT_E2E_MCP_PORT` when the user needs a different one.
 - Start no hidden long-lived process outside the documented command.
-- Write a manifest with `mcpUrl`. App URLs should come from `stack.start` / `stack.status` service URLs, not from the Dev MCP manifest.
+- Keep app URLs in `stack.start` / `stack.status` service URLs, not in Dev MCP configuration.
 - Keep the Dev MCP endpoint stable while Bun reloads the TypeScript journey/config source behind it during agent iteration.
 - Shut down cleanly on `SIGINT`/`SIGTERM`; the proof loop should still call `stack.stop` for managed app infrastructure.
 
@@ -76,7 +75,6 @@ Adapt to the user's stack, but keep the boundaries clear:
 ```text
 <app>/
   agent-e2e.config.ts              # conventional config: stack provider, journeys, resource adapters
-  scripts/dev-mcp.ts               # public Bun-run Dev MCP entrypoint
   src/e2e-harness/
     journey.ts                     # executable journeys
     seed.ts                        # environment seed
@@ -175,12 +173,11 @@ In this repository, `apps/showcase` demonstrates the pattern with a Proof Notes 
 
 ```sh
 npm run dev:mcp --workspace @agent-e2e/showcase
-cat .agents-e2e/dev-mcp.json
 ```
 
 Use it to inspect structure and expected behavior, not as a template to copy blindly. Good reference files include:
 
-- `apps/showcase/scripts/dev-mcp.ts` for the public command shape.
+- `apps/showcase/package.json` for the public `agent-e2e-harness dev-mcp` command shape.
 - `apps/showcase/src/harness/` for app-specific Dev MCP composition.
 - `apps/showcase/src/journey.ts` for a typed Playwright journey.
 - `apps/showcase/test/showcase.e2e.test.ts` for crystallized closure proof.
@@ -190,8 +187,8 @@ Use it to inspect structure and expected behavior, not as a template to copy bli
 
 For app adoption, final evidence should include:
 
-- Dev MCP command and manifest path.
-- MCP client configured against the Dev MCP `mcpUrl`.
+- Dev MCP command and configured MCP URL.
+- MCP client configured against `http://127.0.0.1:3766/mcp` unless the app intentionally overrides the MCP port.
 - Tool discovery result.
 - Stack ready services.
 - Seed status.

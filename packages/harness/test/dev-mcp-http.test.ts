@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -195,14 +195,12 @@ describe("Dev MCP Streamable HTTP server", () => {
     expect(events).toEqual(["start", "stop:stack-1"]);
   });
 
-  it("starts a convention-based Dev MCP server and writes a framework-owned manifest", async () => {
+  it("starts a convention-based Dev MCP server without requiring a manifest file", async () => {
     const tmpRoot = await mkdtemp(join(tmpdir(), "agent-e2e-dev-mcp-"));
-    const manifestPath = join(tmpRoot, ".agents-e2e", "dev-mcp.json");
     const artifactRoot = join(tmpRoot, ".agents-e2e", "artifacts");
     const config = defineAgentE2EConfig<HttpHarness>({
       journeys: [makeHttpJourney()],
       artifactRoot,
-      manifestPath,
       port: 0,
       browserSessions: false,
       installSignalHandlers: false,
@@ -218,7 +216,6 @@ describe("Dev MCP Streamable HTTP server", () => {
       path: "/mcp",
     });
     expect(server.manifest).not.toHaveProperty("appUrl");
-    await expect(readFile(manifestPath, "utf8")).resolves.toContain(server.url);
 
     const client = new Client({
       name: "agent-e2e-convention-client",

@@ -20,7 +20,7 @@ npm install -D @modelcontextprotocol/sdk playwright
 
 ```ts
 import { defineJourney } from '@agent-e2e/harness/core';
-import { defineAgentE2EConfig, startAgentE2EDevMcpFromConfig } from '@agent-e2e/harness/dev-mcp';
+import { defineAgentE2EConfig } from '@agent-e2e/harness/dev-mcp';
 import { createProcessStackProvider } from '@agent-e2e/harness/stack';
 import { createRunArtifactRecorder } from '@agent-e2e/harness/artifacts';
 ```
@@ -99,23 +99,17 @@ export default defineAgentE2EConfig({
 });
 ```
 
-Then keep the runnable command thin:
-
-```ts
-import { startAgentE2EDevMcpFromConfig } from '@agent-e2e/harness/dev-mcp';
-
-await startAgentE2EDevMcpFromConfig();
-```
+Then run the Dev MCP server through the package CLI:
 
 ```json
 {
   "scripts": {
-    "dev:mcp": "bun scripts/dev-mcp.ts"
+    "dev:mcp": "agent-e2e-harness dev-mcp"
   }
 }
 ```
 
-The high-level factory creates the MCP harness, default Playwright browser sessions, `.agents-e2e/artifacts`, `.agents-e2e/dev-mcp.json`, signal handlers, and a hot-reloaded journey registry. Bun runs the TypeScript entrypoint and `agent-e2e.config.ts` directly; when the config file changes, new MCP calls see the updated journeys without reconnecting the MCP client. It uses `127.0.0.1:3766/mcp` by default; set `AGENT_E2E_MCP_PORT` to override it. App URLs come from `stack.start` / `stack.status` service URLs, not from the Dev MCP manifest.
+The CLI creates the MCP harness, default Playwright browser sessions, `.agents-e2e/artifacts`, signal handlers, and a hot-reloaded journey registry. Bun runs `agent-e2e.config.ts` directly; when the config file changes, new MCP calls see the updated journeys without reconnecting the MCP client. It uses `127.0.0.1:3766/mcp` by default; set `AGENT_E2E_MCP_PORT` to override it. App URLs come from `stack.start` / `stack.status` service URLs, not from Dev MCP configuration.
 
 ## Proof Loop
 
@@ -125,7 +119,7 @@ Drive the app through a standard MCP client configured with the Dev MCP URL:
 {
   "mcpServers": {
     "agent-e2e": {
-      "url": "http://127.0.0.1:<port>/mcp"
+      "url": "http://127.0.0.1:3766/mcp"
     }
   }
 }
