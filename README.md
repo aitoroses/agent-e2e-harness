@@ -22,14 +22,24 @@ Imagine this user request to a coding agent:
 
 With Agent E2E Harness, the app gives the agent a small set of MCP tools instead of a vague instruction to "write an E2E test". The loop becomes:
 
-1. `stack.start` starts the app and any disposable services, then returns the app URL.
-2. `run.begin` seeds a known user/workspace without creating the note being tested.
+1. `stack.start` asks the app-owned stack adapter to start the app and disposable services, then returns the app URL.
+2. `run.begin` runs the journey seed, creating or checking prerequisite state without creating the note being tested.
 3. `browser.open` launches an MCP-owned Playwright browser at the app URL.
 4. `browser.snapshot` gives the agent stable refs for visible UI targets.
 5. `browser.act` clicks and types through those refs.
 6. `journey.step` checks the product-visible result, records owned resources, and writes proof artifacts.
-7. `artifact.read` lets the agent time-travel through screenshots, console logs, network logs, and step feedback.
-8. `cleanup.plan` and `run.reseed` delete only resources owned by that run.
+7. `artifact.read` lets the agent time-travel through screenshots, console logs, network logs, result JSON, and step feedback.
+8. `cleanup.plan` and `run.reseed` use resource adapters to delete only resources owned by that run.
+
+That touches the whole public surface:
+
+- A **journey** describes the user-visible behavior and proofs.
+- A **seed** creates known prerequisites and forbidden-state checks.
+- A **stack provider** owns app processes, databases, queues, containers, or other local infrastructure.
+- **Resource adapters** know how to clean domain objects created during a run.
+- **Browser MCP tools** give the agent refs, actions, snapshots, and screenshots.
+- **Artifacts** make the run time-travelable after every step.
+- **Cleanup/reseed** turns agent iteration into a safe loop instead of leaving test data behind.
 
 The journey stays close to the user story:
 
