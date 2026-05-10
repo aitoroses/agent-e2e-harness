@@ -14,6 +14,69 @@ Use it when a human asks an agent to instrument an application for E2E developme
 - Stack contracts for app processes and other consumer-owned infrastructure.
 - Public subpath exports so consumer apps import only the surfaces they need.
 
+## The Idea In One Example
+
+Imagine this user request to a coding agent:
+
+> Instrument my notes app so you can prove that a signed-in user can create a note, see it in the UI, and clean up only the note you created.
+
+With Agent E2E Harness, the app gives the agent a small set of MCP tools instead of a vague instruction to "write an E2E test". The loop becomes:
+
+1. `stack.start` starts the app and any disposable services, then returns the app URL.
+2. `run.begin` seeds a known user/workspace without creating the note being tested.
+3. `browser.open` launches an MCP-owned Playwright browser at the app URL.
+4. `browser.snapshot` gives the agent stable refs for visible UI targets.
+5. `browser.act` clicks and types through those refs.
+6. `journey.step` checks the product-visible result, records owned resources, and writes proof artifacts.
+7. `artifact.read` lets the agent time-travel through screenshots, console logs, network logs, and step feedback.
+8. `cleanup.plan` and `run.reseed` delete only resources owned by that run.
+
+The journey stays close to the user story:
+
+```ts
+export const createNoteJourney = defineJourney({
+  id: 'notes:create',
+  title: 'Create a note from the UI',
+  profiles: [{ id: 'default', label: 'Signed-in user', isDefault: true, data: {} }],
+  seed: async () => ({
+    environment: {
+      checked: [{ type: 'workspace', id: 'agent-proof' }],
+      created: [],
+      forbidden: [{ type: 'note', id: 'agent-created-note' }]
+    }
+  }),
+  phases: [
+    {
+      id: 'phase:notes',
+      title: 'Notes',
+      steps: [
+        {
+          id: 'step:create-note',
+          title: 'Create a note and verify it is visible',
+          execute: async ({ execution }) => {
+            const note = await execution.notes.findByTitle('Agent proof note');
+            return {
+              status: note ? 'passed' : 'failed',
+              observed: { noteVisible: Boolean(note), noteId: note?.id },
+              ownedResources: note ? [{ type: 'note', id: note.id }] : []
+            };
+          },
+          proofs: [
+            {
+              id: 'proof:note-visible',
+              title: 'The created note is visible in the app',
+              check: ({ observed }) => observed.noteVisible === true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+});
+```
+
+During development, the agent can keep the Dev MCP server connected while it edits journeys. When `agent-e2e.config.ts` changes, the journey registry hot-reloads behind the same MCP URL. When the flow works, the same journey shape can be crystallized into a deterministic CI test.
+
 ## Install
 
 In a consumer app:
