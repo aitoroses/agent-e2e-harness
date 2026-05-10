@@ -1,8 +1,10 @@
 # Agent E2E Harness
 
-Agent E2E Harness is a TypeScript toolkit for turning interactive agent work into repeatable end-to-end proof loops. It gives an agent a local MCP control surface for starting an app stack, seeding known state, driving a Playwright-owned browser, collecting artifacts, cleaning resources it created, and crystallizing the same flow into CI.
+Agent E2E Harness gives coding agents MCP tools optimized for discovery and time-travel debugging.
 
-Use it when a human asks an agent to instrument an application for E2E development, not just to add a one-off Playwright test.
+Journeys are executable maps of your product workflows. They give agents coordinates: seed known state, start the app stack, move phase by phase, stop at any step, inspect the browser, read artifacts, clean owned data, and rerun until the flow is ready to crystallize into CI.
+
+Without it, agents burn context rediscovering setup, replaying clicks, reading terminal scrollback, and manually cleaning data. With it, the workflow lives in the harness.
 
 ## What It Provides
 
@@ -14,32 +16,35 @@ Use it when a human asks an agent to instrument an application for E2E developme
 - Stack contracts for app processes and other consumer-owned infrastructure.
 - Public subpath exports so consumer apps import only the surfaces they need.
 
-## The Idea In One Example
+## How It Works In 60 Seconds
 
 Imagine this user request to a coding agent:
 
 > Instrument my notes app so you can prove that a signed-in user can create a note, see it in the UI, and clean up only the note you created.
 
-With Agent E2E Harness, the app gives the agent a small set of MCP tools instead of a vague instruction to "write an E2E test". The loop becomes:
+With Agent E2E Harness, the app gives the agent a compact MCP toolset instead of a vague instruction to "write an E2E test":
 
-1. `stack.start` asks the app-owned stack adapter to start the app and disposable services, then returns the app URL.
-2. `run.begin` runs the journey seed, creating or checking prerequisite state without creating the note being tested.
-3. `browser.open` launches an MCP-owned Playwright browser at the app URL.
-4. `browser.snapshot` gives the agent stable refs for visible UI targets.
-5. `browser.act` clicks and types through those refs.
-6. `journey.step` checks the product-visible result, records owned resources, and writes proof artifacts.
-7. `artifact.read` lets the agent time-travel through screenshots, console logs, network logs, result JSON, and step feedback.
-8. `cleanup.plan` and `run.reseed` use resource adapters to delete only resources owned by that run.
+```text
+Human request
+  -> Agent uses MCP tools optimized for discovery
+  -> stack.start starts the app and disposable services
+  -> run.begin applies the seed and creates a known starting point
+  -> browser.open / browser.snapshot / browser.act drive and inspect the UI
+  -> journey.step executes one phase/step and records proof
+  -> artifact.read opens screenshots, console, network, result, and feedback
+  -> cleanup.plan / run.reseed clean owned data and return to known state
+  -> the passing journey crystallizes into CI
+```
 
 That touches the whole public surface:
 
-- A **journey** describes the user-visible behavior and proofs.
-- A **seed** creates known prerequisites and forbidden-state checks.
-- A **stack provider** owns app processes, databases, queues, containers, or other local infrastructure.
+- A **journey** is the executable map: phases, steps, proofs, guidance, and typed observed state.
+- A **seed** creates the known starting point and checks forbidden state before steps run.
+- A **stack provider** owns app processes, databases, queues, containers, or other disposable infrastructure.
 - **Resource adapters** know how to clean domain objects created during a run.
-- **Browser MCP tools** give the agent refs, actions, snapshots, and screenshots.
-- **Artifacts** make the run time-travelable after every step.
-- **Cleanup/reseed** turns agent iteration into a safe loop instead of leaving test data behind.
+- **Browser MCP tools** give the agent refs, actions, snapshots, screenshots, and visible state.
+- **Artifacts** give each phase/step a replayable checkpoint: `before.png`, `after.png` or `failure.png`, `console.json`, `network.json`, `result.json`, and `step-feedback.json`.
+- **Cleanup/reseed** turns debugging into a safe loop instead of leaving test data behind.
 
 The journey stays close to the user story:
 
