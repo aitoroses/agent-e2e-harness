@@ -6,6 +6,13 @@ Journeys are executable maps of your product workflows. They give agents coordin
 
 Without it, agents burn context rediscovering setup, replaying clicks, reading terminal scrollback, and manually cleaning data. With it, the workflow lives in the harness.
 
+| Without Agent E2E Harness | With Agent E2E Harness |
+| --- | --- |
+| The agent guesses how to start the app, database, queues, and browser. | `stack.start` exposes a known app stack through MCP. |
+| The agent manually recreates data before every debug attempt. | `run.begin` and `run.reseed` return to a known seeded state. |
+| The agent repeats clicks just to reach the failing screen again. | Journeys give phase/step coordinates the agent can navigate. |
+| Evidence lives in screenshots, terminal scrollback, and memory. | Artifacts attach evidence to every phase/step for later inspection. |
+
 ## What It Provides
 
 - Seeded journeys that describe a user-visible flow from known state.
