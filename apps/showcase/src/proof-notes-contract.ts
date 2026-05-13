@@ -2,7 +2,6 @@ import {
   createResourceRegistry,
   defineResourceKind,
   type ArtifactRef,
-  type ResourceKindDefinition,
   type ResourceRegistry,
 } from "@agent-e2e/harness/core";
 
@@ -80,7 +79,11 @@ export function createDeletedProofNoteArtifact(resourceId: string): ArtifactRef 
   };
 }
 
-export const noteKind = defineResourceKind({
+export const noteKind = defineResourceKind<
+  typeof PROOF_NOTE_RESOURCE_KIND,
+  CreateProofNoteResourceInput,
+  ProofNoteResource
+>({
   kind: PROOF_NOTE_RESOURCE_KIND,
   create: async (input: CreateProofNoteResourceInput) => {
     const response = await fetch(notesApiUrl(input.baseUrl), {
@@ -109,7 +112,5 @@ export const noteKind = defineResourceKind({
 });
 
 export function createShowcaseResourceRegistry(): ResourceRegistry<ShowcaseResource> {
-  return createResourceRegistry([
-    noteKind as ResourceKindDefinition<string, object, ShowcaseResource>,
-  ]);
+  return createResourceRegistry<ShowcaseResource>([noteKind]);
 }
