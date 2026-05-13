@@ -2,17 +2,17 @@
 
 The Proof Notes showcase exists to demonstrate **Journey-Driven Showcase Development**, not only a finished demo app. Its launch path is intentionally the same path a consumer would run: Dev MCP starts at a stable URL, the stack starts through `stack.start`, the journey seeds state, a browser creates the proof note, artifacts explain the run, and cleanup removes only owned resources.
 
-## Runtime Split
+## Runtime Shape
 
-The Dev MCP server is Bun-backed because `agent-e2e.config.ts` is the consumer integration point and should load directly during agent iteration. The managed stack is owned by a private Node sidecar at `apps/showcase/scripts/showcase-stack-sidecar.mjs`.
+The Dev MCP server is Bun-backed because `agent-e2e.config.ts` is the consumer integration point and should load directly during agent iteration. The managed stack is composed directly in the showcase provider: PostgreSQL Testcontainers for infrastructure and `createProcessStackProvider` for the managed `next dev` process.
 
-The sidecar is part of the showcase narrative:
+The runtime boundary is part of the showcase narrative:
 
 - Bun remains responsible for Dev MCP, the tool grammar, hot config loading, browser sessions, artifacts, and the journey registry.
-- Node is used only for showcase infrastructure lifecycle: Testcontainers PostgreSQL, schema initialization, and the managed `next dev` process.
-- The bridge is stdio JSON lines, so the sidecar does not add a public service or harness API.
+- The showcase infrastructure provider owns Testcontainers PostgreSQL readiness, schema initialization, and teardown.
+- PostgreSQL readiness is explicit: wait for the Postgres-ready log line, then use bounded client connection retry and schema timeout.
 
-This keeps the reusable harness surface small while showing consumers how to isolate runtime-specific infrastructure clients when needed.
+This keeps the reusable harness surface small while showing consumers where runtime-specific infrastructure readiness belongs: inside the consumer provider or a future adapter package.
 
 ## Proof Loop
 

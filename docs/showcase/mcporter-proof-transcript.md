@@ -34,7 +34,7 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.sto
 - `npm install`: completed with `found 0 vulnerabilities`.
 - `npm run dev:mcp --workspace @agent-e2e/showcase`: printed `Agent E2E Dev MCP ready` and `MCP: http://127.0.0.1:3766/mcp`.
 - `mcporter list`: status `ok`; 19 tools discovered.
-- `stack.start`: status `ok`; stack status `ready`; `showcase-next-dev` ready at `http://127.0.0.1:58589`; PostgreSQL ready through the showcase Node sidecar.
+- `stack.start`: status `ok`; stack status `ready`; `showcase-next-dev` ready at `http://127.0.0.1:58589`; PostgreSQL ready through the showcase Testcontainers provider.
 - `journey.list`: listed `showcase:proof-notes`.
 - `run.begin`: seed gate `ready`; `canRunSteps: true`; baseline workspace/user checked.
 - `browser.open`: returned headed MCP browser session `browser-1778691174645-4ba879`.
@@ -73,4 +73,4 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.sto
 
 ## Runtime Note
 
-The Dev MCP server remains Bun-backed. The showcase stack lifecycle runs through `apps/showcase/scripts/showcase-stack-sidecar.mjs`, a private Node sidecar that owns Testcontainers PostgreSQL and the managed `next dev` process while Dev MCP keeps the stable Streamable HTTP endpoint.
+The Dev MCP server remains Bun-backed. The showcase stack lifecycle is composed directly by the showcase stack provider, which owns Testcontainers PostgreSQL readiness and the managed `next dev` process while Dev MCP keeps the stable Streamable HTTP endpoint.

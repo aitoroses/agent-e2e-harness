@@ -113,15 +113,15 @@ Expected checkpoint: `"stack": { "status": "stopped" }` with stopped `showcase-n
 
 ## How The Stack Works
 
-Dev MCP stays Bun-backed so `agent-e2e.config.ts` loads directly and the MCP URL remains stable. The showcase stack itself runs through a private Node sidecar at `scripts/showcase-stack-sidecar.mjs`.
+Dev MCP stays Bun-backed so `agent-e2e.config.ts` loads directly and the MCP URL remains stable. The showcase stack provider composes the showcase-owned PostgreSQL Testcontainers provider with the managed `next dev` process in-process.
 
-That split is intentional for the launch showcase:
+That direct composition is intentional for the launch showcase:
 
 - Bun owns Dev MCP, hot config loading, MCP tool routing, and browser sessions.
-- The Node sidecar owns Testcontainers PostgreSQL, schema initialization, and the managed `next dev` process.
-- The Bun stack provider talks to the sidecar over stdio JSON lines, so no extra public port or harness API is needed.
+- The showcase provider owns Testcontainers PostgreSQL, explicit readiness, schema initialization, and the managed `next dev` process.
+- PostgreSQL readiness uses a container log wait plus bounded `pg` connection retry so the stack starts reliably without a private bridge or harness API change.
 
-A consumer app does not need this exact sidecar unless its infrastructure tooling expects Node-specific runtime behavior. Apps with Bun-compatible stack providers can implement `stackProvider` directly in `agent-e2e.config.ts`; apps with Node-only infrastructure clients can copy this sidecar shape while still keeping the Dev MCP server Bun-backed.
+Consumer apps should implement `stackProvider` directly in `agent-e2e.config.ts` when their infrastructure clients are compatible with the Dev MCP runtime. Runtime-specific readiness belongs in the consumer provider or a future dedicated adapter package, not in a private lifecycle bridge.
 
 ## Artifacts
 
@@ -150,8 +150,8 @@ Artifacts are generated under `.agents-e2e/artifacts/<journey>/<run>/`:
 ## Framework Surfaces Demonstrated
 
 - `@agent-e2e/harness/dev-mcp`: local Streamable HTTP MCP server.
-- `@agent-e2e/harness/stack`: managed process stack provider used inside the Node sidecar.
-- `apps/showcase/scripts/showcase-stack-sidecar.mjs`: showcase-owned Node lifecycle bridge for Testcontainers and `next dev`.
+- `@agent-e2e/harness/stack`: managed process stack provider composed with showcase-owned infrastructure readiness.
+- `apps/showcase/src/harness/postgres-testcontainers.ts`: showcase-owned PostgreSQL Testcontainers provider with explicit readiness and schema initialization.
 - `@agent-e2e/harness/playwright-mcp`: headed browser sessions, snapshots, actions, screenshots.
 - `@agent-e2e/harness/mcp`: run, step, cleanup, reseed, and artifact control surface.
 
