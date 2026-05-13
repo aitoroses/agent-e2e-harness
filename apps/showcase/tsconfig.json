@@ -1,45 +1,45 @@
 {
-  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "jsx": "preserve",
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "jsx": "react-jsx",
     "allowJs": false,
     "noEmit": true,
     "incremental": true,
+    "types": [
+      "node"
+    ],
     "plugins": [
       {
         "name": "next"
       }
     ],
-    "baseUrl": ".",
-    "paths": {
-      "@agent-e2e/harness": [
-        "../../packages/harness/src/index.ts"
-      ],
-      "@agent-e2e/harness/core": [
-        "../../packages/harness/src/core/index.ts"
-      ],
-      "@agent-e2e/harness/mcp": [
-        "../../packages/harness/src/mcp/index.ts"
-      ],
-      "@agent-e2e/harness/dev-mcp": [
-        "../../packages/harness/src/dev-mcp/index.ts"
-      ],
-      "@agent-e2e/harness/playwright-mcp": [
-        "../../packages/harness/src/playwright-mcp/index.ts"
-      ],
-      "@agent-e2e/harness/stack": [
-        "../../packages/harness/src/stack/index.ts"
-      ],
-      "@agent-e2e/harness/artifacts": [
-        "../../packages/harness/src/artifacts/index.ts"
-      ]
-    }
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "esModuleInterop": true,
+    "resolveJsonModule": true
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    ".next/dev/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

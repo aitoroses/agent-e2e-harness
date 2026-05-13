@@ -15,7 +15,7 @@ import {
   DEFAULT_DEV_MCP_PORT,
   type DevMcpHttpServerHandle,
 } from "@agent-e2e/harness/dev-mcp";
-import { createMcpHarnessServer } from "@agent-e2e/harness/mcp";
+import { createMcpHarnessServer } from "../src/mcp/index.js";
 import type { StackProvider } from "@agent-e2e/harness/stack";
 
 type HttpHarness = HarnessTypes<
@@ -56,7 +56,16 @@ describe("Dev MCP Streamable HTTP server", () => {
 
   it("serves the frozen tool grammar through the official MCP Streamable HTTP client", async () => {
     const harness = createMcpHarnessServer({ journeys: [makeHttpJourney()] });
-    const server = await startDevMcpStreamableHttpServer({ harness });
+    const server = await startDevMcpStreamableHttpServer({
+      harness,
+      browserSessions: {
+        open: async () => ({ browserSessionId: "browser-1" }),
+        snapshot: async (browserSessionId) => ({ browserSessionId, refs: [] }),
+        close: async (browserSessionId) => ({ status: "closed", browserSessionId }),
+        list: () => [],
+        act: async (input) => ({ status: "ok", input }),
+      },
+    });
     handles.push(server);
     const client = new Client({
       name: "agent-e2e-test-client",
@@ -68,19 +77,29 @@ describe("Dev MCP Streamable HTTP server", () => {
 
     try {
       const tools = await client.listTools();
-      expect(tools.tools.map((tool) => tool.name)).toContain("harness.probe");
+      expect(tools.tools.map((tool) => tool.name)).not.toContain("harness.probe");
       expect(tools.tools.map((tool) => tool.name)).toContain("run.reseed");
-
-      const probe = await client.callTool({
-        name: "harness.probe",
-        arguments: {},
+      expect(tools.tools.find((tool) => tool.name === "journey.inspect")?.inputSchema).toMatchObject({
+        type: "object",
+        properties: { journeyId: expect.objectContaining({ type: "string" }) },
+        required: ["journeyId"],
       });
-      const text =
-        probe.content[0]?.type === "text" ? probe.content[0].text : "";
-      expect(JSON.parse(text)).toMatchObject({
-        status: "ok",
-        tool: "harness.probe",
-        ready: true,
+      expect(tools.tools.find((tool) => tool.name === "journey.step")?.inputSchema).toMatchObject({
+        type: "object",
+        properties: {
+          runId: expect.objectContaining({ type: "string" }),
+          phaseId: expect.objectContaining({ type: "string" }),
+          stepId: expect.objectContaining({ type: "string" }),
+        },
+        required: ["runId", "phaseId", "stepId"],
+      });
+      expect(tools.tools.find((tool) => tool.name === "browser.act")?.inputSchema).toMatchObject({
+        type: "object",
+        properties: {
+          browserSessionId: expect.objectContaining({ type: "string" }),
+          action: expect.objectContaining({ enum: ["click", "fill", "press"] }),
+        },
+        required: ["browserSessionId", "action"],
       });
 
       const list = await client.callTool({
@@ -93,6 +112,21 @@ describe("Dev MCP Streamable HTTP server", () => {
         status: "ok",
         tool: "journey.list",
         journeys: [{ id: "journey:http" }],
+      });
+      const inspect = await client.callTool({
+        name: "journey.inspect",
+        arguments: { journeyId: "journey:http" },
+      });
+      const inspectText =
+        inspect.content[0]?.type === "text" ? inspect.content[0].text : "";
+      expect(JSON.parse(inspectText)).toMatchObject({
+        status: "ok",
+        tool: "journey.inspect",
+        contract: {
+          id: "journey:http",
+          title: "HTTP journey",
+          phases: [{ id: "phase:http", steps: [{ id: "step:http" }] }],
+        },
       });
     } finally {
       await client.close();

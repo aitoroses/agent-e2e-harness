@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { defineJourney, type HarnessTypes } from "@agent-e2e/harness/core";
 import { createDevMcpToolRouter } from "@agent-e2e/harness/dev-mcp";
-import { createMcpHarnessServer } from "@agent-e2e/harness/mcp";
+import { createMcpHarnessServer } from "../src/mcp/index.js";
 import type { StackProvider } from "@agent-e2e/harness/stack";
 
 type RouterHarness = HarnessTypes<
@@ -78,17 +78,14 @@ function makeFailingJourney() {
 }
 
 describe("Dev MCP Tool Router", () => {
-  it("lists only implemented tools for the injected capabilities and probes readiness", async () => {
+  it("lists no tools until capabilities are injected", async () => {
     const router = createDevMcpToolRouter();
 
-    expect(router.listTools().map((tool) => tool.name)).toEqual([
-      "harness.probe",
-    ]);
+    expect(router.listTools().map((tool) => tool.name)).toEqual([]);
     await expect(router.callTool("harness.probe")).resolves.toMatchObject({
-      status: "ok",
+      status: "not-found",
       tool: "harness.probe",
-      surface: "dev-mcp-http-server-contracts",
-      ready: true,
+      subject: "tool",
     });
   });
 
@@ -109,6 +106,7 @@ describe("Dev MCP Tool Router", () => {
     expect(router.listTools().map((tool) => tool.name)).toEqual(
       expect.arrayContaining([
         "journey.list",
+        "journey.inspect",
         "run.begin",
         "run.reseed",
         "cleanup.plan",
@@ -120,6 +118,23 @@ describe("Dev MCP Tool Router", () => {
       tool: "journey.list",
       journeys: [{ id: "journey:router" }],
     });
+    await expect(
+      router.callTool("journey.inspect", { journeyId: "journey:router" }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      tool: "journey.inspect",
+      contract: {
+        id: "journey:router",
+        title: "Router journey",
+        profiles: [{ id: "profile:router" }],
+        phases: [
+          {
+            id: "phase:router",
+            steps: [{ id: "step:router" }],
+          },
+        ],
+      },
+    });
 
     const begin = await router.callTool("run.begin", {
       journeyId: "journey:router",
@@ -129,7 +144,7 @@ describe("Dev MCP Tool Router", () => {
       status: "ok",
       tool: "run.begin",
       runId: "router-run",
-      artifact_dir: expect.stringContaining("journey-router/router-run"),
+      artifactDir: expect.stringContaining("journey-router/router-run"),
       artifacts: expect.arrayContaining([
         expect.objectContaining({ name: "seed-manifest" }),
       ]),
@@ -157,7 +172,7 @@ describe("Dev MCP Tool Router", () => {
     expect(step).toMatchObject({
       status: "ok",
       tool: "journey.step",
-      artifact_dir: expect.stringContaining("journey-router/router-run"),
+      artifactDir: expect.stringContaining("journey-router/router-run"),
       result: {
         status: "passed",
         observed: { message: "execution:browser-1" },
@@ -167,7 +182,7 @@ describe("Dev MCP Tool Router", () => {
           expect.objectContaining({ name: "result", kind: "json" }),
           expect.objectContaining({ name: "step-feedback", kind: "json" }),
         ]),
-        step_feedback_artifact: expect.objectContaining({ name: "step-feedback" }),
+        stepFeedbackArtifact: expect.objectContaining({ name: "step-feedback" }),
       },
     });
     const stepArtifacts = (step.result as { artifacts: Array<{ path: string }> }).artifacts;
@@ -252,7 +267,7 @@ describe("Dev MCP Tool Router", () => {
           expect.objectContaining({ name: "failure", kind: "screenshot" }),
           expect.objectContaining({ name: "step-feedback", kind: "json" }),
         ]),
-        step_feedback_artifact: expect.objectContaining({ name: "step-feedback" }),
+        stepFeedbackArtifact: expect.objectContaining({ name: "step-feedback" }),
       },
     });
     const artifacts = (step.result as { artifacts: Array<{ name?: string; path: string }> }).artifacts;
@@ -332,11 +347,50 @@ describe("Dev MCP Tool Router", () => {
       status: "blocked",
       code: "stack-already-running",
     });
+    await expect(router.callTool("stack.start")).resolves.not.toHaveProperty("next");
     await expect(router.callTool("stack.stop")).resolves.toMatchObject({
       status: "ok",
       stack: { status: "stopped", summary: "stopped:stack-1" },
     });
     expect(events).toEqual(["start", "stop:stack-1"]);
+  });
+
+  it("cleans up a started stack when readiness/status fails", async () => {
+    const events: string[] = [];
+    const provider: StackProvider<{ id: string }> = {
+      id: "failing-status-stack",
+      start: async () => {
+        events.push("start");
+        return { id: "stack-1" };
+      },
+      status: () => {
+        events.push("status");
+        throw new Error("readiness timeout");
+      },
+      stop: async (handle) => {
+        events.push(`stop:${handle.id}`);
+        return {
+          status: "stopped",
+          summary: "stopped",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        };
+      },
+    };
+    const router = createDevMcpToolRouter({ stackProvider: provider });
+
+    await expect(router.callTool("stack.start")).resolves.toMatchObject({
+      status: "error",
+      tool: "stack.start",
+      error: "readiness timeout",
+    });
+    await expect(router.callTool("stack.status")).resolves.toMatchObject({
+      status: "ok",
+      stack: { status: "stopped" },
+    });
+    expect(events).toEqual(["start", "status", "stop:stack-1"]);
   });
 
   it("disposes active stack and browser sessions", async () => {

@@ -1,12 +1,16 @@
-import type { ArtifactRef, HarnessTypes, ResourceAdapter } from "@agent-e2e/harness/core";
+import {
+  createResourceRegistry,
+  defineResourceKind,
+  type ArtifactRef,
+  type ResourceKindDefinition,
+  type ResourceRegistry,
+} from "@agent-e2e/harness/core";
 
 export const SHOWCASE_JOURNEY_ID = "showcase:proof-notes";
 export const SHOWCASE_PROFILE_ID = "profile:default";
 export const SHOWCASE_PHASE_ID = "phase:proof-notes";
 export const SHOWCASE_STEP_ID = "step:create-proof-note";
-export const SHOWCASE_RESOURCE_ADAPTER_ID = "showcase-proof-note-api";
-
-export const PROOF_NOTE_RESOURCE_KIND = "proof-note";
+export const PROOF_NOTE_RESOURCE_KIND = "note";
 export const PROOF_BASELINE_RESOURCE_KIND = "proof-baseline";
 export const PROOF_NOTE_BODY = "Proof note created through the browser";
 
@@ -45,6 +49,12 @@ export interface ProofNoteResource {
   baseUrl: string;
 }
 
+export interface CreateProofNoteResourceInput {
+  baseUrl: string;
+  body?: string;
+  runId?: string;
+}
+
 export type ShowcaseResource = ProofNoteResource | {
   kind: typeof PROOF_BASELINE_RESOURCE_KIND;
   id: string;
@@ -70,23 +80,36 @@ export function createDeletedProofNoteArtifact(resourceId: string): ArtifactRef 
   };
 }
 
-export function createShowcaseResourceAdapter<
-  TTypes extends HarnessTypes<unknown, object, object, ShowcaseResource>,
->(): ResourceAdapter<TTypes> {
-  return {
-    id: SHOWCASE_RESOURCE_ADAPTER_ID,
-    supports: (resource) =>
-      resource.kind === PROOF_NOTE_RESOURCE_KIND &&
-      resource.id.startsWith("proof-note:") &&
-      typeof resource.baseUrl === "string",
-    delete: async (resource) => {
-      if (resource.kind !== PROOF_NOTE_RESOURCE_KIND)
-        throw new Error(`Unsupported showcase resource kind: ${resource.kind}`);
-      const response = await fetch(noteApiUrl(resource.baseUrl, resource.id), { method: "DELETE" });
-      if (!response.ok) {
-        throw new Error(`Failed to delete proof note ${resource.id}: ${response.status}`);
-      }
-      return { artifact: createDeletedProofNoteArtifact(resource.id) };
-    },
-  };
+export const noteKind = defineResourceKind({
+  kind: PROOF_NOTE_RESOURCE_KIND,
+  create: async (input: CreateProofNoteResourceInput) => {
+    const response = await fetch(notesApiUrl(input.baseUrl), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        body: input.body ?? PROOF_NOTE_BODY,
+        runId: input.runId ?? "run:registry",
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to create proof note: ${response.status}`);
+    }
+    const payload = await response.json() as { note?: { id?: string } };
+    const id = payload.note?.id;
+    if (!id) throw new Error("Proof note create response did not include note.id");
+    return { kind: PROOF_NOTE_RESOURCE_KIND, id, baseUrl: input.baseUrl };
+  },
+  delete: async (resource: ProofNoteResource) => {
+    const response = await fetch(noteApiUrl(resource.baseUrl, resource.id), { method: "DELETE" });
+    if (!response.ok) {
+      throw new Error(`Failed to delete proof note ${resource.id}: ${response.status}`);
+    }
+    return { artifact: createDeletedProofNoteArtifact(resource.id) };
+  },
+});
+
+export function createShowcaseResourceRegistry(): ResourceRegistry<ShowcaseResource> {
+  return createResourceRegistry([
+    noteKind as ResourceKindDefinition<string, object, ShowcaseResource>,
+  ]);
 }

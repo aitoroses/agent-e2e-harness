@@ -110,7 +110,7 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           runs.set(result.run.id, result.run);
           const artifacts = createRunArtifactRecorder(
             {
-              artifactRoot: optionalStringArg(args, 'artifactRoot') ?? optionalStringArg(args, 'artifact_root') ?? options.artifactRoot,
+              artifactRoot: optionalStringArg(args, 'artifactRoot') ?? options.artifactRoot,
               journeyId: journey.id,
               runId: result.run.id
             },
@@ -127,7 +127,7 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           return {
             status: 'ok',
             runId: result.run.id,
-            artifact_dir: artifacts.run.relDir,
+            artifactDir: artifacts.run.relDir,
             seedGate: result.seedGate,
             artifacts: [seedArtifact, resultArtifact],
             guidance: result.seedGate.guidance
@@ -171,8 +171,8 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           const enhancedResult = {
             ...result,
             artifacts: uniqueArtifacts([...result.artifacts, ...generatedArtifacts]),
-            step_feedback_artifact: generatedArtifacts.find((artifact) => artifact.name === 'step-feedback')
-          } as StepRunResult<TTypes> & { step_feedback_artifact?: ArtifactRef };
+            stepFeedbackArtifact: generatedArtifacts.find((artifact) => artifact.name === 'step-feedback')
+          } as StepRunResult<TTypes> & { stepFeedbackArtifact?: ArtifactRef };
           rememberStepArtifacts(emittedArtifacts, enhancedResult);
           if (artifacts) {
             for (const artifact of generatedArtifacts) emittedArtifacts.set(artifact.id, artifact);
@@ -198,7 +198,7 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
             );
             for (const artifact of [timelineArtifact, metricsArtifact, resultArtifact]) emittedArtifacts.set(artifact.id, artifact);
           }
-          return { status: 'ok', artifact_dir: artifacts?.run.relDir, result: enhancedResult, guidance: result.guidance };
+          return { status: 'ok', artifactDir: artifacts?.run.relDir, result: enhancedResult, guidance: result.guidance };
         }
 
         case 'reseedRun': {
@@ -241,7 +241,7 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           return {
             status: 'ok',
             runId: result.run.id,
-            artifact_dir: artifacts.run.relDir,
+            artifactDir: artifacts.run.relDir,
             cleanup: result.cleanup,
             seedGate: result.seedGate,
             artifacts: [cleanupArtifact, seedArtifact, ownedArtifact],
@@ -286,7 +286,7 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           const artifacts = runArtifacts.get(run.id);
           const artifact = artifacts ? await artifacts.writeCleanupPlan(plan) : undefined;
           if (artifact) emittedArtifacts.set(artifact.id, artifact);
-          return { status: 'ok', artifact_dir: artifacts?.run.relDir, plan, artifact };
+          return { status: 'ok', artifactDir: artifacts?.run.relDir, plan, artifact };
         }
 
         case 'teardown': {
@@ -300,7 +300,7 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           const artifacts = runArtifacts.get(run.id);
           const artifact = artifacts ? await artifacts.writeTeardown(result, 'cleanup') : undefined;
           if (artifact) emittedArtifacts.set(artifact.id, artifact);
-          return { status: 'ok', artifact_dir: artifacts?.run.relDir, result, artifact };
+          return { status: 'ok', artifactDir: artifacts?.run.relDir, result, artifact };
         }
 
         default:

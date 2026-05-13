@@ -4,7 +4,7 @@ import {
   type HarnessTypes,
   type ResourceAdapter,
 } from "@agent-e2e/harness/core";
-import { createMcpHarnessServer } from "@agent-e2e/harness/mcp";
+import { createMcpHarnessServer } from "../src/mcp/index.js";
 
 type McpHarness = HarnessTypes<
   { runId: string },

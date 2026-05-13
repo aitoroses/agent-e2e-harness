@@ -49,7 +49,7 @@ export interface BrowserOpenResult {
   browserSessionId: string;
   browserMode: BrowserSessionMode;
   url: string;
-  artifact_dir: string;
+  artifactDir: string;
   next: { actions: Array<{ id: string; tool?: string; why: string }> };
 }
 
@@ -153,7 +153,7 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
       browserSessionId: id,
       browserMode: mode,
       url: page.url(),
-      artifact_dir: run.relDir,
+      artifactDir: run.relDir,
       next: {
         actions: [
           {

@@ -30,8 +30,11 @@
     "packages/*",
     "apps/*"
   ],
+  "overrides": {
+    "postcss": "^8.5.14"
+  },
   "scripts": {
-    "typecheck": "npm run typecheck --workspace @agent-e2e/harness && npm run typecheck --workspace @agent-e2e/showcase",
+    "typecheck": "npm run build --workspace @agent-e2e/harness && npm run typecheck --workspace @agent-e2e/harness && npm run typecheck --workspace @agent-e2e/showcase",
     "build": "npm run build --workspace @agent-e2e/harness",
     "test": "npm run build --workspace @agent-e2e/harness && npm run typecheck:public && npm run test --workspace @agent-e2e/harness && npm run test --workspace @agent-e2e/showcase",
     "check:core-boundary": "npm run check:boundaries",
@@ -44,7 +47,7 @@
     "@types/node": "^22.15.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "next": "^16.2.5",
+    "next": "^16.2.6",
     "playwright": "^1.59.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

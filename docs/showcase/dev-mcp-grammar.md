@@ -13,10 +13,8 @@ The default Dev MCP grammar defines reusable Agent E2E Harness vocabulary for lo
 
 ### Orientation
 
-- `harness.probe` — returns non-mutating harness/repo/server state.
-- `journey.prompt` — returns an agent prompt generated from the executable journey contract.
 - `journey.list` — lists textual/executable journeys and profile coverage.
-- `journey.validate` — validates textual journey plans and executable alignment.
+- `journey.inspect` — returns the full Inspectable Journey Contract for one journey.
 
 ### Stack and seed
 
@@ -49,19 +47,6 @@ The default Dev MCP grammar defines reusable Agent E2E Harness vocabulary for lo
 
 - `artifact.read` — reads harness-owned artifacts only.
 - `cleanup.plan` — previews journey-owned resources that teardown would delete.
-
-## Planned/future tools
-
-These names are reserved for the reusable grammar but are not advertised by `DEV_MCP_TOOL_GRAMMAR` until their contracts are implemented:
-
-- `run.reset` — clear evidence for a named run id without deleting product resources.
-- `run.status` — read run progress artifacts.
-- `run.explainFailure` — compact step feedback into an agent repair packet.
-- `browser.wait` — wait for text, URL, selector, load state, network idle, or predicate.
-- `browser.apiCall` — call a same-origin API from the page context for debugging API/UI boundaries.
-- `journey.run` — run the full journey in dev mode; still requires closure before crystallized proof.
-- `closure.run` — non-interactive clean-stack headless proof suitable for CI.
-- `proof.timeline` — return the ordered proof timeline for the run.
 
 ## Artifact layout contract
 
