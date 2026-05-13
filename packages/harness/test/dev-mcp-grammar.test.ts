@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DEV_MCP_TOOL_GRAMMAR, FUTURE_DEV_MCP_TOOLS } from '@agent-e2e/harness/dev-mcp';
+import { DEV_MCP_TOOL_GRAMMAR } from '@agent-e2e/harness/dev-mcp';
 import { PLAYWRIGHT_MCP_DEFAULT_BROWSER_MODE, type BrowserSnapshotPacket } from '@agent-e2e/harness/playwright-mcp';
 
 const requiredTools = [
-  'harness.probe',
   'stack.start',
   'stack.status',
   'stack.stop',
@@ -30,10 +29,19 @@ describe('Dev MCP Tool Grammar contracts', () => {
     expect(DEV_MCP_TOOL_GRAMMAR).toEqual(requiredTools);
   });
 
-  it('keeps future tool names out of the advertised implemented grammar', () => {
-    for (const futureTool of FUTURE_DEV_MCP_TOOLS) {
-      expect(DEV_MCP_TOOL_GRAMMAR).not.toContain(futureTool);
-    }
+  it('does not reserve deferred tool names in the public grammar', () => {
+    expect(DEV_MCP_TOOL_GRAMMAR).not.toEqual(
+      expect.arrayContaining([
+        'run.reset',
+        'run.status',
+        'run.explainFailure',
+        'browser.wait',
+        'browser.apiCall',
+        'journey.run',
+        'closure.run',
+        'proof.timeline'
+      ])
+    );
   });
 
   it('defaults dev-mode Playwright browser sessions to visible/headed', () => {

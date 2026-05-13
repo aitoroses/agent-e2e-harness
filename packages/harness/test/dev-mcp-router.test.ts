@@ -78,17 +78,14 @@ function makeFailingJourney() {
 }
 
 describe("Dev MCP Tool Router", () => {
-  it("lists only implemented tools for the injected capabilities and probes readiness", async () => {
+  it("lists no tools until capabilities are injected", async () => {
     const router = createDevMcpToolRouter();
 
-    expect(router.listTools().map((tool) => tool.name)).toEqual([
-      "harness.probe",
-    ]);
+    expect(router.listTools().map((tool) => tool.name)).toEqual([]);
     await expect(router.callTool("harness.probe")).resolves.toMatchObject({
-      status: "ok",
+      status: "not-found",
       tool: "harness.probe",
-      surface: "dev-mcp-http-server-contracts",
-      ready: true,
+      subject: "tool",
     });
   });
 
@@ -350,6 +347,7 @@ describe("Dev MCP Tool Router", () => {
       status: "blocked",
       code: "stack-already-running",
     });
+    await expect(router.callTool("stack.start")).resolves.not.toHaveProperty("next");
     await expect(router.callTool("stack.stop")).resolves.toMatchObject({
       status: "ok",
       stack: { status: "stopped", summary: "stopped:stack-1" },

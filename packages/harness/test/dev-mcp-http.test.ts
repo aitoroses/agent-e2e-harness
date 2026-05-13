@@ -68,20 +68,8 @@ describe("Dev MCP Streamable HTTP server", () => {
 
     try {
       const tools = await client.listTools();
-      expect(tools.tools.map((tool) => tool.name)).toContain("harness.probe");
+      expect(tools.tools.map((tool) => tool.name)).not.toContain("harness.probe");
       expect(tools.tools.map((tool) => tool.name)).toContain("run.reseed");
-
-      const probe = await client.callTool({
-        name: "harness.probe",
-        arguments: {},
-      });
-      const text =
-        probe.content[0]?.type === "text" ? probe.content[0].text : "";
-      expect(JSON.parse(text)).toMatchObject({
-        status: "ok",
-        tool: "harness.probe",
-        ready: true,
-      });
 
       const list = await client.callTool({
         name: "journey.list",

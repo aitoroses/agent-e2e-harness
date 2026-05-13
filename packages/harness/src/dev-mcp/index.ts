@@ -29,15 +29,12 @@ export interface AgentE2EDevMcpApiContract {
 }
 
 export type DevMcpToolGroup =
-  | "harness"
   | "stack"
   | "run"
   | "browser"
   | "journey"
   | "artifact"
-  | "cleanup"
-  | "closure"
-  | "proof";
+  | "cleanup";
 
 export interface DevMcpToolContract {
   name: string;
@@ -46,7 +43,6 @@ export interface DevMcpToolContract {
 }
 
 export const DEV_MCP_TOOL_GRAMMAR = [
-  "harness.probe",
   "stack.start",
   "stack.status",
   "stack.stop",
@@ -68,18 +64,7 @@ export const DEV_MCP_TOOL_GRAMMAR = [
   "browser.close",
 ] as const;
 
-export const FUTURE_DEV_MCP_TOOLS = [
-  "run.reset",
-  "run.status",
-  "run.explainFailure",
-  "browser.wait",
-  "browser.apiCall",
-  "journey.run",
-  "closure.run",
-  "proof.timeline",
-] as const;
-
-export type DevMcpToolName = (typeof DEV_MCP_TOOL_GRAMMAR)[number] | (typeof FUTURE_DEV_MCP_TOOLS)[number];
+export type DevMcpToolName = (typeof DEV_MCP_TOOL_GRAMMAR)[number];
 
 export type DevMcpToolStatus = ToolStatus;
 
@@ -383,12 +368,6 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
   ): Promise<DevMcpToolResponse> {
     try {
       switch (name) {
-        case "harness.probe":
-          return ok(name, {
-            surface: devMcpApiContract.surface,
-            tools: listTools(),
-            ready: true,
-          });
         case "journey.list":
           return fromHarness(name, await resolveHarness(options.harness), "listJourneys", args);
         case "journey.inspect":
@@ -418,18 +397,6 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
         case "journey.phase":
         case "journey.untilPhase":
           return fromHarness(name, await resolveHarness(options.harness), "runPhase", args);
-        case "journey.run":
-          return blocked(
-            name,
-            "journey-run-requires-orchestrator",
-            "Run journey via run.begin plus journey.phase until the Dev MCP orchestrator is installed.",
-          );
-        case "closure.run":
-          return blocked(
-            name,
-            "closure-run-requires-orchestrator",
-            "Closure will be wired after managed stack and headless browser contracts are installed.",
-          );
         case "stack.start": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
@@ -513,15 +480,6 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             result: await options.browserSessions.screenshot(args),
           });
         }
-        case "run.reset":
-        case "run.status":
-        case "run.explainFailure":
-        case "proof.timeline":
-          return blocked(
-            name,
-            "run-or-proof-tool-not-wired",
-            `${name} is reserved for the future Dev MCP grammar and is not implemented yet.`,
-          );
         default:
           return { status: "not-found", tool: name, subject: "tool" };
       }
@@ -616,7 +574,7 @@ function listTools(
 function implementedToolNames(
   options: DevMcpToolRouterOptions,
 ): readonly DevMcpToolName[] {
-  const tools: DevMcpToolName[] = ["harness.probe"];
+  const tools: DevMcpToolName[] = [];
 
   if (options.stackProvider)
     tools.push("stack.start", "stack.status", "stack.stop");
@@ -653,34 +611,24 @@ function summaryFor(name: DevMcpToolName): string {
   const summaries: Record<DevMcpToolName, string> = {
     "journey.list": "List available journeys and profiles.",
     "journey.inspect": "Read the full Inspectable Journey Contract for a journey.",
-    "harness.probe": "Report Dev MCP server capabilities and readiness.",
     "stack.start": "Start the managed development stack.",
     "stack.status": "Read managed stack readiness.",
     "stack.stop": "Stop the managed development stack.",
     "run.begin": "Begin a journey run.",
-    "run.reset": "Reset run state without deleting external resources.",
-    "run.status": "Read current run state.",
     "run.reseed":
       "Delete journey-owned resources and run environment seed again.",
-    "run.explainFailure":
-      "Summarize the current failure with suggested next tools.",
     "run.teardown": "Delete journey-owned resources for a run.",
     "browser.open": "Open an MCP-owned browser session.",
     "browser.sessions": "List MCP-owned browser sessions.",
     "browser.snapshot": "Capture the primary browser forensics packet.",
     "browser.act": "Act on a current browser snapshot ref.",
-    "browser.wait": "Wait for browser-visible state.",
-    "browser.apiCall": "Exercise an application API from the browser context.",
     "browser.screenshot": "Capture a supporting screenshot artifact.",
     "browser.close": "Close an MCP-owned browser session.",
     "journey.step": "Run one journey step.",
     "journey.untilPhase": "Run journey steps until a phase boundary.",
     "journey.phase": "Run a journey phase.",
-    "journey.run": "Run a journey through completion.",
-    "closure.run": "Run headless closure from a clean environment.",
     "artifact.read": "Read a safe emitted artifact.",
     "cleanup.plan": "Preview journey-owned cleanup.",
-    "proof.timeline": "Read the proof timeline artifact.",
   };
   return summaries[name];
 }
@@ -748,7 +696,6 @@ function blocked(
     tool,
     code,
     message,
-    next: { actions: [{ id: "inspect-capabilities", tool: "harness.probe" }] },
   };
 }
 
