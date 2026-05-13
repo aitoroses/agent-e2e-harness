@@ -30,6 +30,9 @@
     "packages/*",
     "apps/*"
   ],
+  "overrides": {
+    "postcss": "^8.5.14"
+  },
   "scripts": {
     "typecheck": "npm run build --workspace @agent-e2e/harness && npm run typecheck --workspace @agent-e2e/harness && npm run typecheck --workspace @agent-e2e/showcase",
     "build": "npm run build --workspace @agent-e2e/harness",
@@ -44,7 +47,7 @@
     "@types/node": "^22.15.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "next": "^16.2.5",
+    "next": "^16.2.6",
     "playwright": "^1.59.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
