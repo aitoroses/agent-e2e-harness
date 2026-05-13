@@ -34,24 +34,11 @@ describe("showcase PostgreSQL Testcontainers provider", () => {
             getDatabase: () => "proof_notes",
             getUsername: () => "agent",
             getPassword: () => "agent",
+            getId: () => "container-123",
             stop: async () => {
               events.push("container:stop");
             },
           };
-        }
-      },
-      Client: class {
-        constructor(private readonly config: { connectionString: string }) {
-          events.push(`client:${config.connectionString}`);
-        }
-        async connect() {
-          events.push("client:connect");
-        }
-        async query(sql: string) {
-          events.push(`schema:${sql}`);
-        }
-        async end() {
-          events.push("client:end");
         }
       },
     };
@@ -62,6 +49,9 @@ describe("showcase PostgreSQL Testcontainers provider", () => {
         username: "agent",
         password: "agent",
         schemaSql: "create table proof_notes(id text primary key);",
+        schemaExecutor: async (_handle, schemaSql) => {
+          events.push(`schema:${schemaSql}`);
+        },
       },
       async () => runtime,
     );
@@ -85,10 +75,7 @@ describe("showcase PostgreSQL Testcontainers provider", () => {
       "username:agent",
       "password:agent",
       "container:start",
-      "client:postgresql://agent:agent@127.0.0.1:15432/proof_notes",
-      "client:connect",
       "schema:create table proof_notes(id text primary key);",
-      "client:end",
       "container:stop",
     ]);
   });

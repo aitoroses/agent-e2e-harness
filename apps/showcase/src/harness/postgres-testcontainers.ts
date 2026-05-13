@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import type { StackProvider, StackStatusPacket } from "@agent-e2e/harness/stack";
 
 export interface PostgresTestcontainersProviderConfig {
@@ -6,9 +7,11 @@ export interface PostgresTestcontainersProviderConfig {
   username: string;
   password: string;
   schemaSql?: string;
+  schemaExecutor?: (handle: PostgresStackHandle, schemaSql: string) => Promise<void>;
 }
 
 export interface PostgresStackHandle {
+  containerId: string;
   connectionUri: string;
   host: string;
   port: number;
@@ -20,7 +23,6 @@ export interface PostgresStackHandle {
 
 export interface PostgresTestcontainersRuntime {
   PostgreSqlContainer: new (image: string) => PostgresContainerBuilder;
-  Client: new (config: { connectionString: string }) => PostgresClient;
 }
 
 export interface PostgresContainerBuilder {
@@ -37,13 +39,8 @@ export interface StartedPostgresContainer {
   getDatabase(): string;
   getUsername(): string;
   getPassword(): string;
+  getId(): string;
   stop(): Promise<void>;
-}
-
-export interface PostgresClient {
-  connect(): Promise<void>;
-  query(sql: string): Promise<unknown>;
-  end(): Promise<void>;
 }
 
 export type PostgresRuntimeLoader =
@@ -65,6 +62,7 @@ export function createPostgresTestcontainersProvider(
         .withPassword(config.password)
         .start();
       const handle: PostgresStackHandle = {
+        containerId: container.getId(),
         connectionUri: container.getConnectionUri(),
         host: container.getHost(),
         port: container.getPort(),
@@ -75,7 +73,7 @@ export function createPostgresTestcontainersProvider(
       };
 
       if (config.schemaSql)
-        await runSchema(runtime, handle.connectionUri, config.schemaSql);
+        await (config.schemaExecutor ?? runSchema)(handle, config.schemaSql);
 
       return handle;
     },
@@ -101,27 +99,48 @@ async function loadPostgresRuntime(): Promise<PostgresTestcontainersRuntime> {
   const postgres = (await import("@testcontainers/postgresql")) as unknown as {
     PostgreSqlContainer: PostgresTestcontainersRuntime["PostgreSqlContainer"];
   };
-  const pg = (await import("pg")) as unknown as {
-    Client: PostgresTestcontainersRuntime["Client"];
-  };
   return {
     PostgreSqlContainer: postgres.PostgreSqlContainer,
-    Client: pg.Client,
   };
 }
 
 async function runSchema(
-  runtime: PostgresTestcontainersRuntime,
-  connectionString: string,
+  handle: PostgresStackHandle,
   schemaSql: string,
 ): Promise<void> {
-  const client = new runtime.Client({ connectionString });
-  await client.connect();
-  try {
-    await client.query(schemaSql);
-  } finally {
-    await client.end();
+  const { stdout, stderr } = await execFileAsync("docker", [
+    "exec",
+    "-i",
+    handle.containerId,
+    "psql",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-U",
+    handle.username,
+    "-d",
+    handle.database,
+    "-c",
+    schemaSql,
+  ]);
+  if (stderr.trim()) {
+    throw new Error(`PostgreSQL schema initialization failed: ${stderr}`);
   }
+  void stdout;
+}
+
+function execFileAsync(
+  file: string,
+  args: string[],
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, (error, stdout, stderr) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
+  });
 }
 
 function postgresStatus(

@@ -7,13 +7,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "dev:mcp": "npm run build --workspace @agent-e2e/harness && agent-e2e-harness dev-mcp",
+    "dev:mcp": "npm run build --workspace @agent-e2e/harness && bun ../../packages/harness/dist/cli/index.js dev-mcp",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build --workspace @agent-e2e/harness && vitest run"
   },
   "dependencies": {
     "@agent-e2e/harness": "0.0.0",
-    "next": "^16.2.5",
+    "next": "^16.2.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "pg": "^8.16.3"

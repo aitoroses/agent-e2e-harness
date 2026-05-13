@@ -10,7 +10,6 @@ import {
   createPostgresTestcontainersProvider,
   type PostgresStackHandle,
 } from "./postgres-testcontainers.js";
-import { PROOF_NOTES_SCHEMA_SQL } from "../proof-notes-contract.js";
 
 const showcaseRoot = process.env.AGENT_E2E_SHOWCASE_ROOT ?? process.cwd();
 const repoRoot = resolve(showcaseRoot, "../..");
@@ -45,7 +44,6 @@ export function createShowcaseDevStackProvider(
     database: config.database ?? "proof_notes",
     username: config.username ?? "agent",
     password: config.password ?? "agent",
-    schemaSql: PROOF_NOTES_SCHEMA_SQL,
   });
 
   return {
