@@ -12,8 +12,7 @@ import {
 } from "./postgres-testcontainers.js";
 import { PROOF_NOTES_SCHEMA_SQL } from "../proof-notes-contract.js";
 
-const showcaseRoot = process.env.AGENT_E2E_SHOWCASE_ROOT ?? process.cwd();
-const repoRoot = resolve(showcaseRoot, "../..");
+const showcaseRoot = resolve(process.env.AGENT_E2E_SHOWCASE_ROOT ?? process.cwd());
 
 export interface ShowcaseDevStackProviderConfig {
   appHost?: string | undefined;
@@ -39,7 +38,7 @@ export function createShowcaseDevStackProvider(
   const configuredAppUrl = config.appUrl ?? process.env.AGENT_E2E_SHOWCASE_URL;
   const configuredAppPort = optionalPort(config.appPort ?? process.env.AGENT_E2E_SHOWCASE_PORT)
     ?? portFromUrl(configuredAppUrl);
-  const logPath = resolve(repoRoot, "apps/showcase/.agents-e2e/logs/next-dev.log");
+  const logPath = resolve(showcaseRoot, ".agents-e2e/logs/next-dev.log");
   const postgres = createPostgresTestcontainersProvider({
     image: config.postgresImage ?? process.env.AGENT_E2E_POSTGRES_IMAGE ?? "postgres:16-alpine",
     database: config.database ?? "proof_notes",
@@ -64,15 +63,13 @@ export function createShowcaseDevStackProvider(
         args: [
           "run",
           "dev",
-          "--workspace",
-          "@agent-e2e/showcase",
           "--",
           "--hostname",
           appHost,
           "--port",
           String(appPort),
         ],
-        cwd: repoRoot,
+        cwd: showcaseRoot,
         env: {
           DATABASE_URL: postgresHandle.connectionUri,
           NEXT_TELEMETRY_DISABLED: "1",

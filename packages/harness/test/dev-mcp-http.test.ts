@@ -56,7 +56,16 @@ describe("Dev MCP Streamable HTTP server", () => {
 
   it("serves the frozen tool grammar through the official MCP Streamable HTTP client", async () => {
     const harness = createMcpHarnessServer({ journeys: [makeHttpJourney()] });
-    const server = await startDevMcpStreamableHttpServer({ harness });
+    const server = await startDevMcpStreamableHttpServer({
+      harness,
+      browserSessions: {
+        open: async () => ({ browserSessionId: "browser-1" }),
+        snapshot: async (browserSessionId) => ({ browserSessionId, refs: [] }),
+        close: async (browserSessionId) => ({ status: "closed", browserSessionId }),
+        list: () => [],
+        act: async (input) => ({ status: "ok", input }),
+      },
+    });
     handles.push(server);
     const client = new Client({
       name: "agent-e2e-test-client",
@@ -70,6 +79,28 @@ describe("Dev MCP Streamable HTTP server", () => {
       const tools = await client.listTools();
       expect(tools.tools.map((tool) => tool.name)).not.toContain("harness.probe");
       expect(tools.tools.map((tool) => tool.name)).toContain("run.reseed");
+      expect(tools.tools.find((tool) => tool.name === "journey.inspect")?.inputSchema).toMatchObject({
+        type: "object",
+        properties: { journeyId: expect.objectContaining({ type: "string" }) },
+        required: ["journeyId"],
+      });
+      expect(tools.tools.find((tool) => tool.name === "journey.step")?.inputSchema).toMatchObject({
+        type: "object",
+        properties: {
+          runId: expect.objectContaining({ type: "string" }),
+          phaseId: expect.objectContaining({ type: "string" }),
+          stepId: expect.objectContaining({ type: "string" }),
+        },
+        required: ["runId", "phaseId", "stepId"],
+      });
+      expect(tools.tools.find((tool) => tool.name === "browser.act")?.inputSchema).toMatchObject({
+        type: "object",
+        properties: {
+          browserSessionId: expect.objectContaining({ type: "string" }),
+          action: expect.objectContaining({ enum: ["click", "fill", "press"] }),
+        },
+        required: ["browserSessionId", "action"],
+      });
 
       const list = await client.callTool({
         name: "journey.list",

@@ -16,6 +16,12 @@ The showcase intentionally uses a database in the managed stack so seed, reseed,
 
 ## Real proof path
 
+Install dependencies first. The showcase `postinstall` script installs Playwright's Chromium browser so a fresh consumer can open MCP-owned browser sessions without an extra manual step.
+
+```sh
+npm install
+```
+
 Start Dev MCP. The showcase runs `agent-e2e-harness dev-mcp`, which uses Bun to load `agent-e2e.config.ts` directly, starts the framework-owned Dev MCP server at `127.0.0.1:3766/mcp` by default, and hot-reloads the journey registry when the config changes. Set `AGENT_E2E_MCP_PORT` only when you intentionally need a different MCP port.
 
 ```sh

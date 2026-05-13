@@ -110,7 +110,13 @@ npm install @agent-e2e/harness
 Add optional runtime dependencies for the surfaces you use:
 
 ```sh
-npm install -D playwright @modelcontextprotocol/sdk
+npm install -D playwright @modelcontextprotocol/sdk zod
+```
+
+Install the Chromium browser used by Playwright-backed Dev MCP sessions, or add the same command to `postinstall` for a no-surprise fresh checkout:
+
+```sh
+npx playwright install chromium
 ```
 
 Dev MCP uses Bun as its TypeScript runtime. Install Bun `>=1.3.0` before adding the `dev:mcp` command.
@@ -147,6 +153,7 @@ Then make `npm run dev:mcp` start the framework-owned Dev MCP server through the
 ```json
 {
   "scripts": {
+    "postinstall": "playwright install chromium",
     "dev:mcp": "agent-e2e-harness dev-mcp"
   }
 }
