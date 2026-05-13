@@ -9,6 +9,7 @@
 .codex/
 .agents/
 .omx/
+.omc/
 .scratch/
 
 # Dependencies and package manager caches
