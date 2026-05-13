@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { defineJourney, type HarnessTypes } from "@agent-e2e/harness/core";
 import { createDevMcpToolRouter } from "@agent-e2e/harness/dev-mcp";
-import { createMcpHarnessServer } from "@agent-e2e/harness/mcp";
+import { createMcpHarnessServer } from "../src/mcp/index.js";
 import type { StackProvider } from "@agent-e2e/harness/stack";
 
 type RouterHarness = HarnessTypes<

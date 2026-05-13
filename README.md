@@ -171,7 +171,6 @@ The app URL is not a Dev MCP setting. Call `stack.start` or `stack.status` and u
 
 - `@agent-e2e/harness/core` - framework-neutral journey, seed, feedback, closure, resource, cleanup, and reseed contracts.
 - `@agent-e2e/harness` - Playwright-specialized default API.
-- `@agent-e2e/harness/mcp` - execution-neutral in-process MCP control surface.
 - `@agent-e2e/harness/dev-mcp` - local Streamable HTTP Dev MCP server, tool grammar, and router.
 - `@agent-e2e/harness/playwright-mcp` - MCP-owned Playwright browser sessions.
 - `@agent-e2e/harness/stack` - managed stack and process provider contracts.

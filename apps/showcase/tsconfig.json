@@ -18,9 +18,6 @@
       "@agent-e2e/harness/core": [
         "../../packages/harness/src/core/index.ts"
       ],
-      "@agent-e2e/harness/mcp": [
-        "../../packages/harness/src/mcp/index.ts"
-      ],
       "@agent-e2e/harness/dev-mcp": [
         "../../packages/harness/src/dev-mcp/index.ts"
       ],

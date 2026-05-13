@@ -4,8 +4,10 @@ import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createMcpHarnessServer } from "@agent-e2e/harness/mcp";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { allocateTcpPort } from "@agent-e2e/harness/stack";
+import { startAgentE2EDevMcp } from "@agent-e2e/harness/dev-mcp";
 import {
   beginJourneyRun,
   runClosure,
@@ -64,11 +66,28 @@ describe("Next.js showcase app", () => {
     const artifactRoot = join(tmpRoot, ".agents-e2e", "artifacts");
     const journey = createShowcaseJourney(baseUrl);
     const resourceAdapter = createShowcaseResourceAdapter();
-    const server = createMcpHarnessServer({
+    const server = await startAgentE2EDevMcp({
       journeys: [journey],
       resourceAdapters: [resourceAdapter],
       artifactRoot,
+      port: 0,
+      installSignalHandlers: false,
+      logger: false,
+      browserSessions: {
+        open: async () => ({ browserSessionId: "showcase-browser" }),
+        snapshot: async (browserSessionId) => ({ browserSessionId, refs: [] }),
+        close: async (browserSessionId) => ({ status: "closed", browserSessionId }),
+        list: () => [{ browserSessionId: "showcase-browser" }],
+        execution: () => ({ browser, page }),
+      },
     });
+    const client = new Client({
+      name: "agent-e2e-showcase-test-client",
+      version: "0.0.0",
+    });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(server.url)) as Parameters<Client["connect"]>[0],
+    );
 
     await page.goto(baseUrl);
     await expect(
@@ -99,13 +118,14 @@ describe("Next.js showcase app", () => {
       expect.objectContaining({ kind: "proof-note" }),
     ]);
 
-    const mcpBegin = await server.callTool("beginRun", {
+    const mcpBegin = await callDevMcp(client, "run.begin", {
       journeyId: journey.id,
-      execution: { browser, page },
+      browserSessionId: "showcase-browser",
       runId: "showcase-mcp",
     });
     expect(mcpBegin).toMatchObject({
       status: "ok",
+      tool: "run.begin",
       runId: "showcase-mcp",
       artifact_dir: expect.stringContaining("showcase-proof-notes/showcase-mcp"),
       artifacts: expect.arrayContaining([
@@ -114,13 +134,15 @@ describe("Next.js showcase app", () => {
       ]),
     });
     expect(existsSync(join(artifactRoot, "showcase-proof-notes", "showcase-mcp", "seed-manifest.json"))).toBe(true);
-    const mcpStep = await server.callTool("runStep", {
+    const mcpStep = await callDevMcp(client, "journey.step", {
       runId: "showcase-mcp",
       phaseId: "phase:proof-notes",
       stepId: "step:create-proof-note",
+      browserSessionId: "showcase-browser",
     });
     expect(mcpStep).toMatchObject({
       status: "ok",
+      tool: "journey.step",
       result: {
         status: "passed",
         ownedResources: [expect.objectContaining({ kind: "proof-note" })],
@@ -155,9 +177,10 @@ describe("Next.js showcase app", () => {
       expect(artifactPath).not.toContain(".scratch");
     }
     await expect(
-      server.callTool("readArtifact", { path: join(stepDir, "step-feedback.json") }),
+      callDevMcp(client, "artifact.read", { path: join(stepDir, "step-feedback.json") }),
     ).resolves.toMatchObject({
       status: "ok",
+      tool: "artifact.read",
       artifact: { kind: "json" },
       content: {
         status: "passed",
@@ -170,9 +193,10 @@ describe("Next.js showcase app", () => {
       },
     });
     await expect(
-      server.callTool("readArtifact", { path: join(stepDir, "result.json") }),
+      callDevMcp(client, "artifact.read", { path: join(stepDir, "result.json") }),
     ).resolves.toMatchObject({
       status: "ok",
+      tool: "artifact.read",
       content: {
         status: "passed",
         artifacts: expect.arrayContaining([
@@ -183,16 +207,18 @@ describe("Next.js showcase app", () => {
       },
     });
     await expect(
-      server.callTool("cleanupPlan", { runId: "showcase-mcp" }),
+      callDevMcp(client, "cleanup.plan", { runId: "showcase-mcp" }),
     ).resolves.toMatchObject({
       status: "ok",
+      tool: "cleanup.plan",
       plan: { planned: [expect.objectContaining({ kind: "proof-note" })] },
       artifact: expect.objectContaining({ name: "cleanup-plan" }),
     });
     await expect(
-      server.callTool("reseedRun", { runId: "showcase-mcp" }),
+      callDevMcp(client, "run.reseed", { runId: "showcase-mcp" }),
     ).resolves.toMatchObject({
       status: "ok",
+      tool: "run.reseed",
       cleanup: {
         artifacts: {
           deleted: [
@@ -226,6 +252,31 @@ describe("Next.js showcase app", () => {
         expect.objectContaining({ id: "artifact:showcase-proof-note" }),
       ]),
     );
+    await client.close();
+    await server.close();
     await rm(tmpRoot, { recursive: true, force: true });
   }, 60_000);
 });
+
+async function callDevMcp(
+  client: Client,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const result = await client.callTool({ name, arguments: args });
+  const content = Array.isArray(result.content) ? result.content : [];
+  const first = content[0];
+  const text = isTextContent(first) ? first.text : "";
+  return JSON.parse(text) as Record<string, unknown>;
+}
+
+function isTextContent(value: unknown): value is { type: "text"; text: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    "text" in value &&
+    value.type === "text" &&
+    typeof value.text === "string"
+  );
+}

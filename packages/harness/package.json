@@ -34,10 +34,6 @@
       "types": "./dist/core/index.d.ts",
       "default": "./dist/core/index.js"
     },
-    "./mcp": {
-      "types": "./dist/mcp/index.d.ts",
-      "default": "./dist/mcp/index.js"
-    },
     "./cli": {
       "types": "./dist/cli/index.d.ts",
       "default": "./dist/cli/index.js"
