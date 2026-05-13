@@ -30,7 +30,7 @@ mcporter call --http-url http://127.0.0.1:3491/mcp --allow-http --tool stack.sto
 - `browser.act`: clicked `@e2`; wrote `forensics/action-click-*.png`.
 - `journey.step`: passed `phase:proof-notes / step:create-proof-note`; returned before/after screenshots plus `console`, `network`, `result`, and `step-feedback` artifacts.
 - `artifact.read`: read `step-feedback.json`; content status `passed`; primary artifacts included `after` and `result`.
-- `cleanup.plan`: planned one owned `proof-note` resource and wrote `cleanup-plan.json`.
+- `cleanup.plan`: planned one owned `note` resource and wrote `cleanup-plan.json`.
 - `run.reseed`: deleted one owned resource, reseeded, and wrote `cleanup`, `seed-manifest`, and `owned-resources` artifacts.
 - `browser.close`: closed the MCP-owned browser session.
 - `stack.stop`: stopped Next.js dev process and PostgreSQL container.

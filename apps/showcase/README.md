@@ -61,7 +61,7 @@ Artifacts are generated under `.agents-e2e/artifacts/<journey>/<run>/`. The harn
 - `apps/showcase/src/harness/postgres-testcontainers.ts`: showcase-owned PostgreSQL Testcontainers provider.
 - `@agent-e2e/harness/playwright-mcp`: headed browser sessions, snapshots, actions, screenshots.
 
-`agent-e2e.config.ts` is the conventional integration point for journeys, resource adapters, and the showcase stack provider. The runnable entrypoint is the package CLI, `agent-e2e-harness dev-mcp`. Showcase-specific harness composition lives in `src/harness/`; shared ids, schema SQL, proof body, and resource-adapter behavior live in `src/proof-notes-contract.ts`; lifecycle mechanics belong in the framework.
+`agent-e2e.config.ts` is the conventional integration point for journeys, the typed resource registry, and the showcase stack provider. The runnable entrypoint is the package CLI, `agent-e2e-harness dev-mcp`. Showcase-specific harness composition lives in `src/harness/`; shared ids, schema SQL, proof body, and resource-kind behavior live in `src/proof-notes-contract.ts`; lifecycle mechanics belong in the framework.
 
 ## Validation
 

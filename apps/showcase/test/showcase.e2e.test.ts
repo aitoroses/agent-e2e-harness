@@ -15,7 +15,7 @@ import {
 } from "@agent-e2e/harness";
 import {
   createShowcaseJourney,
-  createShowcaseResourceAdapter,
+  createShowcaseResourceRegistry,
 } from "../src/journey.js";
 import { createShowcaseDevStackProvider } from "../src/harness/dev-stack.js";
 
@@ -65,10 +65,10 @@ describe("Next.js showcase app", () => {
     const tmpRoot = await mkdtemp(join(tmpdir(), "agent-e2e-showcase-"));
     const artifactRoot = join(tmpRoot, ".agents-e2e", "artifacts");
     const journey = createShowcaseJourney(baseUrl);
-    const resourceAdapter = createShowcaseResourceAdapter();
+    const resourceRegistry = createShowcaseResourceRegistry();
     const server = await startAgentE2EDevMcp({
       journeys: [journey],
-      resourceAdapters: [resourceAdapter],
+      resourceRegistry,
       artifactRoot,
       port: 0,
       installSignalHandlers: false,
@@ -115,7 +115,7 @@ describe("Next.js showcase app", () => {
       baselineUserId: "user:seed",
     });
     expect(begin.run.ownershipLedger.resources).toEqual([
-      expect.objectContaining({ kind: "proof-note" }),
+      expect.objectContaining({ kind: "note" }),
     ]);
 
     const mcpBegin = await callDevMcp(client, "run.begin", {
@@ -145,7 +145,7 @@ describe("Next.js showcase app", () => {
       tool: "journey.step",
       result: {
         status: "passed",
-        ownedResources: [expect.objectContaining({ kind: "proof-note" })],
+        ownedResources: [expect.objectContaining({ kind: "note" })],
         artifacts: expect.arrayContaining([
           expect.objectContaining({ name: "before", kind: "screenshot" }),
           expect.objectContaining({ name: "after", kind: "screenshot" }),
@@ -211,7 +211,7 @@ describe("Next.js showcase app", () => {
     ).resolves.toMatchObject({
       status: "ok",
       tool: "cleanup.plan",
-      plan: { planned: [expect.objectContaining({ kind: "proof-note" })] },
+      plan: { planned: [expect.objectContaining({ kind: "note" })] },
       artifact: expect.objectContaining({ name: "cleanup-plan" }),
     });
     await expect(
@@ -222,7 +222,7 @@ describe("Next.js showcase app", () => {
       cleanup: {
         artifacts: {
           deleted: [
-            expect.objectContaining({ adapterId: "showcase-proof-note-api" }),
+            expect.objectContaining({ adapterId: "resource-registry-adapter" }),
           ],
         },
       },

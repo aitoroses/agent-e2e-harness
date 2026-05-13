@@ -122,14 +122,25 @@ Install database clients, containers, queues, or other infrastructure packages i
 Create a conventional `agent-e2e.config.ts` at the app root:
 
 ```ts
+import { createResourceRegistry, defineResourceKind } from '@agent-e2e/harness/core';
 import { defineAgentE2EConfig } from '@agent-e2e/harness/dev-mcp';
+
+const orderKind = defineResourceKind({
+  kind: 'order',
+  create: async (input: { id: string }) => ({ kind: 'order', id: input.id }),
+  delete: async (resource: { kind: 'order'; id: string }) => {
+    await appApi.deleteOrder(resource.id);
+  }
+});
 
 export default defineAgentE2EConfig({
   stackProvider: myStackProvider,
   journeys: [myJourney],
-  resourceAdapters: [myResourceAdapter]
+  resourceRegistry: createResourceRegistry([orderKind])
 });
 ```
+
+Use `resourceAdapters: [myResourceAdapter]` only when you need a lower-level cleanup adapter that cannot be expressed as a typed resource kind.
 
 Then make `npm run dev:mcp` start the framework-owned Dev MCP server through the package CLI:
 

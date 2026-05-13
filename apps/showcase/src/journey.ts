@@ -3,7 +3,7 @@ import {
   type PlaywrightExecutableJourney,
   type PlaywrightHarnessTypes,
 } from "@agent-e2e/harness";
-import type { ResourceAdapter } from "@agent-e2e/harness/core";
+import type { ResourceRegistry } from "@agent-e2e/harness/core";
 import {
   BASELINE_USER,
   BASELINE_WORKSPACE,
@@ -14,7 +14,7 @@ import {
   SHOWCASE_PHASE_ID,
   SHOWCASE_PROFILE_ID,
   SHOWCASE_STEP_ID,
-  createShowcaseResourceAdapter as createShowcaseApiResourceAdapter,
+  createShowcaseResourceRegistry as createShowcaseApiResourceRegistry,
   notesApiUrl,
   type ShowcaseResource,
 } from "./proof-notes-contract.js";
@@ -163,7 +163,6 @@ export type ShowcaseHarnessTypes = PlaywrightHarnessTypes<
   ShowcaseOwnedResource
 >;
 
-export function createShowcaseResourceAdapter(
-): ResourceAdapter<ShowcaseHarnessTypes> {
-  return createShowcaseApiResourceAdapter<ShowcaseHarnessTypes>();
+export function createShowcaseResourceRegistry(): ResourceRegistry<ShowcaseOwnedResource> {
+  return createShowcaseApiResourceRegistry();
 }

@@ -98,7 +98,7 @@ describe("showcase journey contracts", () => {
       noteOwnedByRun: "showcase-dev",
     });
     expect(result.ownedResources).toEqual([
-      { kind: "proof-note", id: "proof-note:current", baseUrl: "http://showcase.local" },
+      { kind: "note", id: "proof-note:current", baseUrl: "http://showcase.local" },
     ]);
   });
 });

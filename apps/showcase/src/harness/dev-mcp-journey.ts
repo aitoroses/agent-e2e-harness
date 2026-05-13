@@ -10,7 +10,7 @@ import {
   SHOWCASE_PHASE_ID,
   SHOWCASE_PROFILE_ID,
   SHOWCASE_STEP_ID,
-  createShowcaseResourceAdapter,
+  createShowcaseResourceRegistry,
   notesApiUrl,
   seedApiUrl,
   type ShowcaseResource,
@@ -145,7 +145,7 @@ export function createShowcaseMcpJourney() {
   });
 }
 
-export { createShowcaseResourceAdapter };
+export { createShowcaseResourceRegistry };
 
 function showcaseAppUrl(execution: ShowcaseMcpHarness["executionSurface"] | undefined): string | undefined {
   const services = execution?.stack?.services ?? [];

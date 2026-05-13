@@ -4,7 +4,7 @@ import {
   type ServerResponse,
 } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { AnyHarnessTypes, ExecutableJourney, ResourceAdapter } from "../core/index.js";
+import type { AnyHarnessTypes, ExecutableJourney, OwnedResource, ResourceAdapter, ResourceRegistry } from "../core/index.js";
 import { createMcpHarnessServer, type McpHarnessServer } from "../mcp/index.js";
 import type { McpToolResponse } from "../mcp/index.js";
 import { normalizeToolResponse, type ToolStatus } from "../mcp/response.js";
@@ -150,6 +150,7 @@ export interface AgentE2EDevMcpConfig<
   TStackHandle = unknown,
 > {
   journeys: readonly ExecutableJourney<TTypes>[];
+  resourceRegistry?: ResourceRegistry<OwnedResource<TTypes> & { kind: string; id: string }>;
   resourceAdapters?: readonly ResourceAdapter<TTypes>[];
   stackProvider?: StackProvider<TStackHandle>;
   browserSessions?: DevMcpBrowserSessionController | false;
@@ -247,9 +248,10 @@ export async function startAgentE2EDevMcp<
   const host = resolvedConfig.host ?? process.env.AGENT_E2E_MCP_HOST ?? DEFAULT_DEV_MCP_HOST;
   const port = resolvedConfig.port ?? optionalPort(process.env.AGENT_E2E_MCP_PORT) ?? DEFAULT_DEV_MCP_PORT;
   const path = resolvedConfig.path ?? process.env.AGENT_E2E_MCP_PATH ?? DEFAULT_DEV_MCP_PATH;
+  const resourceAdapters = resourceAdaptersFromConfig(resolvedConfig);
   const harness = resolvedConfig.harness ?? createMcpHarnessServer<TTypes>({
     journeys: resolvedConfig.journeys,
-    ...(resolvedConfig.resourceAdapters ? { resourceAdapters: resolvedConfig.resourceAdapters } : {}),
+    ...(resourceAdapters.length > 0 ? { resourceAdapters } : {}),
     artifactRoot,
   });
   const browserSessions = resolvedConfig.browserSessions === false
@@ -354,6 +356,19 @@ function optionalPort(value: string | number | undefined | null): number | undef
   if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65_535)
     throw new Error(`Invalid port: ${value}`);
   return parsed;
+}
+
+function resourceAdaptersFromConfig<
+  TTypes extends AnyHarnessTypes,
+  TStackHandle,
+>(
+  config: AgentE2EDevMcpConfig<TTypes, TStackHandle>,
+): readonly ResourceAdapter<TTypes>[] {
+  const explicit = config.resourceAdapters ?? [];
+  const registry = config.resourceRegistry
+    ? [config.resourceRegistry.adapter as ResourceAdapter<TTypes>]
+    : [];
+  return [...explicit, ...registry];
 }
 
 export function createDevMcpToolRouter<TStackHandle = unknown>(

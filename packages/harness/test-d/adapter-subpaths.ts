@@ -2,6 +2,7 @@ import { allocateTcpPort, type AgentE2EStackApiContract, type StackProvider } fr
 import { defineAgentE2EConfig, DEFAULT_DEV_MCP_PORT, type AgentE2EDevMcpApiContract, type DevMcpToolName } from '@agent-e2e/harness/dev-mcp';
 import type { AgentE2EPlaywrightMcpApiContract, BrowserSnapshotPacket } from '@agent-e2e/harness/playwright-mcp';
 import type { RunArtifacts } from '@agent-e2e/harness/artifacts';
+import { createResourceRegistry, defineResourceKind, type HarnessTypes } from '@agent-e2e/harness/core';
 
 type Expect<T extends true> = T;
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -23,8 +24,18 @@ const stackProvider: StackProvider<{ id: string }> = {
     return { status: 'stopped', summary: 'stopped', services: [], artifacts: [], warnings: [], errors: [] };
   }
 };
-const devMcpConfig = defineAgentE2EConfig({
+type RecordResource = { kind: 'record'; id: string };
+type TypeHarness = HarnessTypes<unknown, Record<string, never>, Record<string, never>, RecordResource>;
+const resourceRegistry = createResourceRegistry<RecordResource>([
+  defineResourceKind({
+    kind: 'record',
+    create: async (input: object) => ({ kind: 'record' as const, id: String((input as { id?: string }).id ?? 'record') }),
+    delete: async (_resource: RecordResource) => undefined
+  })
+]);
+const devMcpConfig = defineAgentE2EConfig<TypeHarness>({
   journeys: [],
+  resourceRegistry,
   stackProvider,
   port: DEFAULT_DEV_MCP_PORT,
   browserSessions: false

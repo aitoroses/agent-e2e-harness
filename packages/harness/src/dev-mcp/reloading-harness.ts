@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import type { AnyHarnessTypes } from "../core/index.js";
+import type { AnyHarnessTypes, ResourceAdapter } from "../core/index.js";
 import { createMcpHarnessServer, type McpHarnessServer } from "../mcp/index.js";
 import { loadAgentE2EConfig } from "./config-loader.js";
 import type { AgentE2EDevMcpConfig } from "./index.js";
@@ -30,15 +30,26 @@ export function createReloadingHarnessSource<
         cacheBust: true,
       });
       const harness = await resolveHarness(config.harness);
+      const resourceAdapters = resourceAdaptersFromConfig(config);
       cachedHarness = harness ?? createMcpHarnessServer<TTypes>({
         journeys: config.journeys,
-        ...(config.resourceAdapters ? { resourceAdapters: config.resourceAdapters } : {}),
+        ...(resourceAdapters.length > 0 ? { resourceAdapters } : {}),
         ...(options.artifactRoot ?? config.artifactRoot ? { artifactRoot: options.artifactRoot ?? config.artifactRoot } : {}),
       });
       cachedMtimeMs = currentMtimeMs;
       return cachedHarness;
     },
   };
+}
+
+function resourceAdaptersFromConfig<TTypes extends AnyHarnessTypes, TStackHandle>(
+  config: AgentE2EDevMcpConfig<TTypes, TStackHandle>,
+): readonly ResourceAdapter<TTypes>[] {
+  const explicit = config.resourceAdapters ?? [];
+  const registry = config.resourceRegistry
+    ? [config.resourceRegistry.adapter as ResourceAdapter<TTypes>]
+    : [];
+  return [...explicit, ...registry];
 }
 
 async function resolveHarness<TTypes extends AnyHarnessTypes, TStackHandle>(

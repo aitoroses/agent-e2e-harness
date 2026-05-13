@@ -90,14 +90,25 @@ The seed prepares prerequisites. It should not pre-create the behavior the journ
 Create a conventional `agent-e2e.config.ts`:
 
 ```ts
+import { createResourceRegistry, defineResourceKind } from '@agent-e2e/harness/core';
 import { defineAgentE2EConfig } from '@agent-e2e/harness/dev-mcp';
+
+const orderKind = defineResourceKind({
+  kind: 'order',
+  create: async (input: { id: string }) => ({ kind: 'order', id: input.id }),
+  delete: async (resource: { kind: 'order'; id: string }) => {
+    await appApi.deleteOrder(resource.id);
+  }
+});
 
 export default defineAgentE2EConfig({
   stackProvider: appStackProvider,
   journeys: [checkoutJourney],
-  resourceAdapters: [orderResourceAdapter]
+  resourceRegistry: createResourceRegistry([orderKind])
 });
 ```
+
+`resourceAdapters: [orderResourceAdapter]` remains available for lower-level cleanup adapters that do not fit a typed resource kind.
 
 Then run the Dev MCP server through the package CLI:
 
