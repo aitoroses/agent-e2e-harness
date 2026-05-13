@@ -17,6 +17,8 @@ import {
 } from "./config-loader.js";
 import { createReloadingHarnessSource, type ReloadingHarnessSourceOptions } from "./reloading-harness.js";
 
+type RuntimeZod = typeof import("zod/v4").z;
+
 export {
   DEFAULT_DEV_MCP_CONFIG_FILES,
   loadAgentE2EConfig,
@@ -37,7 +39,7 @@ export type DevMcpToolGroup =
   | "cleanup";
 
 export interface DevMcpToolContract {
-  name: string;
+  name: DevMcpToolName;
   group: DevMcpToolGroup;
   summary: string;
 }
@@ -406,12 +408,19 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
               "stack-already-running",
               "A managed stack is already active. Call stack.stop before starting another stack.",
             );
-          stackHandle = await options.stackProvider.start();
-          const status = await options.stackProvider.status(stackHandle);
-          return ok(name, {
-            handle: serializableHandle(stackHandle),
-            stack: status,
-          });
+          const handle = await options.stackProvider.start();
+          let ready = false;
+          try {
+            const status = await options.stackProvider.status(handle);
+            ready = true;
+            stackHandle = handle;
+            return ok(name, {
+              handle: serializableHandle(handle),
+              stack: status,
+            });
+          } finally {
+            if (!ready) await options.stackProvider.stop(handle);
+          }
         }
         case "stack.status": {
           if (!options.stackProvider)
@@ -633,6 +642,97 @@ function summaryFor(name: DevMcpToolName): string {
   return summaries[name];
 }
 
+function inputSchemaForTool(
+  name: DevMcpToolName,
+  z: RuntimeZod,
+): Record<string, unknown> {
+  const stringId = () => z.string().min(1);
+  const optionalArray = () => z.array(z.unknown()).optional();
+
+  switch (name) {
+    case "stack.start":
+    case "stack.status":
+    case "stack.stop":
+    case "journey.list":
+    case "browser.sessions":
+      return {};
+    case "journey.inspect":
+      return {
+        journeyId: stringId().describe("Journey id returned by journey.list."),
+      };
+    case "run.begin":
+      return {
+        journeyId: stringId().describe("Journey id returned by journey.list."),
+        profileId: stringId().optional(),
+        runId: stringId().optional(),
+        browserSessionId: stringId().optional(),
+        artifactRoot: stringId().optional(),
+      };
+    case "run.reseed":
+      return {
+        runId: stringId(),
+        newRunId: stringId().optional(),
+        requestedResources: optionalArray(),
+      };
+    case "run.teardown":
+      return {
+        runId: stringId(),
+        requestedResources: optionalArray(),
+      };
+    case "cleanup.plan":
+      return {
+        runId: stringId(),
+      };
+    case "artifact.read":
+      return {
+        artifactId: stringId().optional(),
+        path: stringId().optional(),
+      };
+    case "journey.step":
+      return {
+        runId: stringId(),
+        phaseId: stringId(),
+        stepId: stringId(),
+        browserSessionId: stringId().optional(),
+      };
+    case "journey.phase":
+    case "journey.untilPhase":
+      return {
+        runId: stringId(),
+        phaseId: stringId(),
+      };
+    case "browser.open":
+      return {
+        headed: z.boolean().optional(),
+        slowMoMs: z.number().nonnegative().optional(),
+        targetUrl: stringId().optional(),
+        journeyId: stringId().optional(),
+        runId: stringId().optional(),
+        artifactRoot: stringId().optional(),
+      };
+    case "browser.snapshot":
+    case "browser.close":
+      return {
+        browserSessionId: stringId(),
+      };
+    case "browser.act":
+      return {
+        browserSessionId: stringId(),
+        action: z.enum(["click", "fill", "press"]),
+        ref: stringId().optional(),
+        selector: stringId().optional(),
+        text: z.string().optional(),
+        key: z.string().optional(),
+      };
+    case "browser.screenshot":
+      return {
+        browserSessionId: stringId(),
+        path: stringId().optional(),
+        fullPage: z.boolean().optional(),
+      };
+  }
+}
+
 async function fromHarness(
   tool: DevMcpToolName,
   harness: McpHarnessServer | undefined,
@@ -801,28 +901,31 @@ export async function startDevMcpStreamableHttpServer<TStackHandle = unknown>(
             ...args: unknown[]
           ) => RuntimeMcpTransport;
         };
-      const { z } = (await import("zod/v4")) as unknown as {
-        z: {
-          object: (shape: Record<string, unknown>) => {
-            passthrough: () => unknown;
-          };
-        };
-      };
+      const { z } = await import("zod/v4");
       const mcpServer = new McpServer({
         name: "agent-e2e-dev-mcp",
         version: "0.0.0",
       });
-      const inputSchema = z.object({}).passthrough();
+      let responseClosed = false;
+      response.once("close", () => {
+        responseClosed = true;
+      });
 
       for (const tool of router.listTools()) {
         mcpServer.registerTool(
           tool.name,
-          { description: tool.summary, inputSchema },
+          {
+            description: tool.summary,
+            inputSchema: inputSchemaForTool(tool.name, z),
+          },
           async (args: unknown) => {
             const result = await router.callTool(
               tool.name,
               isRecord(args) ? args : {},
             );
+            if (tool.name === "stack.start" && result.status === "ok" && responseClosed) {
+              await router.callTool("stack.stop", {});
+            }
             return {
               content: [{ type: "text", text: JSON.stringify(result) }],
               structuredContent: result,

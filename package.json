@@ -31,7 +31,7 @@
     "apps/*"
   ],
   "scripts": {
-    "typecheck": "npm run typecheck --workspace @agent-e2e/harness && npm run typecheck --workspace @agent-e2e/showcase",
+    "typecheck": "npm run build --workspace @agent-e2e/harness && npm run typecheck --workspace @agent-e2e/harness && npm run typecheck --workspace @agent-e2e/showcase",
     "build": "npm run build --workspace @agent-e2e/harness",
     "test": "npm run build --workspace @agent-e2e/harness && npm run typecheck:public && npm run test --workspace @agent-e2e/harness && npm run test --workspace @agent-e2e/showcase",
     "check:core-boundary": "npm run check:boundaries",

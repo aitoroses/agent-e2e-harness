@@ -7,20 +7,28 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "dev:mcp": "npm run build --workspace @agent-e2e/harness && agent-e2e-harness dev-mcp",
+    "postinstall": "playwright install chromium",
+    "dev:mcp": "agent-e2e-harness dev-mcp",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build --workspace @agent-e2e/harness && vitest run"
+    "test": "vitest run"
   },
   "dependencies": {
-    "@agent-e2e/harness": "0.0.0",
+    "@agent-e2e/harness": "^1.0.0",
     "next": "^16.2.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "pg": "^8.16.3"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@testcontainers/postgresql": "^11.14.0",
+    "@types/node": "^22.15.0",
     "@types/pg": "^8.15.5",
-    "typescript": "^5.8.3"
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "playwright": "^1.59.1",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2",
+    "zod": "^4.4.3"
   }
 }

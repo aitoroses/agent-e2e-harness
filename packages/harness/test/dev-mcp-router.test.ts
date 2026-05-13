@@ -355,6 +355,44 @@ describe("Dev MCP Tool Router", () => {
     expect(events).toEqual(["start", "stop:stack-1"]);
   });
 
+  it("cleans up a started stack when readiness/status fails", async () => {
+    const events: string[] = [];
+    const provider: StackProvider<{ id: string }> = {
+      id: "failing-status-stack",
+      start: async () => {
+        events.push("start");
+        return { id: "stack-1" };
+      },
+      status: () => {
+        events.push("status");
+        throw new Error("readiness timeout");
+      },
+      stop: async (handle) => {
+        events.push(`stop:${handle.id}`);
+        return {
+          status: "stopped",
+          summary: "stopped",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        };
+      },
+    };
+    const router = createDevMcpToolRouter({ stackProvider: provider });
+
+    await expect(router.callTool("stack.start")).resolves.toMatchObject({
+      status: "error",
+      tool: "stack.start",
+      error: "readiness timeout",
+    });
+    await expect(router.callTool("stack.status")).resolves.toMatchObject({
+      status: "ok",
+      stack: { status: "stopped" },
+    });
+    expect(events).toEqual(["start", "status", "stop:stack-1"]);
+  });
+
   it("disposes active stack and browser sessions", async () => {
     const events: string[] = [];
     const provider: StackProvider<{ id: string }> = {
