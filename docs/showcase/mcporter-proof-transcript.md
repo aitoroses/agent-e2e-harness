@@ -42,8 +42,8 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.sto
 - `browser.act`: clicked `@e2` and wrote a forensics screenshot.
 - `journey.step`: passed `phase:proof-notes / step:create-proof-note`; both proofs passed; returned before/after screenshots, console/network logs, result, and `step-feedback` artifacts.
 - `artifact.read`: read `step-feedback.json`; content status `passed`; console errors `0`.
-- `cleanup.plan`: planned one run-owned `proof-note`.
-- `run.teardown`: deleted one run-owned `proof-note` through `showcase-proof-note-api`.
+- `cleanup.plan`: planned one run-owned `note`.
+- `run.teardown`: deleted one run-owned `note` through `resource-registry-adapter`.
 - `browser.close`: closed the MCP-owned browser session.
 - `stack.stop`: stopped `showcase-next-dev` and PostgreSQL.
 - Post-run container check: no `postgres:16-alpine` or `testcontainers/ryuk` containers remained after Dev MCP shutdown.

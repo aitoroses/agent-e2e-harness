@@ -100,7 +100,7 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool cleanup.p
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool run.teardown --args '{"runId":"showcase-dev"}' --output json
 ```
 
-Expected checkpoints: `"planned"` contains one `proof-note`; `"deleted"` contains one `proof-note`.
+Expected checkpoints: `"planned"` contains one `note`; `"deleted"` contains one `note`.
 
 Close the browser and stop the stack:
 
