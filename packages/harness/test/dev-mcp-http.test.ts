@@ -94,6 +94,21 @@ describe("Dev MCP Streamable HTTP server", () => {
         tool: "journey.list",
         journeys: [{ id: "journey:http" }],
       });
+      const inspect = await client.callTool({
+        name: "journey.inspect",
+        arguments: { journeyId: "journey:http" },
+      });
+      const inspectText =
+        inspect.content[0]?.type === "text" ? inspect.content[0].text : "";
+      expect(JSON.parse(inspectText)).toMatchObject({
+        status: "ok",
+        tool: "journey.inspect",
+        contract: {
+          id: "journey:http",
+          title: "HTTP journey",
+          phases: [{ id: "phase:http", steps: [{ id: "step:http" }] }],
+        },
+      });
     } finally {
       await client.close();
     }

@@ -109,6 +109,7 @@ describe("Dev MCP Tool Router", () => {
     expect(router.listTools().map((tool) => tool.name)).toEqual(
       expect.arrayContaining([
         "journey.list",
+        "journey.inspect",
         "run.begin",
         "run.reseed",
         "cleanup.plan",
@@ -119,6 +120,23 @@ describe("Dev MCP Tool Router", () => {
       status: "ok",
       tool: "journey.list",
       journeys: [{ id: "journey:router" }],
+    });
+    await expect(
+      router.callTool("journey.inspect", { journeyId: "journey:router" }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      tool: "journey.inspect",
+      contract: {
+        id: "journey:router",
+        title: "Router journey",
+        profiles: [{ id: "profile:router" }],
+        phases: [
+          {
+            id: "phase:router",
+            steps: [{ id: "step:router" }],
+          },
+        ],
+      },
     });
 
     const begin = await router.callTool("run.begin", {

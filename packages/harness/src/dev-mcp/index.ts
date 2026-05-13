@@ -50,9 +50,8 @@ export const DEV_MCP_TOOL_GRAMMAR = [
   "stack.start",
   "stack.status",
   "stack.stop",
-  "journey.prompt",
   "journey.list",
-  "journey.validate",
+  "journey.inspect",
   "run.begin",
   "run.reseed",
   "run.teardown",
@@ -377,12 +376,8 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           });
         case "journey.list":
           return fromHarness(name, await resolveHarness(options.harness), "listJourneys", args);
-        case "journey.validate":
-        case "journey.prompt":
-          return ok(name, {
-            accepted: true,
-            next: { actions: [{ id: "list-journeys", tool: "journey.list" }] },
-          });
+        case "journey.inspect":
+          return fromHarness(name, await resolveHarness(options.harness), "inspectJourney", args);
         case "run.begin":
           return fromHarness(
             name,
@@ -614,6 +609,7 @@ function implementedToolNames(
   if (options.harness)
     tools.push(
       "journey.list",
+      "journey.inspect",
       "run.begin",
       "run.reseed",
       "run.teardown",
@@ -640,9 +636,8 @@ function implementedToolNames(
 
 function summaryFor(name: DevMcpToolName): string {
   const summaries: Record<DevMcpToolName, string> = {
-    "journey.prompt": "Register or validate a textual journey prompt.",
     "journey.list": "List available journeys and profiles.",
-    "journey.validate": "Validate journey grammar before execution.",
+    "journey.inspect": "Read the full Inspectable Journey Contract for a journey.",
     "harness.probe": "Report Dev MCP server capabilities and readiness.",
     "stack.start": "Start the managed development stack.",
     "stack.status": "Read managed stack readiness.",

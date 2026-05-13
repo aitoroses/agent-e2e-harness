@@ -14,9 +14,8 @@ The default Dev MCP grammar defines reusable Agent E2E Harness vocabulary for lo
 ### Orientation
 
 - `harness.probe` — returns non-mutating harness/repo/server state.
-- `journey.prompt` — returns an agent prompt generated from the executable journey contract.
 - `journey.list` — lists textual/executable journeys and profile coverage.
-- `journey.validate` — validates textual journey plans and executable alignment.
+- `journey.inspect` — returns the full Inspectable Journey Contract for one journey.
 
 ### Stack and seed
 
