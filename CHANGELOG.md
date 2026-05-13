@@ -33,7 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Closure Command path for crystallizing development proof into CI E2E tests.
 - MCP-owned Playwright browser session tools for open, snapshot, act, screenshot, and close flows.
 - Published artifact contract under `.agents-e2e/artifacts/`.
-- Reference Showcase App demonstrating Bun-backed Dev MCP with a Node-sidecar PostgreSQL/Testcontainers stack.
+- Reference Showcase App demonstrating Bun-backed Dev MCP with a direct PostgreSQL/Testcontainers managed stack.
 
 ### Changed
 
