@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { setTimeout as delay } from "node:timers/promises";
 import type { StackProvider, StackStatusPacket } from "@agent-e2e/harness/stack";
 
 export interface PostgresTestcontainersProviderConfig {
@@ -7,11 +7,11 @@ export interface PostgresTestcontainersProviderConfig {
   username: string;
   password: string;
   schemaSql?: string;
-  schemaExecutor?: (handle: PostgresStackHandle, schemaSql: string) => Promise<void>;
+  schemaTimeoutMs?: number;
+  startupTimeoutMs?: number;
 }
 
 export interface PostgresStackHandle {
-  containerId: string;
   connectionUri: string;
   host: string;
   port: number;
@@ -23,12 +23,18 @@ export interface PostgresStackHandle {
 
 export interface PostgresTestcontainersRuntime {
   PostgreSqlContainer: new (image: string) => PostgresContainerBuilder;
+  Client: new (config: { connectionString: string; connectionTimeoutMillis?: number }) => PostgresClient;
+  Wait: {
+    forLogMessage(message: RegExp): unknown;
+  };
 }
 
 export interface PostgresContainerBuilder {
   withDatabase(database: string): PostgresContainerBuilder;
   withUsername(username: string): PostgresContainerBuilder;
   withPassword(password: string): PostgresContainerBuilder;
+  withWaitStrategy(waitStrategy: unknown): PostgresContainerBuilder;
+  withStartupTimeout(startupTimeoutMs: number): PostgresContainerBuilder;
   start(): Promise<StartedPostgresContainer>;
 }
 
@@ -39,8 +45,13 @@ export interface StartedPostgresContainer {
   getDatabase(): string;
   getUsername(): string;
   getPassword(): string;
-  getId(): string;
   stop(): Promise<void>;
+}
+
+export interface PostgresClient {
+  connect(): Promise<void>;
+  query(sql: string): Promise<unknown>;
+  end(): Promise<void>;
 }
 
 export type PostgresRuntimeLoader =
@@ -60,9 +71,10 @@ export function createPostgresTestcontainersProvider(
         .withDatabase(config.database)
         .withUsername(config.username)
         .withPassword(config.password)
+        .withWaitStrategy(runtime.Wait.forLogMessage(/database system is ready to accept connections/))
+        .withStartupTimeout(config.startupTimeoutMs ?? 45_000)
         .start();
       const handle: PostgresStackHandle = {
-        containerId: container.getId(),
         connectionUri: container.getConnectionUri(),
         host: container.getHost(),
         port: container.getPort(),
@@ -72,8 +84,19 @@ export function createPostgresTestcontainersProvider(
         stop: () => container.stop(),
       };
 
-      if (config.schemaSql)
-        await (config.schemaExecutor ?? runSchema)(handle, config.schemaSql);
+      if (config.schemaSql) {
+        try {
+          await runSchema(
+            runtime,
+            handle.connectionUri,
+            config.schemaSql,
+            config.schemaTimeoutMs ?? 15_000,
+          );
+        } catch (error) {
+          await stopPostgresHandle(handle).catch(() => undefined);
+          throw error;
+        }
+      }
 
       return handle;
     },
@@ -85,12 +108,21 @@ export function createPostgresTestcontainersProvider(
       );
     },
     async stop(handle) {
-      await handle.stop();
-      return postgresStatus(
+      const warnings: StackStatusPacket["warnings"] = [];
+      try {
+        await stopPostgresHandle(handle);
+      } catch (error) {
+        warnings.push({
+          code: "postgres-stop-timeout",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      const status = postgresStatus(
         "stopped",
         "Showcase PostgreSQL Testcontainer stopped.",
         handle,
       );
+      return { ...status, warnings };
     },
   };
 }
@@ -99,48 +131,88 @@ async function loadPostgresRuntime(): Promise<PostgresTestcontainersRuntime> {
   const postgres = (await import("@testcontainers/postgresql")) as unknown as {
     PostgreSqlContainer: PostgresTestcontainersRuntime["PostgreSqlContainer"];
   };
+  const pg = (await import("pg")) as unknown as {
+    Client: PostgresTestcontainersRuntime["Client"];
+  };
+  const testcontainers = (await import("testcontainers")) as unknown as {
+    Wait: PostgresTestcontainersRuntime["Wait"];
+  };
   return {
     PostgreSqlContainer: postgres.PostgreSqlContainer,
+    Client: pg.Client,
+    Wait: testcontainers.Wait,
   };
 }
 
 async function runSchema(
-  handle: PostgresStackHandle,
+  runtime: PostgresTestcontainersRuntime,
+  connectionString: string,
   schemaSql: string,
+  timeoutMs: number,
 ): Promise<void> {
-  const { stdout, stderr } = await execFileAsync("docker", [
-    "exec",
-    "-i",
-    handle.containerId,
-    "psql",
-    "-v",
-    "ON_ERROR_STOP=1",
-    "-U",
-    handle.username,
-    "-d",
-    handle.database,
-    "-c",
-    schemaSql,
-  ]);
-  if (stderr.trim()) {
-    throw new Error(`PostgreSQL schema initialization failed: ${stderr}`);
+  const client = await connectWithRetry(runtime, connectionString, timeoutMs);
+  try {
+    await withTimeout(
+      client.query(schemaSql),
+      timeoutMs,
+      `Timed out applying PostgreSQL schema after ${timeoutMs}ms.`,
+    );
+  } finally {
+    await client.end().catch(() => undefined);
   }
-  void stdout;
 }
 
-function execFileAsync(
-  file: string,
-  args: string[],
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    execFile(file, args, (error, stdout, stderr) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve({ stdout, stderr });
+async function connectWithRetry(
+  runtime: PostgresTestcontainersRuntime,
+  connectionString: string,
+  timeoutMs: number,
+): Promise<PostgresClient> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    const remainingMs = Math.max(1, deadline - Date.now());
+    const client = new runtime.Client({
+      connectionString,
+      connectionTimeoutMillis: Math.min(remainingMs, 5_000),
     });
-  });
+    try {
+      await withTimeout(
+        client.connect(),
+        remainingMs,
+        `Timed out connecting to PostgreSQL after ${timeoutMs}ms.`,
+      );
+      return client;
+    } catch (error) {
+      lastError = error;
+      await client.end().catch(() => undefined);
+      await delay(Math.min(500, Math.max(0, deadline - Date.now())));
+    }
+  }
+
+  const reason = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`Timed out connecting to PostgreSQL after ${timeoutMs}ms. Last error: ${reason}`);
+}
+
+async function stopPostgresHandle(handle: PostgresStackHandle): Promise<void> {
+  await withTimeout(
+    handle.stop(),
+    10_000,
+    "Timed out stopping PostgreSQL Testcontainer after 10000ms.",
+  );
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  return await Promise.race([
+    promise,
+    delay(timeoutMs).then(() => {
+      throw new Error(message);
+    }),
+  ]);
 }
 
 function postgresStatus(
