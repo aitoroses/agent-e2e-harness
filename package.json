@@ -30,6 +30,9 @@
     "packages/*",
     "apps/*"
   ],
+  "overrides": {
+    "postcss": "^8.5.14"
+  },
   "scripts": {
     "typecheck": "npm run typecheck --workspace @agent-e2e/harness && npm run typecheck --workspace @agent-e2e/showcase",
     "build": "npm run build --workspace @agent-e2e/harness",
