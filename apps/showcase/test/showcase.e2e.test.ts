@@ -127,7 +127,7 @@ describe("Next.js showcase app", () => {
       status: "ok",
       tool: "run.begin",
       runId: "showcase-mcp",
-      artifact_dir: expect.stringContaining("showcase-proof-notes/showcase-mcp"),
+      artifactDir: expect.stringContaining("showcase-proof-notes/showcase-mcp"),
       artifacts: expect.arrayContaining([
         expect.objectContaining({ name: "seed-manifest" }),
         expect.objectContaining({ name: "result" }),
@@ -154,7 +154,7 @@ describe("Next.js showcase app", () => {
           expect.objectContaining({ name: "result", kind: "json" }),
           expect.objectContaining({ name: "step-feedback", kind: "json" }),
         ]),
-        step_feedback_artifact: expect.objectContaining({ name: "step-feedback" }),
+        stepFeedbackArtifact: expect.objectContaining({ name: "step-feedback" }),
       },
     });
     const runDir = join(artifactRoot, "showcase-proof-notes", "showcase-mcp");

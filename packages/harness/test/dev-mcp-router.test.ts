@@ -144,7 +144,7 @@ describe("Dev MCP Tool Router", () => {
       status: "ok",
       tool: "run.begin",
       runId: "router-run",
-      artifact_dir: expect.stringContaining("journey-router/router-run"),
+      artifactDir: expect.stringContaining("journey-router/router-run"),
       artifacts: expect.arrayContaining([
         expect.objectContaining({ name: "seed-manifest" }),
       ]),
@@ -172,7 +172,7 @@ describe("Dev MCP Tool Router", () => {
     expect(step).toMatchObject({
       status: "ok",
       tool: "journey.step",
-      artifact_dir: expect.stringContaining("journey-router/router-run"),
+      artifactDir: expect.stringContaining("journey-router/router-run"),
       result: {
         status: "passed",
         observed: { message: "execution:browser-1" },
@@ -182,7 +182,7 @@ describe("Dev MCP Tool Router", () => {
           expect.objectContaining({ name: "result", kind: "json" }),
           expect.objectContaining({ name: "step-feedback", kind: "json" }),
         ]),
-        step_feedback_artifact: expect.objectContaining({ name: "step-feedback" }),
+        stepFeedbackArtifact: expect.objectContaining({ name: "step-feedback" }),
       },
     });
     const stepArtifacts = (step.result as { artifacts: Array<{ path: string }> }).artifacts;
@@ -267,7 +267,7 @@ describe("Dev MCP Tool Router", () => {
           expect.objectContaining({ name: "failure", kind: "screenshot" }),
           expect.objectContaining({ name: "step-feedback", kind: "json" }),
         ]),
-        step_feedback_artifact: expect.objectContaining({ name: "step-feedback" }),
+        stepFeedbackArtifact: expect.objectContaining({ name: "step-feedback" }),
       },
     });
     const artifacts = (step.result as { artifacts: Array<{ name?: string; path: string }> }).artifacts;

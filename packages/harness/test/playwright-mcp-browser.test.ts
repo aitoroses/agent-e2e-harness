@@ -26,7 +26,7 @@ describe('Playwright MCP browser session manager', () => {
       runId: 'browser-run',
     });
     expect(open).toMatchObject({ status: 'open', browserMode: { headed: false, headless: true, consumer: 'mcp' } });
-    expect(open.artifact_dir).toContain('journey-browser-proof/browser-run');
+    expect(open.artifactDir).toContain('journey-browser-proof/browser-run');
 
     const session = manager.list()[0];
     expect(session?.browserSessionId).toBe(open.browserSessionId);

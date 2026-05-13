@@ -97,7 +97,7 @@ The exact tool names may evolve, but the proof must establish these facts:
 - `browser.snapshot` shows the expected app state and no visible runtime errors.
 - `browser.act` performs a user-visible action using a fresh snapshot ref, not a hardcoded stale ref.
 - `journey.step` or `journey.phase` returns `status: "passed"` and records owned resources created by the journey.
-- `artifact.read` can read the returned `step_feedback_artifact.path` or equivalent primary artifact ref.
+- `artifact.read` can read the returned `stepFeedbackArtifact.path` or equivalent primary artifact ref.
 - `cleanup.plan` includes only resources owned by the current run.
 - `run.reseed` deletes planned owned resources and returns seed ready again.
 - `browser.close` closes MCP-owned browser state.
