@@ -8,8 +8,11 @@
     "build": "next build",
     "start": "next start",
     "postinstall": "playwright install chromium",
+    "predev:mcp": "npm run build --workspace @agent-e2e/harness",
     "dev:mcp": "agent-e2e-harness dev-mcp",
+    "pretypecheck": "npm run build --workspace @agent-e2e/harness",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "npm run build --workspace @agent-e2e/harness",
     "test": "vitest run"
   },
   "dependencies": {
