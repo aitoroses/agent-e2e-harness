@@ -2,6 +2,12 @@
 
 Reusable TypeScript package for agent-driven E2E proof loops. Consumer apps use it to expose a local Dev MCP server, define seeded journeys, drive browser/API proof, collect artifacts, clean owned resources, and turn the same flow into CI.
 
+Name map:
+
+- npm package: `@agent-e2e/harness`
+- adoption skill / repository: `agent-e2e-harness`
+- CLI binary: `agent-e2e`
+
 ## Install
 
 ```sh
@@ -166,6 +172,21 @@ stack.stop
 ```
 
 Use returned artifact refs to inspect failures instead of relying on terminal scrollback.
+
+Starting `agent-e2e dev` only proves the server booted. A proof run requires tool calls. For a fresh or remote agent session without this MCP registered, `mcporter` is the portable dynamic client path:
+
+```sh
+mcporter list http://127.0.0.1:3766/mcp --schema --json --allow-http
+
+mcporter call \
+  --http-url http://127.0.0.1:3766/mcp \
+  --allow-http \
+  --tool journey.list \
+  --args '{}' \
+  --output json
+```
+
+Use `--allow-http` for localhost HTTP MCP endpoints. Prefer `--http-url ... --tool ...`; dotted URL selector forms can fail for local MCP URLs.
 
 ## CI Verify
 

@@ -1,0 +1,3 @@
+display_name: Agent E2E Adoption Smoke
+short_description: Run a fresh-agent adoption smoke for Agent E2E Harness and capture learnings.
+default_prompt: Use agent-e2e-adoption-smoke to run a clean Agent E2E Harness adoption test with AOE, observe the worker, and collect a learning report.
