@@ -38,13 +38,15 @@ The worker should prove at least this sequence:
 3. `stack.start` starts the app and returns service URL.
 4. `browser.open` opens the app.
 5. `browser.snapshot` sees seeded baseline and interactive controls.
-6. `run.begin` seeds the run and returns `canRunSteps: true`.
-7. `journey.step` performs the browser/API proof and passes.
-8. `artifact.read` reads a step feedback or proof artifact.
-9. `cleanup.plan` reports owned resources.
-10. `run.reseed` or cleanup removes owned data and restores baseline.
-11. `browser.close` closes the browser session.
-12. `stack.stop` stops the app.
+6. `browser.find` resolves at least one stable UI target when semantic lookup is useful.
+7. `browser.act`, `browser.wait`, and `browser.get` prove the agent can mutate, wait on, and inspect live app state.
+8. `run.begin` seeds the run and returns `canRunSteps: true`.
+9. `journey.step` performs the browser/API proof and passes.
+10. `artifact.read` reads a step feedback or proof artifact.
+11. `cleanup.plan` reports owned resources.
+12. `run.reseed` or cleanup removes owned data and restores baseline.
+13. `browser.close` closes the browser session.
+14. `stack.stop` stops the app.
 
 ## Evidence To Capture
 

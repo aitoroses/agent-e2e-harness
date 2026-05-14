@@ -22,7 +22,14 @@ const requiredTools = [
   'browser.open',
   'browser.sessions',
   'browser.snapshot',
+  'browser.find',
   'browser.act',
+  'browser.wait',
+  'browser.get',
+  'browser.eval',
+  'browser.playwright',
+  'browser.console',
+  'browser.network',
   'browser.screenshot',
   'browser.close'
 ] as const;
@@ -38,8 +45,8 @@ describe('Dev MCP Tool Grammar contracts', () => {
         'run.reset',
         'run.status',
         'run.explainFailure',
-        'browser.wait',
         'browser.apiCall',
+        'browser.tabs',
         'journey.run',
         'closure.run',
         'proof.timeline'
@@ -63,14 +70,14 @@ describe('Dev MCP Tool Grammar contracts', () => {
       url: 'http://127.0.0.1:3000',
       title: 'Example App',
       summary: 'Example App is ready for the next action.',
-      refs: [{ ref: '@e1', role: 'button', name: 'Create record' }],
+      refs: [{ ref: '@e1', role: 'button', name: 'Create record', selector: 'button' }],
       artifacts: [{ id: 'artifact:snapshot', kind: 'json', uri: 'artifact://snapshot.json' }],
       warnings: [],
       errors: [],
       next: { actions: [{ id: 'create-record', tool: 'browser.act', why: 'Exercise the next visible UI affordance.' }] }
     };
 
-    expect(packet.refs[0]).toEqual({ ref: '@e1', role: 'button', name: 'Create record' });
+    expect(packet.refs[0]).toEqual({ ref: '@e1', role: 'button', name: 'Create record', selector: 'button' });
     expect(packet.next.actions[0]).toMatchObject({ tool: 'browser.act' });
   });
 });

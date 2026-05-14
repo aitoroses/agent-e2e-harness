@@ -50,8 +50,12 @@ When the task includes interactive setup, capture:
 - `stack.explore.run` result for one concrete provider tool
 - `run.begin` seed status
 - browser session id
-- snapshot evidence
-- action result
+- `browser.snapshot` evidence with visible refs
+- `browser.find` evidence when semantic lookup is used
+- `browser.act` result without relying on implicit screenshot artifacts
+- `browser.wait` result with `durationMs` and `timeoutMs` when waiting for UI state
+- `browser.get` result for targeted state reads when useful
+- `browser.console` and `browser.network` cursor evidence when debugging runtime or request behavior
 - step or phase proof status
 - primary artifact path read with `artifact.read`
 - cleanup/reseed result

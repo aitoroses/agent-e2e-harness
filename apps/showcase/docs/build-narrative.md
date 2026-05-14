@@ -22,7 +22,7 @@ The current launch proof loop is:
 2. `mcporter list http://127.0.0.1:3766/mcp --allow-http --schema --json`
 3. `stack.start` returns ready `showcase-next-dev` and `postgres` services.
 4. `run.begin` applies the baseline workspace/user seed.
-5. `browser.open`, `browser.snapshot`, and `browser.act` create the proof note through the UI.
+5. `browser.open`, `browser.snapshot`, `browser.find`, `browser.act`, `browser.wait`, and `browser.get` create and inspect the proof note through the UI.
 6. `journey.step` captures the browser-created proof note as run-owned and verifies persistence.
 7. `artifact.read` opens `step-feedback.json` so the agent can debug from artifacts instead of terminal scrollback.
 8. `cleanup.plan` and `run.teardown` delete the owned proof note.

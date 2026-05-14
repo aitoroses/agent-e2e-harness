@@ -63,7 +63,14 @@ describe("Dev MCP Streamable HTTP server", () => {
         snapshot: async (browserSessionId) => ({ browserSessionId, refs: [] }),
         close: async (browserSessionId) => ({ status: "closed", browserSessionId }),
         list: () => [],
+        find: async (input) => ({ status: "ok", input, targets: [] }),
         act: async (input) => ({ status: "ok", input }),
+        wait: async (input) => ({ status: "ok", input }),
+        get: async (input) => ({ status: "ok", input, value: "value" }),
+        evaluate: async (input) => ({ status: "ok", input, output: null }),
+        playwright: async (input) => ({ status: "ok", input, output: null }),
+        console: async (input) => ({ status: "ok", input, entries: [], nextCursor: 0 }),
+        network: async (input) => ({ status: "ok", input, entries: [], nextCursor: 0 }),
       },
     });
     handles.push(server);
@@ -97,9 +104,25 @@ describe("Dev MCP Streamable HTTP server", () => {
         type: "object",
         properties: {
           browserSessionId: expect.objectContaining({ type: "string" }),
-          action: expect.objectContaining({ enum: ["click", "fill", "press"] }),
+          action: expect.objectContaining({ enum: ["click", "fill", "press", "hover", "focus", "check", "uncheck", "select", "scroll"] }),
         },
         required: ["browserSessionId", "action"],
+      });
+      expect(tools.tools.find((tool) => tool.name === "browser.find")?.inputSchema).toMatchObject({
+        type: "object",
+        properties: {
+          by: expect.objectContaining({ enum: ["role", "text", "label", "placeholder", "testId", "selector"] }),
+          value: expect.objectContaining({ description: expect.stringContaining("Role name") }),
+        },
+        required: ["browserSessionId", "by", "value"],
+      });
+      expect(tools.tools.find((tool) => tool.name === "browser.eval")?.inputSchema).toMatchObject({
+        type: "object",
+        properties: {
+          code: expect.objectContaining({ description: expect.stringContaining("page context") }),
+          timeoutMs: expect.objectContaining({ description: expect.stringContaining("30000") }),
+        },
+        required: ["browserSessionId", "code"],
       });
 
       const list = await client.callTool({

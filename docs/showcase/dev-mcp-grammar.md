@@ -39,9 +39,16 @@ Provider-declared stack exploration tools must declare `id`, `title`, `descripti
 
 - `browser.open` — opens an MCP-owned headed browser and returns `browserSessionId`.
 - `browser.sessions` — lists open sessions.
-- `browser.snapshot` — primary forensics packet: URL, title, semantic tree, interactive refs, visible errors, console/network signals, artifacts, optional visual evidence, and next actions.
-- `browser.act` — performs a single Playwright action using snapshot refs or semantic locators.
-- `browser.screenshot` — captures an additional named screenshot artifact.
+- `browser.snapshot` — primary forensics packet: URL, title, semantic tree, interactive refs, visible errors, artifacts, and next actions. Snapshot refs use `@eN`.
+- `browser.find` — resolves semantic locators into reusable refs without acting. Find refs use `@fN`.
+- `browser.act` — performs one UI action using a current ref or CSS selector. It does not capture screenshots automatically.
+- `browser.wait` — waits for an explicit ref, selector, text, URL, load-state, or page-function condition and reports elapsed timeout feedback.
+- `browser.get` — reads one targeted value: text, HTML, value, attribute, title, URL, or count.
+- `browser.eval` — runs an async page-context function body with JSON input and JSON-serializable output.
+- `browser.playwright` — runs an async Playwright-context function body against the live MCP-owned page/browser and optional refs.
+- `browser.console` — reads per-session console signals with cursor-based incremental filtering.
+- `browser.network` — reads per-session network request, response, and failed-request signals.
+- `browser.screenshot` — captures an explicit named screenshot artifact.
 - `browser.close` — closes an MCP-owned browser session.
 
 ### Journey execution
@@ -84,4 +91,4 @@ MCP tools should return artifact refs with `path` plus `uri`; agents should use 
 
 ## First contract tests
 
-Phase 0/1 tests should assert tool names, required inputs, default headed dev mode, no caller-injected Playwright objects, artifact refs, automatic screenshots/snapshots, and consistent feedback envelope fields: `status`, `summary`, `artifacts`, `warnings`, `errors`, and `next.actions`.
+Phase 0/1 tests should assert tool names, required inputs, default headed dev mode, no caller-injected Playwright objects, artifact refs, explicit screenshot capture, automatic snapshot artifacts, and consistent feedback envelope fields: `status`, `summary`, `artifacts`, `warnings`, `errors`, and `next.actions`.

@@ -114,4 +114,4 @@ The public Dev MCP grammar remains small. `stack.status` stays the canonical sta
 
 ## Follow-up
 
-The next design pass should define `browser.explore.*` separately. Browser exploration has different ergonomics because DOM snapshots are volatile and browser refs are useful there. Stack exploration should keep stable service ids.
+Browser exploration is resolved separately in ADR 0004 as a fixed Browser Workbench under `browser.*`, not as `browser.explore.*`. Browser exploration has different ergonomics because DOM snapshots are volatile and browser refs are useful there. Stack exploration keeps stable service ids.

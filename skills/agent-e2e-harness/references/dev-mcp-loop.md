@@ -82,7 +82,12 @@ stack.logs
 run.begin
 browser.open
 browser.snapshot
+browser.find
 browser.act
+browser.wait
+browser.get
+browser.console
+browser.network
 journey.step
 stack.explore.run
 artifact.read
@@ -107,7 +112,11 @@ Capture these facts before changing implementation again:
 - `run.begin` returns seed `status: "passed"` or `"warning"` and `canRunSteps: true`.
 - `browser.open` returns a browser session id.
 - `browser.snapshot` shows expected app state and no visible runtime error.
-- `browser.act` uses a fresh snapshot ref or clear semantic locator.
+- `browser.find` resolves semantic targets when a role, label, text, placeholder, test id, or selector is clearer than a snapshot ref.
+- `browser.act` uses a fresh snapshot/find ref or clear CSS selector and performs exactly one UI mutation.
+- `browser.wait` waits for explicit page state instead of sleeping.
+- `browser.get` reads targeted text/value/HTML/attribute/title/URL/count when the agent needs a small observation.
+- `browser.console` and `browser.network` can be read with cursors when diagnosing runtime errors, failed requests, or unexpected behavior.
 - `journey.step` or `journey.phase` returns `status: "passed"`.
 - `artifact.read` can read the primary step feedback or result artifact.
 - `cleanup.plan` contains only resources owned by this run.

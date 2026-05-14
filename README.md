@@ -295,6 +295,15 @@ stack.explore.run
 run.begin
 browser.open
 browser.snapshot
+browser.find
+browser.act
+browser.wait
+browser.get
+browser.console
+browser.network
+browser.eval
+browser.playwright
+browser.screenshot
 journey.step
 artifact.read
 cleanup.plan
@@ -302,6 +311,8 @@ run.reseed
 ```
 
 Use `stack.logs` for live service logs after the stack is active. It requires one `serviceId`, a required `tail`, and optional `stream`. Use `stack.explore.list` to discover provider-declared tools and `stack.explore.run` to run one of them with Zod-validated input/output.
+
+The Browser Workbench is the browser-side exploration surface. Use `browser.snapshot` for visible refs, `browser.find` for semantic lookup, `browser.act` for one UI mutation, `browser.wait` for explicit conditions, `browser.get` for targeted reads, `browser.console` / `browser.network` for signal buffers, `browser.screenshot` for explicit visual artifacts, and `browser.eval` / `browser.playwright` when exploration needs custom page or Playwright code.
 
 `journey.inspect` returns the full contract for one journey: phases, steps, proofs, profiles, and descriptions. Agents use it to plan, humans use it to read, and CI uses it to diff.
 
@@ -418,7 +429,7 @@ The v1.0 package exports six entries. All are stable.
 - `@agent-e2e/harness/core` - core API: `defineJourney`, `HarnessTypes`, inspectable contract types, feedback and guidance types, seed contracts, ownership and resource cleanup contracts, typed resource registry helpers, and journey run helpers.
 - `@agent-e2e/harness/dev-mcp` - Dev MCP server facade: `defineAgentE2EConfig`, `startAgentE2EDevMcpFromConfig`, manifest types, defaults (`127.0.0.1:3766/mcp`, `.agents-e2e/artifacts`), and the Dev MCP tool grammar types.
 - `@agent-e2e/harness/verify` - config-backed verify runner, suite selection types, report types, built-in reporters, and `runAgentE2EVerifyFromConfig`.
-- `@agent-e2e/harness/playwright-mcp` - MCP-owned browser session factory and the `browser.open` / `browser.snapshot` / `browser.act` / `browser.screenshot` / `browser.close` packet types.
+- `@agent-e2e/harness/playwright-mcp` - MCP-owned browser session factory and Browser Workbench packet types for `browser.open`, `browser.snapshot`, `browser.find`, `browser.act`, `browser.wait`, `browser.get`, `browser.eval`, `browser.playwright`, `browser.console`, `browser.network`, `browser.screenshot`, and `browser.close`.
 - `@agent-e2e/harness/stack` - stack provider contract, `StackStatusPacket`, `StackLifecyclePhase`, `createProcessStackProvider`, `allocateTcpPort`.
 - `@agent-e2e/harness/artifacts` - artifact recorder and reader helpers: `createRunArtifacts`, `createRunArtifactRecorder`, `readArtifact`, `resolveArtifactPath`, canonical filenames, and `DEFAULT_AGENT_E2E_ARTIFACT_ROOT`.
 

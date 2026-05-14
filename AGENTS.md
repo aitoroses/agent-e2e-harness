@@ -8,6 +8,8 @@ This repository contains a reusable E2E harness for agent workflows. It defines 
 
 Issues and PRDs are tracked in GitHub Issues for `aitoroses/agent-e2e-harness`. See `docs/agents/issue-tracker.md`.
 
+When `$to-prd` is invoked, publish the PRD as a GitHub issue and apply `ready-for-agent`. Do not create a local `docs/prd/*` PRD file unless the user explicitly asks for a repo-local PRD artifact in addition to the GitHub issue.
+
 ### Triage labels
 
 This repo uses the canonical five-label triage vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
@@ -108,10 +110,10 @@ Use `feat/` for user-facing behavior or public API, `fix/` for regressions, `doc
 PR titles should use the same intent-oriented type as the branch, for example `feat: add agent-e2e dev/verify launch surface`. Keep PR bodies release-aware:
 
 - `Summary` lists the public behavior and docs surfaces changed.
-- `Issues / PRDs` names every GitHub issue and PRD covered by the PR, including the local PRD path when one exists.
+- `Issues / PRDs` names every GitHub issue and PRD covered by the PR.
 - `Validation` lists local commands, GitHub CI state, and any unavailable checks.
 - `Release Notes` calls out public CLI/package/skill/release workflow effects when present.
-- Link completed GitHub issues and PRDs with closing keywords, for example `Closes #18` plus `PRD: docs/prd/agent-e2e-dev-verify-cli.md`. If a PR only partially implements a PRD, say `Part of #<id>` instead of `Closes`.
+- Link completed GitHub issues and PRDs with closing keywords, for example `Closes #18`. If a PR only partially implements a PRD, say `Part of #<id>` instead of `Closes`.
 
 Open broad launch-surface PRs as draft until local validation and GitHub CI are both green. Tagging and publishing are post-merge release actions, not part of ordinary PR completion.
 

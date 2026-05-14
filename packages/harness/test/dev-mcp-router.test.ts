@@ -844,10 +844,48 @@ describe("Dev MCP Tool Router", () => {
           browserSessionId,
           refs: [{ ref: "@e1", role: "button" }],
         }),
+        find: async (input) => ({
+          status: "ok",
+          browserSessionId: input.browserSessionId,
+          targets: [{ ref: "@f1", role: input.value }],
+        }),
         act: async (input) => ({
           status: "ok",
           browserSessionId: input.browserSessionId,
           action: input.action,
+        }),
+        wait: async (input) => ({
+          status: "ok",
+          browserSessionId: input.browserSessionId,
+          matched: input.until,
+        }),
+        get: async (input) => ({
+          status: "ok",
+          browserSessionId: input.browserSessionId,
+          kind: input.kind,
+          value: "value",
+        }),
+        evaluate: async (input) => ({
+          status: "ok",
+          browserSessionId: input.browserSessionId,
+          output: { ran: "eval" },
+        }),
+        playwright: async (input) => ({
+          status: "ok",
+          browserSessionId: input.browserSessionId,
+          output: { ran: "playwright" },
+        }),
+        console: async (input) => ({
+          status: "ok",
+          browserSessionId: input.browserSessionId,
+          entries: [],
+          nextCursor: 0,
+        }),
+        network: async (input) => ({
+          status: "ok",
+          browserSessionId: input.browserSessionId,
+          entries: [],
+          nextCursor: 0,
         }),
         screenshot: async (input) => ({
           status: "ok",
@@ -866,7 +904,14 @@ describe("Dev MCP Tool Router", () => {
       expect.arrayContaining([
         "browser.open",
         "browser.snapshot",
+        "browser.find",
         "browser.act",
+        "browser.wait",
+        "browser.get",
+        "browser.eval",
+        "browser.playwright",
+        "browser.console",
+        "browser.network",
         "browser.screenshot",
         "browser.close",
       ]),
@@ -886,6 +931,16 @@ describe("Dev MCP Tool Router", () => {
       sessions: [{ browserSessionId: "browser-1" }],
     });
     await expect(
+      router.callTool("browser.find", {
+        browserSessionId: "browser-1",
+        by: "role",
+        value: "button",
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      result: { targets: [{ ref: "@f1" }] },
+    });
+    await expect(
       router.callTool("browser.act", {
         browserSessionId: "browser-1",
         ref: "@e1",
@@ -895,6 +950,49 @@ describe("Dev MCP Tool Router", () => {
       status: "ok",
       result: { status: "ok", action: "click" },
     });
+    await expect(
+      router.callTool("browser.wait", {
+        browserSessionId: "browser-1",
+        until: { kind: "text", text: "ready" },
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      result: { matched: { kind: "text", text: "ready" } },
+    });
+    await expect(
+      router.callTool("browser.get", {
+        browserSessionId: "browser-1",
+        kind: "text",
+        ref: "@e1",
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      result: { value: "value" },
+    });
+    await expect(
+      router.callTool("browser.eval", {
+        browserSessionId: "browser-1",
+        code: "return 1",
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      result: { output: { ran: "eval" } },
+    });
+    await expect(
+      router.callTool("browser.playwright", {
+        browserSessionId: "browser-1",
+        code: "return 1",
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      result: { output: { ran: "playwright" } },
+    });
+    await expect(
+      router.callTool("browser.console", { browserSessionId: "browser-1" }),
+    ).resolves.toMatchObject({ status: "ok", result: { entries: [] } });
+    await expect(
+      router.callTool("browser.network", { browserSessionId: "browser-1" }),
+    ).resolves.toMatchObject({ status: "ok", result: { entries: [] } });
     await expect(
       router.callTool("browser.screenshot", { browserSessionId: "browser-1" }),
     ).resolves.toMatchObject({
