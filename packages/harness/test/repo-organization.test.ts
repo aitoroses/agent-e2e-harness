@@ -43,7 +43,7 @@ describe('repository organization contract', () => {
 
   it('uses the package CLI for Dev MCP instead of app-owned runnable scripts', () => {
     expect(entries(resolve(repoRoot, 'apps/showcase/scripts'))).toEqual([]);
-    expect(showcasePackage.scripts['dev:mcp']).toContain('agent-e2e-harness dev-mcp');
+    expect(showcasePackage.scripts['dev:mcp']).toContain('agent-e2e dev');
   });
 
   it('keeps consumer infrastructure providers out of the published harness package', () => {

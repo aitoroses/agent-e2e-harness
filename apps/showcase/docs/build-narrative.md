@@ -28,4 +28,4 @@ The current launch proof loop is:
 8. `cleanup.plan` and `run.teardown` delete the owned proof note.
 9. `stack.stop` tears down Next.js and PostgreSQL.
 
-The same behavior is preserved in `apps/showcase/test/showcase.e2e.test.ts` as the crystallized closure proof.
+The same configured journey is promoted through `npm run e2e:verify --workspace @agent-e2e/showcase`, which runs `agent-e2e verify`, writes suite reports under `.agents-e2e/artifacts/_suites/<suite-id>/`, and exits non-zero on failure.

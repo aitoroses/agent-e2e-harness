@@ -15,7 +15,7 @@ Rejected alternatives:
 
 | Export | Purpose | May import | Must not import | Dependency rule |
 | --- | --- | --- | --- | --- |
-| `@agent-e2e/harness/core` | Generic harness contracts, journeys, seed, feedback, closure, ownership, resource/reseed semantics | TypeScript/Node-free generic utilities | Playwright, MCP SDK/transports, consumer infrastructure, Next/React/showcase app, DB clients | No adapter dependencies. |
+| `@agent-e2e/harness/core` | Generic harness contracts, journeys, seed, feedback, verification, ownership, resource/reseed semantics | TypeScript/Node-free generic utilities | Playwright, MCP SDK/transports, consumer infrastructure, Next/React/showcase app, DB clients | No adapter dependencies. |
 | `@agent-e2e/harness` | Default Playwright-specialized ergonomics | Core, Playwright types | MCP SDK/transports, consumer infrastructure, showcase app | Playwright peer may remain because package root is the default Playwright surface. |
 | `@agent-e2e/harness/stack` | Generic managed stack contracts outside core | Generic types | Testcontainers, DB clients, Next/React/showcase app, Playwright, MCP transports | No provider-specific dependencies. |
 | `@agent-e2e/harness/dev-mcp` | HTTP Dev MCP server contracts, convention-based local-dev server entrypoints, and default adapter composition | Stack contracts, protocol-neutral MCP contracts, optional dynamic import of internal Playwright MCP adapter | Direct Playwright package imports, consumer infrastructure, Next/React/showcase app, DB clients | MCP SDK and browser adapter dependencies must stay optional/dynamic; no product provider belongs here. |

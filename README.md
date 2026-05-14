@@ -1,18 +1,34 @@
 # Agent E2E Harness
 
-A reusable proof-loop toolkit for **agent-built development** — the workflow where coding agents implement changes and must produce **Deterministic Proof** that the change works.
+Agent E2E Harness helps coding agents prove their own work.
 
-![An agent driving an Executable Journey from seeded state through phases and steps, emitting artifacts](docs/launch/v1.0/hero-agent-journey.png)
+Journeys give agents a repeatable way to seed app state, start the stack, move through UI/API steps, capture artifacts, clean owned data, and rerun from a known point. The outcome is practical time travel for app state: the agent can go back to a clean checkpoint, inspect what changed, and turn the passing journey into the same CI check humans review.
 
-When a coding agent makes a change, the proof that it works should not be a "looks good on my machine" screenshot or a hand-waved transcript. Agent E2E Harness gives the agent an **Executable Journey** — a seeded environment, MCP-callable phase/step controls, an **MCP-Owned Browser Session**, per-step artifacts, and an **Ownership Ledger** that bounds what cleanup may delete. The same journey that produces a Deterministic Proof during development crystallizes, unchanged, into a **CI E2E Test**.
+![An agent driving a journey from seeded state through phases and steps, emitting artifacts](docs/launch/v1.0/hero-agent-journey-readme.png)
 
-The agent is the primary user. Humans and CI read the same artifacts the agent left behind.
+_A journey starts from seeded state, runs through MCP-controlled steps, and leaves artifacts CI can replay._
+
+The agent is the primary user. Humans and CI read the same evidence the agent left behind.
 
 ## Install in 5 minutes
 
-The whole path: install the package, declare a config, start the Dev MCP server, point a standard Streamable HTTP MCP client at it, list tools. The journey itself is the only domain code you write — the rest is a one-line CLI and an `agent-e2e.config.ts`.
+The quick path is: install the adoption skill for your agent, install the package, declare a config, start the Dev MCP server, and connect your agent to it. The journey is the domain code. The rest is one CLI command and an `agent-e2e.config.ts`.
 
-**1. Install the harness and its runtime peers.**
+**1. Install the adoption skill for your agent.** This gives Codex the setup, journey-building, Dev MCP, and CI verification workflow as a reusable skill.
+
+```sh
+npx skills add aitoroses/agent-e2e-harness --skill agent-e2e-harness --agent codex -y
+```
+
+For every supported local agent:
+
+```sh
+npx skills add aitoroses/agent-e2e-harness --skill agent-e2e-harness --all
+```
+
+Then ask your agent to use `$agent-e2e-harness` in the app you want to instrument.
+
+**2. Install the harness and its runtime peers.**
 
 ```sh
 npm install -D @agent-e2e/harness playwright @modelcontextprotocol/sdk zod
@@ -24,7 +40,7 @@ Expected output line:
 added N packages
 ```
 
-**2. Install Bun `>=1.3.0`.** The Dev MCP CLI runs on Bun so `agent-e2e.config.ts` loads directly and the **Hot-Reloaded Journey Registry** can replace journey definitions behind a stable MCP URL.
+**3. Install Bun `>=1.3.0`.** The Dev MCP CLI runs on Bun so `agent-e2e.config.ts` loads directly and the journey registry can hot-reload behind a stable MCP URL.
 
 ```sh
 bun --version
@@ -36,13 +52,14 @@ Expected:
 1.3.0
 ```
 
-**3. Add the `dev:mcp` script** to the app's `package.json`:
+**4. Add the `dev:mcp` script** to the app's `package.json`:
 
 ```json
 {
   "scripts": {
     "postinstall": "playwright install chromium",
-    "dev:mcp": "agent-e2e-harness dev-mcp"
+    "dev:mcp": "agent-e2e dev",
+    "e2e:verify": "agent-e2e verify"
   }
 }
 ```
@@ -56,12 +73,12 @@ npm pkg get scripts.dev:mcp
 Expected:
 
 ```text
-"agent-e2e-harness dev-mcp"
+"agent-e2e dev"
 ```
 
-**4. Drop an `agent-e2e.config.ts` at the app root** with at least one journey, a stack provider, and a **Typed Resource Registry** (see the worked examples below for the shapes).
+**5. Drop an `agent-e2e.config.ts` at the app root** with at least one journey, a stack provider, and a typed resource registry. The examples below show the shapes.
 
-**5. Start Dev MCP and discover its tool surface.** Run:
+**6. Start Dev MCP.** Run:
 
 ```sh
 npm run dev:mcp
@@ -70,22 +87,22 @@ npm run dev:mcp
 Expected line in the server log:
 
 ```text
-Dev MCP listening on http://127.0.0.1:3766/mcp
+Agent E2E Dev MCP ready
 ```
 
-Then point any standard Streamable HTTP MCP client at `http://127.0.0.1:3766/mcp` and call `tools/list`. The first entry confirms the **Dev MCP Tool Grammar** is wired:
+Then connect Codex, Claude Code, or any other Streamable HTTP MCP client to `http://127.0.0.1:3766/mcp`. The agent should see `stack.start` in its MCP tools:
 
 ```text
 stack.start
 ```
 
-## Worked examples
+## Build the proof loop
 
-The frozen v1.0 surface is small. These five examples cover the whole loop end-to-end: define the journey, register typed resources, drive tools through a standard MCP client, read run artifacts, and crystallize.
+These six examples cover the full loop: define the journey, register typed resources, wire `agent-e2e.config.ts`, connect an agent through MCP, read run artifacts, and promote the same journey suite to CI.
 
-### 1. Define an Executable Journey
+### 1. Define a journey
 
-The journey is the **Inspectable Journey Contract** plus executable step handlers. Profiles, phases, steps, and proofs are data. Step `execute` and proof `check` are TypeScript handlers that bind to the **Execution Surface** declared in `HarnessTypes`.
+The journey is the inspectable contract plus executable step handlers. Profiles, phases, steps, and proofs are data. Step `execute` and proof `check` are TypeScript handlers that bind to the execution surface declared in `HarnessTypes`.
 
 ```ts
 import { defineJourney, type HarnessTypes } from "@agent-e2e/harness/core";
@@ -143,9 +160,9 @@ export const createNoteJourney = defineJourney<NotesHarness>({
 });
 ```
 
-### 2. Register typed resources via the Typed Resource Registry
+### 2. Register typed resources
 
-The **Typed Resource Registry** is the canonical v1.0 wiring. `defineResourceKind` types the creation input and binds the destruction mechanic; `createResourceRegistry` bundles kinds so `defineAgentE2EConfig` can resolve cleanup across every journey in the config.
+The typed resource registry is the canonical v1.0 wiring. `defineResourceKind` types the creation input and binds the destruction mechanic. `createResourceRegistry` bundles kinds so `defineAgentE2EConfig` can resolve cleanup across every journey in the config.
 
 ```ts
 import {
@@ -188,7 +205,9 @@ const noteKind = defineResourceKind({
 export const notesResourceRegistry = createResourceRegistry([noteKind]);
 ```
 
-Wire it into the config alongside the journey and the **Stack Provider**:
+### 3. Add `agent-e2e.config.ts`
+
+`agent-e2e.config.ts` is the project integration point. It is the only file the Dev MCP CLI needs to load journeys, resources, and stack lifecycle.
 
 ```ts
 import { defineAgentE2EConfig } from "@agent-e2e/harness/dev-mcp";
@@ -200,74 +219,78 @@ export default defineAgentE2EConfig({
   journeys: [createNoteJourney],
   resourceRegistry: notesResourceRegistry,
   stackProvider: myStackProvider,
-});
-```
-
-The lower-level `resourceAdapters: [...]` field is still accepted for one-off cleanup mechanics that do not fit a typed kind; the registry is the canonical pattern.
-
-### 3. Drive the loop from a standard Streamable HTTP MCP client
-
-The Dev MCP server is a standard Streamable HTTP MCP endpoint. Any compliant client works — Claude Code, Cursor, Codex, a custom agent loop, or the official TypeScript SDK shown here. Tools live under `stack`, `run`, `journey`, `browser`, `artifact`, and `cleanup` groups.
-
-```ts
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-
-const transport = new StreamableHTTPClientTransport(
-  new URL("http://127.0.0.1:3766/mcp"),
-);
-const client = new Client(
-  { name: "notes-agent", version: "0.0.0" },
-  { capabilities: {} },
-);
-await client.connect(transport);
-
-// Discovery + inspection.
-const { tools } = await client.listTools();
-const inspected = await client.callTool({
-  name: "journey.inspect",
-  arguments: { journeyId: "notes:create" },
-});
-
-// Lifecycle.
-const stack = await client.callTool({ name: "stack.start", arguments: {} });
-const begun = await client.callTool({
-  name: "run.begin",
-  arguments: { journeyId: "notes:create", profileId: "default" },
-});
-
-// Drive UI through the MCP-Owned Browser Session.
-const session = await client.callTool({
-  name: "browser.open",
-  arguments: { url: stack.services?.[0]?.url, headed: true },
-});
-await client.callTool({ name: "browser.snapshot", arguments: { browserSessionId: session.browserSessionId } });
-
-// Execute one step at a time, inspect, then proceed.
-await client.callTool({
-  name: "journey.step",
-  arguments: { runId: begun.runId, stepId: "step:create-note" },
-});
-
-// Bounded cleanup and reseed.
-await client.callTool({ name: "cleanup.plan", arguments: { runId: begun.runId } });
-await client.callTool({ name: "run.reseed", arguments: { runId: begun.runId } });
-```
-
-`journey.inspect` returns the full **Inspectable Journey Contract** for one journey: phases, steps, proofs, profiles, and descriptions. Agents use it to plan; humans use it to read; CI uses it to diff.
-
-### 4. Read the artifacts a run left behind
-
-Every phase and step writes evidence under `.agents-e2e/artifacts/<journey>/<run>/`. The layout is contractual — agents and CI grep these filenames. `artifact.read` returns a typed packet without the agent having to know filesystem internals.
-
-```ts
-const result = await client.callTool({
-  name: "artifact.read",
-  arguments: {
-    runId: begun.runId,
-    path: "01-phase-phase:notes/01-step-step:create-note/step-feedback.json",
+  verify: {
+    suites: [
+      { id: "smoke", journeys: ["notes:*"] },
+      { id: "regression", tags: ["regression"], allProfiles: true },
+    ],
   },
 });
+```
+
+The same config drives both `agent-e2e dev` and `agent-e2e verify`. The lower-level `resourceAdapters: [...]` field is still accepted for one-off cleanup mechanics that do not fit a typed kind; the registry is the canonical pattern.
+
+### 4. Connect an agent to Dev MCP
+
+The Dev MCP server is a standard Streamable HTTP MCP endpoint. Use the agent's MCP config instead of writing a client script. Start `npm run dev:mcp`, then attach your agent to `http://127.0.0.1:3766/mcp`.
+
+![The Dev MCP tool surface grouped by stack, run, journey, browser, artifact, and cleanup](docs/launch/v1.0/mcp-tool-surface-readme.png)
+
+_The Dev MCP server exposes stack, run, journey, browser, artifact, and cleanup tools through one surface._
+
+Codex CLI:
+
+```sh
+codex mcp add agent-e2e --url http://127.0.0.1:3766/mcp
+codex mcp get agent-e2e
+```
+
+Equivalent Codex config:
+
+```toml
+[mcp_servers.agent-e2e]
+url = "http://127.0.0.1:3766/mcp"
+```
+
+Claude Code, project-scoped:
+
+```sh
+claude mcp add --scope project --transport http agent-e2e http://127.0.0.1:3766/mcp
+claude mcp get agent-e2e
+```
+
+Once connected, ask the agent to use the `agent-e2e` MCP server:
+
+```text
+Inspect the notes:create journey, start the app stack, begin a run, open the browser, execute the create-note step, read the step artifact, then plan cleanup and reseed.
+```
+
+That prompt maps to standard MCP tool calls:
+
+```text
+journey.list
+journey.inspect
+stack.start
+run.begin
+browser.open
+browser.snapshot
+journey.step
+artifact.read
+cleanup.plan
+run.reseed
+```
+
+`journey.inspect` returns the full contract for one journey: phases, steps, proofs, profiles, and descriptions. Agents use it to plan, humans use it to read, and CI uses it to diff.
+
+### 5. Read the artifacts a run left behind
+
+Every phase and step writes evidence under `.agents-e2e/artifacts/<journey>/<run>/`. The layout is contractual, and agents and CI can read the same filenames. `artifact.read` returns a typed packet without the agent having to know filesystem internals.
+
+```json
+{
+  "runId": "<runId from run.begin>",
+  "path": "01-phase-phase:notes/01-step-step:create-note/step-feedback.json"
+}
 ```
 
 The on-disk layout, in the order an agent typically reaches for it:
@@ -293,33 +316,42 @@ The on-disk layout, in the order an agent typically reaches for it:
     step-feedback.json
 ```
 
-### 5. Crystallize with the Closure Command
+Together with seed, cleanup, and reseed, these artifacts let the agent move through app state deliberately: inspect a failure, return to a known point, and rerun the same step without inventing a new test path.
 
-A Deterministic Proof becomes a **Crystallized Proof** only after the **Closure Command** reruns the same journey from clean seed, non-interactively, with no agent in the loop. `runClosure` from `@agent-e2e/harness/core` is the programmatic embedding point; consumers usually wire it behind an `npm run closure` script and call the same script from CI.
+### 6. Promote journeys with verify
 
-```ts
-import { runClosure } from "@agent-e2e/harness/core";
-import { createNoteJourney } from "./journeys/notes-create.js";
+A development run becomes CI proof when `agent-e2e verify` reruns the configured journeys from clean seed, non-interactively, with no agent in the loop. The command uses the same `agent-e2e.config.ts`, starts the configured stack once for the suite, creates an isolated Playwright context/page for each selected run, cleans owned resources, and writes one suite report directory.
 
-const closure = await runClosure({
-  journey: createNoteJourney,
-  profileId: "default",
-  execution: await buildExecutionSurface(),
-});
-
-if (closure.status !== "crystallized") {
-  console.error("closure failed", closure.failureReason, closure.evidence);
-  process.exit(1);
-}
+```sh
+agent-e2e verify
+agent-e2e verify --suite smoke
+agent-e2e verify --journey "notes:*" --profile default
+agent-e2e verify --all-profiles --workers 4 --reporter github
 ```
 
-When closure passes, the journey is the CI E2E test. There is no second test file to maintain.
+By default, verify runs every configured journey with its default profile. Named suites, journey globs, tags, excludes, profiles, `--all-profiles`, `--workers`, `--fail-fast`, and `--warnings-as-errors` tune that selection without a second Playwright wrapper.
 
-![The Dev MCP Tool Grammar grouped by stack, run, journey, browser, artifact, and cleanup](docs/launch/v1.0/mcp-tool-surface.png)
+GitHub Actions can stay small:
 
-## Why this and not …
+```yaml
+- run: npm ci
+- run: npx agent-e2e verify --reporter github
+- uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: agent-e2e-artifacts
+    path: .agents-e2e/artifacts/_suites
+```
 
-The harness exists to close one gap: **proof an agent built must be deterministic, replayable, and the same artifact CI runs**. Existing tools either ignore the agent or treat the proof as disposable.
+When verify passes, the journey suite is the CI E2E test. There is no second test file to maintain.
+
+![Development proof becoming a CI E2E test](docs/launch/v1.0/proof-loop-readme.png)
+
+_A development run becomes a CI check without changing the journey._
+
+## Why this
+
+Most E2E tools are built around human-authored tests. This harness is built around agent-authored proof: the agent runs the workflow, records what happened, moves app state through seed and reseed, and leaves CI with the same contract.
 
 | Concern                                | Hand-rolled Playwright | Playwright codegen        | Cypress AI / recorder      | **Agent E2E Harness**                                |
 | -------------------------------------- | ---------------------- | ------------------------- | -------------------------- | ---------------------------------------------------- |
@@ -327,50 +359,50 @@ The harness exists to close one gap: **proof an agent built must be deterministi
 | Seeded environment as a gate           | Ad-hoc fixtures        | None                      | None                       | **Environment Seed** + **Seed Gate** + warnings      |
 | Discovery surface for the agent        | Read the test file     | Read the recorded file    | Read the recording         | **Inspectable Journey Contract** via `journey.inspect` |
 | Step-by-step debug from one MCP call   | Rerun the whole spec   | Rerun the whole recording | Rerun the whole recording  | `journey.step`, `journey.phase`, `journey.untilPhase` |
+| Time-travel app state while debugging  | Manual reset scripts   | Rerun from the start      | Rerun from the start       | Seed, inspect, cleanup, reseed, and rerun            |
 | Bounded teardown of agent-created data | Cleanup blocks (best-effort) | None              | None                       | **Ownership Ledger** + **Resource Adapter** + reseed |
-| Same artifact in dev and CI            | Maybe                  | Maybe                     | Recordings drift           | Closure runs the same journey, headless              |
-| Proof status after development         | Test passed            | Test passed               | Recording passed           | **Deterministic Proof** → **Crystallized Proof**     |
+| Same artifact in dev and CI            | Maybe                  | Maybe                     | Recordings drift           | `agent-e2e verify` runs the same journey suite       |
+| Proof status after development         | Test passed            | Test passed               | Recording passed           | **Verified proof** with Markdown and JSON reports    |
 
 Three honest trade-offs:
 
-- **You write more upfront.** A journey defines profiles, seed, phases, steps, proofs, and a resource registry. That is more than a Playwright spec or a codegen capture. The payoff is the agent can debug, reseed, and rerun without rewriting any of it, and there is no second test artifact when the proof crystallizes.
-- **You take a runtime dependency on Bun.** The Dev MCP CLI is Bun-only so `agent-e2e.config.ts` and the **Hot-Reloaded Journey Registry** work without a compile-watch bridge. Closure, CI, and programmatic embedders use Node as normal.
-- **You commit to the harness's domain model.** Journeys, profiles, owned resources, feedback envelopes, and observed payloads are opinionated shapes. If you only need to record a happy path once, codegen is shorter. If you need an agent to discover, debug, fix, and crystallize a flow without re-explaining it every time, the model pays for itself.
+- **You write more upfront.** A journey defines profiles, seed, phases, steps, proofs, and a resource registry. That is more than a Playwright spec or a codegen capture. The payoff is the agent can debug, reseed, and rerun without rewriting any of it, and there is no second test artifact when the proof becomes CI.
+- **You take a runtime dependency on Bun for the CLI.** The CLI loads `agent-e2e.config.ts` directly so Dev MCP can hot-reload behind a stable URL and verify can run from the same config in CI.
+- **You commit to the harness's domain model.** Journeys, profiles, owned resources, feedback envelopes, and observed payloads are opinionated shapes. If you only need to record a happy path once, codegen is shorter. If you need an agent to discover, debug, fix, and promote a flow without re-explaining it every time, the model pays for itself.
 
-![Deterministic Proof crystallizing into a CI E2E Test](docs/launch/v1.0/proof-loop.png)
-
-## Public Package Surfaces
+## Public package surfaces
 
 The v1.0 package exports six entries. All are stable.
 
-- `@agent-e2e/harness` — **Default Harness API**, Playwright-specialized. Re-exports `/core` plus `definePlaywrightJourney`, `PlaywrightExecutionSurface`, and the Playwright-bound journey types.
-- `@agent-e2e/harness/core` — **Harness Core**: `defineJourney`, `HarnessTypes`, the **Inspectable Journey Contract** types, the **Feedback Envelope** and **Guidance Action** types, **Environment Seed** / **Seed Gate** contracts, **Ownership Ledger** + **Resource Adapter**, `defineResourceKind` / `createResourceRegistry` for the **Typed Resource Registry**, `beginJourneyRun`, `runJourneyStep`, `runEnvironmentSeed`, `reseedJourneyRun`, and `runClosure`.
-- `@agent-e2e/harness/dev-mcp` — **Dev MCP Server** facade: `defineAgentE2EConfig`, `startAgentE2EDevMcpFromConfig`, the manifest types, defaults (`127.0.0.1:3766/mcp`, `.agents-e2e/artifacts`), and the **Dev MCP Tool Grammar** type (`DevMcpToolName`, `DevMcpToolContract`, `DEV_MCP_TOOL_GRAMMAR`).
-- `@agent-e2e/harness/playwright-mcp` — **MCP-Owned Browser Session** factory and the `browser.open` / `browser.snapshot` / `browser.act` / `browser.screenshot` / `browser.close` packet types.
-- `@agent-e2e/harness/stack` — **Stack Provider** contract, `StackStatusPacket`, `StackLifecyclePhase`, `createProcessStackProvider`, `allocateTcpPort`.
-- `@agent-e2e/harness/artifacts` — **Validation Artifact Recorder/Reader**: `createRunArtifacts`, `createRunArtifactRecorder`, `readArtifact`, `resolveArtifactPath`, the canonical filenames, and `DEFAULT_AGENT_E2E_ARTIFACT_ROOT`.
+- `@agent-e2e/harness` - default Playwright-specialized API. Re-exports `/core` plus `definePlaywrightJourney`, `PlaywrightExecutionSurface`, and the Playwright-bound journey types.
+- `@agent-e2e/harness/core` - core API: `defineJourney`, `HarnessTypes`, inspectable contract types, feedback and guidance types, seed contracts, ownership and resource cleanup contracts, typed resource registry helpers, and journey run helpers.
+- `@agent-e2e/harness/dev-mcp` - Dev MCP server facade: `defineAgentE2EConfig`, `startAgentE2EDevMcpFromConfig`, manifest types, defaults (`127.0.0.1:3766/mcp`, `.agents-e2e/artifacts`), and the Dev MCP tool grammar types.
+- `@agent-e2e/harness/verify` - config-backed verify runner, suite selection types, report types, built-in reporters, and `runAgentE2EVerifyFromConfig`.
+- `@agent-e2e/harness/playwright-mcp` - MCP-owned browser session factory and the `browser.open` / `browser.snapshot` / `browser.act` / `browser.screenshot` / `browser.close` packet types.
+- `@agent-e2e/harness/stack` - stack provider contract, `StackStatusPacket`, `StackLifecyclePhase`, `createProcessStackProvider`, `allocateTcpPort`.
+- `@agent-e2e/harness/artifacts` - artifact recorder and reader helpers: `createRunArtifacts`, `createRunArtifactRecorder`, `readArtifact`, `resolveArtifactPath`, canonical filenames, and `DEFAULT_AGENT_E2E_ARTIFACT_ROOT`.
 
-The reference CLI is `agent-e2e-harness`, with one subcommand, `dev-mcp`, and flags `--config`, `--cwd`, `--host`, `--port`, `--path`, `--artifact-root`.
+The reference CLI is `agent-e2e`. It exposes `agent-e2e dev` for Dev MCP and `agent-e2e verify` for CI. Both accept `--config`, `--cwd`, and `--artifact-root`; `dev` also accepts `--host`, `--port`, and `--path`, while `verify` adds selectors, profiles, workers, reporters, cleanup mode, fail-fast, and warning strictness.
 
-## Showcase
+## Showcase app
 
-`apps/showcase` is the **Reference Showcase App**: a Proof Notes app built through its own journeys via **Harness-Driven TDD**, against **Managed Showcase Infrastructure** (Testcontainers PostgreSQL plus `next dev`). It consumes the public package surfaces exactly as a downstream app would.
+`apps/showcase` is a Proof Notes app built through its own journeys, against Testcontainers PostgreSQL plus `next dev`. It consumes the public package surfaces exactly as a downstream app would.
 
 ```sh
 npm run dev:mcp --workspace @agent-e2e/showcase
 ```
 
-See `apps/showcase/README.md` for the **Showcase Build Narrative**.
+See `apps/showcase/README.md` for the showcase build narrative.
 
-## Repository Map
+## Repository map
 
-- `packages/harness` — the published library.
-- `apps/showcase` — the **Reference Showcase App** and dogfood proof.
-- `skills/agent-e2e-harness` — the **Showcase Skill** for adopting the harness in another repo.
-- `docs/architecture` — package, export, and layout decisions.
-- `docs/showcase` — MCP grammar, proof transcript, and seed/ownership docs.
-- `docs/adr` — architectural decision records.
-- `CONTEXT.md` — the full domain vocabulary this README uses.
+- `packages/harness` - the published library.
+- `apps/showcase` - the reference app and dogfood proof.
+- `skills/agent-e2e-harness` - the adoption skill for another repo.
+- `docs/architecture` - package, export, and layout decisions.
+- `docs/showcase` - MCP grammar, proof transcript, and seed/ownership docs.
+- `docs/adr` - architectural decision records.
+- `CONTEXT.md` - the full domain vocabulary this README uses.
 
 ## Development
 

@@ -43,6 +43,10 @@
       "types": "./dist/dev-mcp/index.d.ts",
       "default": "./dist/dev-mcp/index.js"
     },
+    "./verify": {
+      "types": "./dist/verify/index.d.ts",
+      "default": "./dist/verify/index.js"
+    },
     "./playwright-mcp": {
       "types": "./dist/playwright-mcp/index.d.ts",
       "default": "./dist/playwright-mcp/index.js"
@@ -68,7 +72,7 @@
     "zod": "^4.2.1"
   },
   "bin": {
-    "agent-e2e-harness": "./dist/cli/index.js"
+    "agent-e2e": "./dist/cli/index.js"
   },
   "peerDependenciesMeta": {
     "playwright": {

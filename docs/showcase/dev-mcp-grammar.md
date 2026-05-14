@@ -7,7 +7,7 @@ The default Dev MCP grammar defines reusable Agent E2E Harness vocabulary for lo
 - Dev MCP runs over local Streamable HTTP for standard MCP clients and hot-reloadable journey iteration.
 - Dev MCP owns Playwright browser sessions; callers never pass `browser` or `page` over MCP.
 - Dev browser sessions are headed by default.
-- Closure/CI may run headless by default.
+- Verify/CI may run headless by default.
 
 ## Implemented tool groups
 

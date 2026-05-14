@@ -3,6 +3,12 @@ import {
   startAgentE2EDevMcpFromConfig,
   type StartAgentE2EDevMcpFromConfigOptions,
 } from "../dev-mcp/index.js";
+import {
+  runAgentE2EVerifyFromConfig,
+  type RunAgentE2EVerifyFromConfigOptions,
+  type VerifyCleanupMode,
+  type VerifyReporterMode,
+} from "../verify/index.js";
 
 export async function runCli(argv = process.argv.slice(2)): Promise<number> {
   const [command, ...flags] = argv;
@@ -14,8 +20,10 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
     case "-h":
       printHelp();
       return 0;
-    case "dev-mcp":
-      return await runDevMcpCommand(flags);
+    case "dev":
+      return await runDevCommand(flags);
+    case "verify":
+      return await runVerifyCommand(flags);
     default:
       process.stderr.write(`Unknown command: ${command}\n\n`);
       printHelp();
@@ -23,17 +31,30 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
   }
 }
 
-async function runDevMcpCommand(flags: string[]): Promise<number> {
+async function runDevCommand(flags: string[]): Promise<number> {
   if (flags.includes("--help") || flags.includes("-h")) {
-    printDevMcpHelp();
+    printDevHelp();
     return 0;
   }
 
-  await startAgentE2EDevMcpFromConfig(parseDevMcpOptions(flags));
+  await startAgentE2EDevMcpFromConfig(parseDevOptions(flags));
   return 0;
 }
 
-function parseDevMcpOptions(flags: string[]): StartAgentE2EDevMcpFromConfigOptions {
+async function runVerifyCommand(flags: string[]): Promise<number> {
+  if (flags.includes("--help") || flags.includes("-h")) {
+    printVerifyHelp();
+    return 0;
+  }
+
+  const report = await runAgentE2EVerifyFromConfig({
+    ...parseVerifyOptions(flags),
+    stdout: process.stdout,
+  });
+  return report.exitCode;
+}
+
+function parseDevOptions(flags: string[]): StartAgentE2EDevMcpFromConfigOptions {
   const options: StartAgentE2EDevMcpFromConfigOptions = {};
   for (let index = 0; index < flags.length; index += 1) {
     const flag = flags[index];
@@ -66,7 +87,84 @@ function parseDevMcpOptions(flags: string[]): StartAgentE2EDevMcpFromConfigOptio
         index += 1;
         break;
       default:
-        throw new Error(`Unknown dev-mcp option: ${flag}`);
+        throw new Error(`Unknown dev option: ${flag}`);
+    }
+  }
+  return options;
+}
+
+function parseVerifyOptions(flags: string[]): RunAgentE2EVerifyFromConfigOptions {
+  const options: RunAgentE2EVerifyFromConfigOptions = {};
+  for (let index = 0; index < flags.length; index += 1) {
+    const flag = flags[index];
+    if (!flag) continue;
+    const value = flags[index + 1];
+    switch (flag) {
+      case "--config":
+      case "-c":
+        options.configPath = requireValue(flag, value);
+        index += 1;
+        break;
+      case "--cwd":
+        options.cwd = requireValue(flag, value);
+        index += 1;
+        break;
+      case "--artifact-root":
+        options.artifactRoot = requireValue(flag, value);
+        index += 1;
+        break;
+      case "--suite":
+        options.suite = requireValue(flag, value);
+        index += 1;
+        break;
+      case "--journey":
+        options.journey = append(options.journey, requireValue(flag, value));
+        index += 1;
+        break;
+      case "--tag":
+        options.tag = append(options.tag, requireValue(flag, value));
+        index += 1;
+        break;
+      case "--exclude":
+        options.exclude = append(options.exclude, requireValue(flag, value));
+        index += 1;
+        break;
+      case "--profile":
+        options.profile = append(options.profile, requireValue(flag, value));
+        index += 1;
+        break;
+      case "--all-profiles":
+        options.allProfiles = true;
+        break;
+      case "--workers":
+        options.workers = parsePositiveInteger(flag, requireValue(flag, value));
+        index += 1;
+        break;
+      case "--reporter":
+        options.reporter = parseReporter(requireValue(flag, value));
+        index += 1;
+        break;
+      case "--quiet":
+        options.reporter = "quiet";
+        break;
+      case "--json":
+        options.reporter = "json";
+        break;
+      case "--warnings-as-errors":
+        options.warningsAsErrors = true;
+        break;
+      case "--fail-fast":
+        options.failFast = true;
+        break;
+      case "--cleanup":
+        options.cleanup = parseCleanup(requireValue(flag, value));
+        index += 1;
+        break;
+      case "--headed":
+        options.headed = true;
+        break;
+      default:
+        throw new Error(`Unknown verify option: ${flag}`);
     }
   }
   return options;
@@ -84,16 +182,38 @@ function parsePort(value: string): number {
   return parsed;
 }
 
+function parsePositiveInteger(flag: string, value: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1)
+    throw new Error(`${flag} must be a positive integer`);
+  return parsed;
+}
+
+function parseReporter(value: string): VerifyReporterMode {
+  if (value === "list" || value === "quiet" || value === "json" || value === "github") return value;
+  throw new Error(`Invalid --reporter value: ${value}`);
+}
+
+function parseCleanup(value: string): VerifyCleanupMode {
+  if (value === "per-run" || value === "suite-end" || value === "none") return value;
+  throw new Error(`Invalid --cleanup value: ${value}`);
+}
+
+function append(values: readonly string[] | undefined, value: string): readonly string[] {
+  return [...(values ?? []), value];
+}
+
 function printHelp(): void {
-  process.stdout.write(`agent-e2e-harness
+  process.stdout.write(`agent-e2e
 
 Commands:
-  dev-mcp   Start the Bun-backed Dev MCP server from agent-e2e.config.ts
+  dev      Start the Dev MCP server from agent-e2e.config.ts
+  verify   Run configured journeys through the CI verify runner
 `);
 }
 
-function printDevMcpHelp(): void {
-  process.stdout.write(`agent-e2e-harness dev-mcp
+function printDevHelp(): void {
+  process.stdout.write(`agent-e2e dev
 
 Starts the Bun-backed Agent E2E Dev MCP server from agent-e2e.config.ts.
 
@@ -107,11 +227,40 @@ Options:
 `);
 }
 
+function printVerifyHelp(): void {
+  process.stdout.write(`agent-e2e verify
+
+Runs configured journeys from agent-e2e.config.ts through the same stack,
+profile, artifact, and cleanup system used by Dev MCP.
+
+Options:
+  -c, --config <path>       Config path, defaults to agent-e2e.config.ts
+      --cwd <path>          Working directory for config resolution
+      --artifact-root <dir> Artifact root, defaults to .agents-e2e/artifacts
+      --suite <id>          Start from a named verify suite in config
+      --journey <pattern>   Include journey id or glob, repeatable
+      --tag <tag>           Include journeys with a tag, repeatable
+      --exclude <pattern>   Exclude journey id or glob, repeatable
+      --profile <id>        Run a profile id, repeatable
+      --all-profiles        Run all profiles for selected journeys
+      --workers <count>     Parallel worker count, defaults to 1
+      --reporter <mode>     list, quiet, json, or github
+      --quiet               Alias for --reporter quiet
+      --json                Alias for --reporter json
+      --warnings-as-errors  Fail runs that emit warnings
+      --fail-fast           Stop scheduling after the first failed run
+      --cleanup <mode>      per-run, suite-end, or none
+      --headed              Run Playwright headed
+`);
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   runCli().then((code) => {
-    process.exitCode = code;
+    if (process.argv[2] === "dev") process.exitCode = code;
+    else process.exit(code);
   }).catch((error: unknown) => {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    process.exitCode = 1;
+    if (process.argv[2] === "dev") process.exitCode = 1;
+    else process.exit(1);
   });
 }

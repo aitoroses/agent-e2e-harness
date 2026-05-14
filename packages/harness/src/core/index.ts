@@ -379,6 +379,7 @@ export interface JourneyDefinition<TTypes extends AnyHarnessTypes = HarnessTypes
   id: string;
   title: string;
   description?: string;
+  tags?: readonly string[];
   profiles: NonEmptyArray<JourneyProfile<TTypes>>;
   seed?: EnvironmentSeed<TTypes>;
   phases: NonEmptyArray<PhaseDefinition<TTypes>>;
@@ -418,6 +419,7 @@ export interface InspectableJourneyContract<TTypes extends AnyHarnessTypes = Har
   id: string;
   title: string;
   description?: string;
+  tags: readonly string[];
   defaultProfileId: string;
   profiles: NonEmptyArray<InspectableJourneyProfile<TTypes>>;
   phases: NonEmptyArray<InspectablePhaseContract>;
@@ -797,6 +799,7 @@ export function toInspectableContract<TTypes extends AnyHarnessTypes = HarnessTy
     id: journey.id,
     title: journey.title,
     description: journey.description,
+    tags: journey.tags ?? [],
     defaultProfileId: defaultProfile.id,
     profiles: journey.profiles.map((profile) =>
       compactObject({
