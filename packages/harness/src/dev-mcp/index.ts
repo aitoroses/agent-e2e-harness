@@ -9,7 +9,15 @@ import type { AgentE2EVerifyConfig } from "../verify/index.js";
 import { createMcpHarnessServer, type McpHarnessServer } from "../mcp/index.js";
 import type { McpToolResponse } from "../mcp/index.js";
 import { normalizeToolResponse, type ToolStatus } from "../mcp/response.js";
-import type { StackProvider, StackStatusPacket } from "../stack/index.js";
+import type {
+  StackExecutionSurface,
+  StackExploreToolDescriptor,
+  StackLogsInput,
+  StackLogStream,
+  StackProvider,
+  StackStatusPacket,
+} from "../stack/index.js";
+import { createStackExecutionSurface } from "../stack/index.js";
 import {
   DEFAULT_DEV_MCP_CONFIG_FILES,
   loadAgentE2EConfig,
@@ -48,6 +56,9 @@ export interface DevMcpToolContract {
 export const DEV_MCP_TOOL_GRAMMAR = [
   "stack.start",
   "stack.status",
+  "stack.logs",
+  "stack.explore.list",
+  "stack.explore.run",
   "stack.stop",
   "journey.list",
   "journey.inspect",
@@ -162,6 +173,7 @@ export interface AgentE2EDevMcpManifest {
   stack?: {
     startTool: "stack.start";
     statusTool: "stack.status";
+    logsTool: "stack.logs";
     stopTool: "stack.stop";
   };
 }
@@ -264,7 +276,7 @@ export async function startAgentE2EDevMcp<
     port: server.port,
     path: server.path,
     ...(resolvedConfig.stackProvider
-      ? { stack: { startTool: "stack.start", statusTool: "stack.status", stopTool: "stack.stop" } }
+      ? { stack: { startTool: "stack.start", statusTool: "stack.status", logsTool: "stack.logs", stopTool: "stack.stop" } }
       : {}),
   };
 
@@ -384,7 +396,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             name,
             await resolveHarness(options.harness),
             "beginRun",
-            withDevExecution(args, options.browserSessions, await currentStackStatus()),
+            withDevExecution(args, options.browserSessions, await currentStackExecution()),
           );
         case "run.reseed":
           return fromHarness(name, await resolveHarness(options.harness), "reseedRun", args);
@@ -399,7 +411,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             name,
             await resolveHarness(options.harness),
             "runStep",
-            withDevExecution(args, options.browserSessions, await currentStackStatus()),
+            withDevExecution(args, options.browserSessions, await currentStackExecution()),
           );
         case "journey.phase":
         case "journey.untilPhase":
@@ -434,6 +446,67 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             return ok(name, { stack: stoppedStackStatus() });
           return ok(name, {
             stack: await options.stackProvider.status(stackHandle),
+          });
+        }
+        case "stack.logs": {
+          if (!options.stackProvider)
+            return missingDependency(name, "stackProvider");
+          if (stackHandle === undefined)
+            return blocked(
+              name,
+              "stack-not-running",
+              "stack.logs requires an active managed stack.",
+            );
+          const stream = optionalStackLogStream(args);
+          const input: StackLogsInput = {
+            serviceId: stringArg(args, "serviceId"),
+            tail: positiveIntegerArg(args, "tail"),
+          };
+          if (stream) input.stream = stream;
+          if (!options.stackProvider.logs)
+            return blocked(
+              name,
+              "stack-logs-not-supported",
+              "This stack provider does not expose logs.",
+            );
+          return ok(name, {
+            logs: await options.stackProvider.logs(stackHandle, input),
+          });
+        }
+        case "stack.explore.list": {
+          if (!options.stackProvider)
+            return missingDependency(name, "stackProvider");
+          return ok(name, {
+            tools: await stackExploreDescriptors(options.stackProvider),
+          });
+        }
+        case "stack.explore.run": {
+          if (!options.stackProvider)
+            return missingDependency(name, "stackProvider");
+          const unexpectedKey = firstUnexpectedKey(args, ["toolId", "input"]);
+          if (unexpectedKey)
+            return failed(name, "stack-explore-invalid-arguments", `stack.explore.run does not accept argument: ${unexpectedKey}`);
+          const toolId = stringArg(args, "toolId");
+          const exploreTool = (options.stackProvider.explore ?? []).find((tool) => tool.id === toolId);
+          if (!exploreTool)
+            return failed(name, "stack-explore-tool-not-found", `Stack exploration tool not found: ${toolId}`);
+          if (stackHandle === undefined)
+            return failed(name, "stack-not-running", "stack.explore.run requires an active managed stack.");
+          const inputResult = exploreTool.input.safeParse(args.input ?? {});
+          if (!inputResult.success)
+            return failed(name, "stack-explore-invalid-input", inputResult.error.message, { toolId });
+          let output: unknown;
+          try {
+            output = await exploreTool.run({ input: inputResult.data, handle: stackHandle });
+          } catch (error) {
+            return failed(name, "stack-explore-handler-failed", error instanceof Error ? error.message : String(error), { toolId });
+          }
+          const outputResult = exploreTool.output.safeParse(output);
+          if (!outputResult.success)
+            return failed(name, "stack-explore-invalid-output", outputResult.error.message, { toolId });
+          return ok(name, {
+            toolId,
+            output: outputResult.data,
           });
         }
         case "stack.stop": {
@@ -529,9 +602,10 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
     }
   }
 
-  async function currentStackStatus(): Promise<StackStatusPacket | undefined> {
+  async function currentStackExecution(): Promise<StackExecutionSurface | undefined> {
     if (!options.stackProvider || stackHandle === undefined) return undefined;
-    return await options.stackProvider.status(stackHandle);
+    const status = await options.stackProvider.status(stackHandle);
+    return createStackExecutionSurface(status, options.stackProvider, stackHandle);
   }
 
   async function dispose(): Promise<DevMcpDisposeResult> {
@@ -591,7 +665,7 @@ function implementedToolNames(
   const tools: DevMcpToolName[] = [];
 
   if (options.stackProvider)
-    tools.push("stack.start", "stack.status", "stack.stop");
+    tools.push("stack.start", "stack.status", "stack.logs", "stack.explore.list", "stack.explore.run", "stack.stop");
 
   if (options.harness)
     tools.push(
@@ -627,6 +701,9 @@ function summaryFor(name: DevMcpToolName): string {
     "journey.inspect": "Read the full Inspectable Journey Contract for a journey.",
     "stack.start": "Start the managed development stack.",
     "stack.status": "Read managed stack readiness.",
+    "stack.logs": "Read live managed stack service logs.",
+    "stack.explore.list": "List provider-declared stack exploration tools.",
+    "stack.explore.run": "Run one provider-declared stack exploration tool.",
     "stack.stop": "Stop the managed development stack.",
     "run.begin": "Begin a journey run.",
     "run.reseed":
@@ -658,9 +735,21 @@ function inputSchemaForTool(
     case "stack.start":
     case "stack.status":
     case "stack.stop":
+    case "stack.explore.list":
     case "journey.list":
     case "browser.sessions":
       return {};
+    case "stack.explore.run":
+      return {
+        toolId: stringId().describe("Provider-declared tool id returned by stack.explore.list."),
+        input: z.unknown().describe("Input parsed by the selected provider-declared tool schema."),
+      };
+    case "stack.logs":
+      return {
+        serviceId: stringId().describe("Service id returned by stack.status or stack.start."),
+        tail: z.number().int().positive().describe("Number of recent log lines to return."),
+        stream: z.enum(["stdout", "stderr", "combined"]).optional(),
+      };
     case "journey.inspect":
       return {
         journeyId: stringId().describe("Journey id returned by journey.list."),
@@ -738,6 +827,22 @@ function inputSchemaForTool(
   }
 }
 
+async function stackExploreDescriptors<TStackHandle>(
+  stackProvider: StackProvider<TStackHandle>,
+): Promise<readonly StackExploreToolDescriptor[]> {
+  const tools = stackProvider.explore ?? [];
+  const { z } = await import("zod/v4");
+  return tools.map((tool) => ({
+    id: tool.id,
+    title: tool.title,
+    description: tool.description,
+    availableIn: tool.availableIn,
+    risk: tool.risk,
+    inputSchema: z.toJSONSchema(tool.input),
+    outputSchema: z.toJSONSchema(tool.output),
+  }));
+}
+
 async function fromHarness(
   tool: DevMcpToolName,
   harness: McpHarnessServer | undefined,
@@ -759,7 +864,7 @@ async function resolveHarness(
 function withDevExecution(
   args: Record<string, unknown>,
   browserSessions: DevMcpBrowserSessionController | undefined,
-  stack: StackStatusPacket | undefined,
+  stack: StackExecutionSurface | undefined,
 ): Record<string, unknown> {
   if (args.execution !== undefined)
     return stack ? { ...args, execution: withStackStatus(args.execution, stack) } : args;
@@ -770,7 +875,7 @@ function withDevExecution(
   return execution === undefined ? args : { ...args, execution };
 }
 
-function withStackStatus(execution: unknown, stack: StackStatusPacket): unknown {
+function withStackStatus(execution: unknown, stack: StackExecutionSurface): unknown {
   if (execution === undefined) return { stack };
   if (!isRecord(execution)) return execution;
   if ("stack" in execution) return execution;
@@ -801,6 +906,21 @@ function blocked(
     tool,
     code,
     message,
+  };
+}
+
+function failed(
+  tool: DevMcpToolName,
+  code: string,
+  message: string,
+  fields: Record<string, unknown> = {},
+): DevMcpToolResponse {
+  return {
+    status: "failed",
+    tool,
+    code,
+    message,
+    ...fields,
   };
 }
 
@@ -858,6 +978,28 @@ function stringArg(args: Record<string, unknown>, name: string): string {
   if (typeof value !== "string" || value.length === 0)
     throw new Error(`Missing required string argument: ${name}`);
   return value;
+}
+
+function firstUnexpectedKey(
+  args: Record<string, unknown>,
+  allowedKeys: readonly string[],
+): string | undefined {
+  return Object.keys(args).find((key) => !allowedKeys.includes(key));
+}
+
+function positiveIntegerArg(args: Record<string, unknown>, name: string): number {
+  const value = args[name];
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0)
+    throw new Error(`Missing required positive integer argument: ${name}`);
+  return value;
+}
+
+function optionalStackLogStream(args: Record<string, unknown>): StackLogStream | undefined {
+  const value = args.stream;
+  if (value === undefined) return undefined;
+  if (value === "stdout" || value === "stderr" || value === "combined")
+    return value;
+  throw new Error("Invalid stack log stream: expected stdout, stderr, or combined");
 }
 
 export async function startDevMcpStreamableHttpServer<TStackHandle = unknown>(

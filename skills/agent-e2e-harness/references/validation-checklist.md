@@ -43,7 +43,11 @@ When the task includes interactive setup, capture:
 - agent MCP client setup command or config
 - `tools/list`, `mcporter list`, or equivalent tool discovery evidence
 - `journey.inspect` result summary
+- `stack.explore.list` result showing concrete provider tools
 - `stack.start` ready services
+- `stack.status` unified packet summary
+- `stack.logs` result for one service with required `tail`
+- `stack.explore.run` result for one concrete provider tool
 - `run.begin` seed status
 - browser session id
 - snapshot evidence
@@ -93,6 +97,7 @@ Final evidence must include:
 - `report.json` and `report.md` existence
 - cleanup status
 - exit code
+- evidence that verify used only Verify Observation Tools if journey code uses `execution.stack.explore.run(...)`
 
 ## Stop Conditions
 

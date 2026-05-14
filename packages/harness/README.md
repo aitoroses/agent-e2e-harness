@@ -160,6 +160,10 @@ The proof loop uses these tools:
 
 ```sh
 stack.start
+stack.status
+stack.logs
+stack.explore.list
+stack.explore.run
 run.begin
 browser.open
 browser.snapshot
@@ -171,6 +175,12 @@ run.reseed
 stack.stop
 ```
 
+The fixed stack grammar is intentionally small: `stack.start`, `stack.status`, `stack.stop`, `stack.logs`, `stack.explore.list`, and `stack.explore.run`. `stack.status` is the unified stack-state packet: services, stable service ids, endpoints, checks, warnings, errors, artifacts, and next actions. There are no native `stack.services`, `stack.health`, or `stack.env` tools in v1.
+
+`stack.logs` is live exploration. It requires an active stack, one `serviceId`, a required `tail`, and an optional `stream` of `stdout`, `stderr`, or `combined`.
+
+Stack-specific exploration belongs to the stack provider. Providers declare tools with `id`, `title`, `description`, `availableIn`, `risk`, mandatory Zod `input` and `output` schemas, and a handler. Dev MCP exposes them through `stack.explore.list` and `stack.explore.run`; `agent-e2e verify` receives only Verify Observation Tools: `availableIn: ["dev", "verify"]` and `risk: "none"`.
+
 Use returned artifact refs to inspect failures instead of relying on terminal scrollback.
 
 Starting `agent-e2e dev` only proves the server booted. A proof run requires tool calls. For a fresh or remote agent session without this MCP registered, `mcporter` is the portable dynamic client path:
@@ -181,7 +191,7 @@ mcporter list http://127.0.0.1:3766/mcp --schema --json --allow-http
 mcporter call \
   --http-url http://127.0.0.1:3766/mcp \
   --allow-http \
-  --tool journey.list \
+  --tool stack.explore.list \
   --args '{}' \
   --output json
 ```
@@ -199,3 +209,5 @@ agent-e2e verify --all-profiles --workers 4 --reporter github
 ```
 
 `verify` loads `agent-e2e.config.ts`, starts the configured stack once, creates an isolated Playwright context/page per selected run, performs per-run cleanup by default, and writes `report.json` plus `report.md` under `.agents-e2e/artifacts/_suites/<suite-id>/`.
+
+`verify` runs crystallized journeys. It does not expose arbitrary Dev MCP exploration; journey code can only call verify-safe stack observation tools through `execution.stack.explore.run(...)`, so product-visible mutations still come from the app path, seed, journey steps, reseed, or cleanup.

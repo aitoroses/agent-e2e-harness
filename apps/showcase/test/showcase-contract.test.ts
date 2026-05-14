@@ -3,6 +3,8 @@ import { beginJourneyRun, runJourneyStep } from "@agent-e2e/harness";
 
 import { createShowcaseJourney } from "../src/journey.js";
 import { createShowcaseMcpJourney } from "../src/harness/dev-mcp-journey.js";
+import { createShowcaseDevStackProvider } from "../src/harness/dev-stack.js";
+import type { ShowcaseStackExecution } from "../src/harness/dev-stack.js";
 import {
   BASELINE_USER,
   BASELINE_WORKSPACE,
@@ -14,6 +16,23 @@ afterEach(() => {
 });
 
 describe("showcase journey contracts", () => {
+  it("declares concrete stack exploration tools for Dev MCP discovery", () => {
+    const provider = createShowcaseDevStackProvider();
+
+    expect(provider.explore).toEqual([
+      expect.objectContaining({
+        id: "notes.list",
+        availableIn: ["dev", "verify"],
+        risk: "none",
+      }),
+      expect.objectContaining({
+        id: "postgres.query",
+        availableIn: ["dev"],
+        risk: "local-mutation",
+      }),
+    ]);
+  });
+
   it("keeps the Dev MCP and CI journey contracts aligned", () => {
     const baseUrl = "http://127.0.0.1:3000";
     const ciContract = createShowcaseJourney(baseUrl).toInspectableContract();
@@ -47,7 +66,13 @@ describe("showcase journey contracts", () => {
 
     const journey = createShowcaseMcpJourney();
     const begin = await beginJourneyRun(journey, {
-      execution: showcaseStackExecution(),
+      execution: showcaseStackExecution([
+        {
+          id: "proof-note:old",
+          body: PROOF_NOTE_BODY,
+          ownedByRun: "old-run",
+        },
+      ]),
       runId: "showcase-dev",
     });
     expect(begin.status).toBe("running");
@@ -81,7 +106,18 @@ describe("showcase journey contracts", () => {
 
     const journey = createShowcaseMcpJourney();
     const begin = await beginJourneyRun(journey, {
-      execution: showcaseStackExecution(),
+      execution: showcaseStackExecution([
+        {
+          id: "proof-note:current",
+          body: PROOF_NOTE_BODY,
+          ownedByRun: "showcase-dev",
+        },
+        {
+          id: "proof-note:old",
+          body: PROOF_NOTE_BODY,
+          ownedByRun: "old-run",
+        },
+      ]),
       runId: "showcase-dev",
     });
     expect(begin.status).toBe("running");
@@ -103,7 +139,9 @@ describe("showcase journey contracts", () => {
   });
 });
 
-function showcaseStackExecution() {
+function showcaseStackExecution(
+  notes: Array<{ id: string; body: string; ownedByRun: string }> = [],
+) {
   return {
     stack: {
       status: "ready" as const,
@@ -112,8 +150,25 @@ function showcaseStackExecution() {
       artifacts: [],
       warnings: [],
       errors: [],
-    },
+      explore: {
+        run: async () => ({
+          notes: notes.map((note) => ({
+            ...note,
+            workspaceId: BASELINE_WORKSPACE.id,
+            authorId: BASELINE_USER.id,
+            createdAt: "2026-05-14T00:00:00.000Z",
+          })),
+        }),
+      },
+    } as unknown as ShowcaseStackExecution,
   };
+}
+
+function assertVerifyClientTypes(stack: ShowcaseStackExecution) {
+  const notes = stack.explore.run("notes.list", { limit: 1 });
+  // @ts-expect-error dev-only tools must not be present in verify-time stack exploration.
+  void stack.explore.run("postgres.query", { sql: "select 1" });
+  return notes;
 }
 
 function stubShowcaseApi(

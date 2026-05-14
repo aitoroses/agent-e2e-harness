@@ -29,8 +29,29 @@ beforeAll(async () => {
     status: "ready",
     services: expect.arrayContaining([
       expect.objectContaining({ id: "postgres", status: "ready" }),
-      expect.objectContaining({ id: "showcase-next-dev", status: "ready", url: baseUrl }),
+      expect.objectContaining({
+        id: "showcase-next-dev",
+        kind: "web",
+        status: "ready",
+        url: baseUrl,
+        endpoints: [expect.objectContaining({ id: "app", kind: "http", url: baseUrl })],
+        checks: [expect.objectContaining({ id: "http.ready", status: "passed" })],
+      }),
     ]),
+    next: {
+      actions: [
+        expect.objectContaining({
+          tool: "stack.logs",
+          input: { serviceId: "showcase-next-dev", tail: 80, stream: "combined" },
+        }),
+      ],
+    },
+  });
+  expect(stackProvider.logs).toBeDefined();
+  await expect(Promise.resolve(stackProvider.logs!(stackHandle, { serviceId: "showcase-next-dev", tail: 20 }))).resolves.toMatchObject({
+    status: "ok",
+    serviceId: "showcase-next-dev",
+    stream: "combined",
   });
   browser = await chromium.launch({ headless: true });
   page = await browser.newPage();

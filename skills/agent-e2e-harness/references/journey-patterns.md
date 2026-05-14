@@ -112,7 +112,21 @@ Prefer `resourceRegistry` for typed cleanup. Use `resourceAdapters` only for one
 ## Stack Provider Template
 
 ```ts
-import { createProcessStackProvider } from "@agent-e2e/harness/stack";
+import { createProcessStackProvider, defineStackExploreTools } from "@agent-e2e/harness/stack";
+import { z } from "zod/v4";
+
+const explore = defineStackExploreTools<{ serviceId: string }>()([
+  {
+    id: "app.health",
+    title: "Read app health",
+    description: "Read a verify-safe health observation from the active app stack.",
+    availableIn: ["dev", "verify"],
+    risk: "none",
+    input: z.object({}),
+    output: z.object({ ok: z.boolean() }),
+    run: async () => ({ ok: true }),
+  },
+]);
 
 export const appStackProvider = createProcessStackProvider({
   id: "app",
@@ -124,9 +138,14 @@ export const appStackProvider = createProcessStackProvider({
   readyTimeoutMs: 90_000,
   logPath: ".agents-e2e/stack/web.log",
 });
+
+export const stackProvider = {
+  ...appStackProvider,
+  explore,
+};
 ```
 
-Use a custom `StackProvider` when the app must start containers, databases, workers, or multiple processes. `stack.start` should return service URLs that journeys and agents use as browser/API targets.
+Use a custom `StackProvider` when the app must start containers, databases, workers, or multiple processes. `stack.start` should return service URLs that journeys and agents use as browser/API targets. `status` should return the unified stack-state packet; optional `logs` should read live logs for stable service ids; `explore` should expose provider-owned tools with Zod schemas, `availableIn`, and `risk`.
 
 ## Config Template
 

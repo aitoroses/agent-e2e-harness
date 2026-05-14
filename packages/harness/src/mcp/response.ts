@@ -1,6 +1,6 @@
 import type { GuidanceAction } from "../core/index.js";
 
-export type ToolStatus = "ok" | "not-found" | "blocked" | "error";
+export type ToolStatus = "ok" | "failed" | "not-found" | "blocked" | "error";
 
 export interface ToolResponse {
   status: ToolStatus;
@@ -20,5 +20,5 @@ export function normalizeToolResponse(response: {
 }
 
 function isToolStatus(status: unknown): status is ToolStatus {
-  return status === "ok" || status === "blocked" || status === "not-found" || status === "error";
+  return status === "ok" || status === "failed" || status === "blocked" || status === "not-found" || status === "error";
 }

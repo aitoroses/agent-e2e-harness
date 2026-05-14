@@ -125,6 +125,31 @@ _Avoid_: hidden test setup, seed side effect, external prerequisite, manual stac
 An extension point that starts, inspects, and stops a **Managed Execution Stack** for a specific product or showcase, such as containers, app processes, databases, queues, or other local services.
 _Avoid_: hardcoded Docker logic, test helper, deployment adapter
 
+**Stack Runtime Tools**:
+Native MCP tools for stack-level runtime facts that most agents need during validation. The core set should stay small: `stack.status` as the unified services/readiness/health packet, `stack.logs` for live log capture, and `stack.explore.*` for provider-declared exploration tools.
+_Avoid_: provider-specific debug endpoint, generic diagnostic API, hidden service metadata
+
+**Exploration Surface**:
+The Dev MCP tool surface agents use during development to discover a live system, test hypotheses, inspect browser and stack state, mutate controlled local state when useful, and crystallize that exploration into an **Executable Journey**.
+_Avoid_: runner-only API, CI command, remote shell, static test script
+
+**Stack Exploration Surface**:
+The stack-provider-owned part of the **Exploration Surface**, where agents can discover and run typed stack/app runtime capabilities without the harness hardcoding a specific stack technology.
+_Avoid_: generic diagnostic API, hardcoded database tooling, product-specific core API
+
+**Stack Exploration Tool**:
+A discoverable, typed operation exposed by a **Stack Provider** through the **Stack Exploration Surface**, such as database reads or writes, schema inspection, SQL execution, queue inspection or mutation, cache clearing, product-owned domain reads, or controlled product-owned writes.
+_Avoid_: hidden troubleshooting command, undocumented script, ad-hoc handler
+
+**Verify Observation Tool**:
+A **Stack Exploration Tool** that is safe to use from journey execution and `agent-e2e verify` because it observes stack or application state without becoming the cause of the product behavior under validation.
+_Avoid_: proof helper, test backdoor, hidden setup
+
+**Exploration Tool Risk**:
+The declared risk class for a **Stack Exploration Tool**, used by the harness to surface side effects to the agent and record evidence.
+_Avoid_: implicit trust, best-effort warning, buried side effect
+
+
 **Reference Stack Provider**:
 The default **Stack Provider** implementation used by the **Reference Showcase App** to demonstrate harness-managed dev-mode infrastructure lifecycle. The first reference provider should use Testcontainers with PostgreSQL and schema initialization.
 _Avoid_: production deployment provider, hidden testcontainer, app-specific script
@@ -244,6 +269,15 @@ _Avoid_: per-adapter status enum, tool-specific response shape, unchecked respon
 - The **Reference Showcase App** should use **Managed Showcase Infrastructure** so seed, proof, closure, and teardown operate against a real stack lifecycle rather than a pre-existing local service.
 - In dev mode, stack management is part of the **Agent E2E Harness** product experience: the harness coordinates a **Managed Execution Stack** through a **Stack Provider** extension point.
 - A **Stack Provider** owns infrastructure lifecycle mechanics, while **Environment Seed** owns repeatable application state inside the ready stack.
+- Direct stack runtime concerns should feel native through **Stack Runtime Tools** rather than being hidden behind generic action plumbing, but simple wins: `stack.status` should carry services, endpoints, readiness checks, and next actions instead of splitting separate `stack.services` or `stack.health` tools.
+- The **Dev MCP Server** is an **Exploration Surface** first: agents use it to discover the live system and crystallize the discovered trajectory into an **Executable Journey**.
+- A **Stack Provider** may expose **Stack Exploration Tools** so agents can inspect or manipulate runtime and application state without the harness hardcoding a specific stack technology.
+- The **Stack Exploration Surface** should define the typed envelope, discovery shape, risk metadata, and artifact plumbing, while concrete tools remain stack-provider-declared and discoverable by the agent.
+- **Stack Runtime Tools** should use stable provider service ids such as `next-dev` or `postgres`; unlike browser snapshots, stack services do not need ephemeral refs.
+- Stack exploration calls may run live without a `runId`; passing `runId` means the harness should also capture the observation as a run artifact for time-travel and proof history.
+- Stack exploration calls should not require repeated `journeyId`; artifact scope should resolve from `runId` when capture is requested.
+- Dev agents may access the full stack-provider-declared **Stack Exploration Surface** subject to risk policy, while journey execution and `agent-e2e verify` may receive only **Verify Observation Tools**.
+- **Verify Observation Tools** preserve validation integrity by forcing the application path, not the verification helper, to be the cause of product-visible mutations.
 - A **Managed Execution Stack** is torn down by stack lifecycle, while product resources created during a journey remain bounded by the **Ownership Ledger** and **Resource Adapters**.
 - **Environment Seed** may prepare application state through product APIs, direct database access, admin clients, or other product-owned setup mechanisms; it is defined by purpose, not by transport.
 - The **Managed Execution Stack** includes dev processes as well as infrastructure services, so a product may recommend Docker/Testcontainers for repeatable dev-mode runs without making every seed operation a container concern.

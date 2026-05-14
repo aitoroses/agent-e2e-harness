@@ -75,12 +75,16 @@ Drive the proof through standard MCP calls:
 ```text
 journey.list
 journey.inspect
+stack.explore.list
 stack.start
+stack.status
+stack.logs
 run.begin
 browser.open
 browser.snapshot
 browser.act
 journey.step
+stack.explore.run
 artifact.read
 cleanup.plan
 run.reseed
@@ -95,7 +99,11 @@ For multi-step journeys, use `journey.phase` or `journey.untilPhase` when approp
 Capture these facts before changing implementation again:
 
 - `journey.inspect` shows the intended journey, tags, profiles, phases, steps, and proofs.
+- `stack.explore.list` shows provider-owned tools with input/output schemas.
 - `stack.start` returns all required services as `ready`.
+- `stack.status` returns the unified stack-state packet. Do not expect native `stack.services`, `stack.health`, or `stack.env`.
+- `stack.logs` returns recent live logs for one active service using `serviceId` and required `tail`.
+- `stack.explore.run` can run at least one concrete provider tool.
 - `run.begin` returns seed `status: "passed"` or `"warning"` and `canRunSteps: true`.
 - `browser.open` returns a browser session id.
 - `browser.snapshot` shows expected app state and no visible runtime error.

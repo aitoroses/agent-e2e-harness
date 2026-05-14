@@ -226,8 +226,29 @@ function postgresStatus(
     services: [
       {
         id: "postgres",
+        kind: "database",
         status,
         url: handle.connectionUri,
+        endpoints: [
+          {
+            id: "postgres",
+            kind: "postgres",
+            url: handle.connectionUri,
+            sensitive: true,
+          },
+        ],
+        checks: [
+          {
+            id: "postgres.ready",
+            status: status === "ready" ? "passed" : status === "degraded" || status === "failed" ? "failed" : "warning",
+            summary:
+              status === "ready"
+                ? "PostgreSQL accepted schema setup and is ready."
+                : status === "stopped"
+                  ? "PostgreSQL container is stopped."
+                  : "PostgreSQL readiness failed.",
+          },
+        ],
       },
     ],
     artifacts: [],

@@ -35,7 +35,15 @@ In another terminal, discover the tools:
 mcporter list http://127.0.0.1:3766/mcp --allow-http --schema --json
 ```
 
-Expected checkpoint: `"status": "ok"` and 19 tools, including `stack.start`, `run.begin`, `browser.open`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.teardown`, and `stack.stop`.
+Expected checkpoint: `"status": "ok"` and 22 tools, including `stack.start`, `stack.logs`, `stack.explore.list`, `stack.explore.run`, `run.begin`, `browser.open`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.teardown`, and `stack.stop`.
+
+Discover the provider-owned stack exploration surface:
+
+```sh
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.explore.list --args '{}' --output json
+```
+
+Expected checkpoint: `notes.list` is available in `dev` and `verify` with `risk: "none"`; `postgres.query` is `dev`-only with `risk: "local-mutation"`.
 
 Start the managed stack:
 
@@ -44,6 +52,14 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.sta
 ```
 
 Expected checkpoint: `"status": "ok"`, `"stack": { "status": "ready" }`, and a `showcase-next-dev` service URL. The 120s timeout covers cold Docker/Testcontainers startup; warm local runs should usually complete much faster.
+
+Read recent managed stack logs when the app is not behaving as expected:
+
+```sh
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.logs --args '{"serviceId":"showcase-next-dev","tail":80,"stream":"combined"}' --output json
+```
+
+Expected checkpoint: `"logs": { "status": "ok", "serviceId": "showcase-next-dev" }`.
 
 Set the app URL returned by `stack.start`:
 
@@ -84,6 +100,14 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool journey.s
 ```
 
 Expected checkpoint: `"status": "passed"` with both proofs passed and a `step_feedback_artifact.path`.
+
+Inspect the created note through the verify-safe stack exploration tool:
+
+```sh
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.explore.run --args '{"toolId":"notes.list","input":{"limit":10}}' --output json
+```
+
+Expected checkpoint: `"toolId": "notes.list"` and `"output"` includes the browser-created proof note.
 
 Read the debug packet:
 

@@ -3,10 +3,14 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { z } from "zod/v4";
 import { defineJourney, type HarnessTypes } from "@agent-e2e/harness/core";
 import { createDevMcpToolRouter } from "@agent-e2e/harness/dev-mcp";
 import { createMcpHarnessServer } from "../src/mcp/index.js";
-import type { StackProvider } from "@agent-e2e/harness/stack";
+import {
+  defineStackExploreTools,
+  type StackProvider,
+} from "@agent-e2e/harness/stack";
 
 type RouterHarness = HarnessTypes<
   { runId: string; marker?: string },
@@ -353,6 +357,395 @@ describe("Dev MCP Tool Router", () => {
       stack: { status: "stopped", summary: "stopped:stack-1" },
     });
     expect(events).toEqual(["start", "stop:stack-1"]);
+  });
+
+  it("returns unified stack state and live provider logs through stack tools", async () => {
+    const provider: StackProvider<{ id: string }> = {
+      id: "observable-stack",
+      start: async () => ({ id: "stack-1" }),
+      status: (handle) => ({
+        status: "ready",
+        summary: `ready:${handle.id}`,
+        services: [
+          {
+            id: "next-dev",
+            kind: "web",
+            status: "ready",
+            endpoints: [
+              {
+                id: "app",
+                kind: "http",
+                url: "http://127.0.0.1:3000",
+                sensitive: false,
+              },
+            ],
+            checks: [
+              {
+                id: "http.ready",
+                status: "passed",
+                summary: "GET /api/notes returned 200.",
+              },
+            ],
+          },
+        ],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+        next: {
+          actions: [
+            {
+              id: "read-logs",
+              tool: "stack.logs",
+              why: "Read recent app process logs.",
+            },
+          ],
+        },
+      }),
+      logs: (handle, input) => ({
+        status: "ok",
+        summary: `read ${input.tail} lines from ${input.serviceId} on ${handle.id}`,
+        serviceId: input.serviceId,
+        stream: input.stream ?? "combined",
+        tail: input.tail,
+        entries: [
+          { stream: "stdout", message: "ready - started server on 127.0.0.1:3000" },
+          { stream: "stderr", message: "warning - route compiled with warnings" },
+        ],
+        truncated: false,
+      }),
+      stop: () => ({
+        status: "stopped",
+        summary: "stopped",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({ stackProvider: provider });
+
+    expect(router.listTools().map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(["stack.start", "stack.status", "stack.stop", "stack.logs"]),
+    );
+    await expect(router.callTool("stack.start")).resolves.toMatchObject({
+      status: "ok",
+      stack: {
+        status: "ready",
+        services: [
+          {
+            id: "next-dev",
+            kind: "web",
+            endpoints: [{ id: "app", kind: "http" }],
+            checks: [{ id: "http.ready", status: "passed" }],
+          },
+        ],
+        next: {
+          actions: [
+            {
+              tool: "stack.logs",
+            },
+          ],
+        },
+      },
+    });
+    await expect(
+      router.callTool("stack.logs", { serviceId: "next-dev", tail: 80, stream: "combined" }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      logs: {
+        status: "ok",
+        serviceId: "next-dev",
+        stream: "combined",
+        tail: 80,
+        entries: [
+          { stream: "stdout", message: expect.stringContaining("started server") },
+          { stream: "stderr", message: expect.stringContaining("warning") },
+        ],
+        truncated: false,
+      },
+    });
+  });
+
+  it("requires stack.logs tail and an active provider log implementation", async () => {
+    const provider: StackProvider<{ id: string }> = {
+      id: "no-logs-stack",
+      start: async () => ({ id: "stack-1" }),
+      status: () => ({
+        status: "ready",
+        summary: "ready",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+      stop: () => ({
+        status: "stopped",
+        summary: "stopped",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({ stackProvider: provider });
+
+    await expect(
+      router.callTool("stack.logs", { serviceId: "next-dev", tail: 10 }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      code: "stack-not-running",
+    });
+
+    await router.callTool("stack.start");
+    await expect(
+      router.callTool("stack.logs", { serviceId: "next-dev" }),
+    ).resolves.toMatchObject({
+      status: "error",
+      tool: "stack.logs",
+      error: "Missing required positive integer argument: tail",
+    });
+    await expect(
+      router.callTool("stack.logs", { serviceId: "next-dev", tail: 10 }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      code: "stack-logs-not-supported",
+    });
+  });
+
+  it("lists provider-declared stack exploration tools before the stack starts", async () => {
+    const explore = defineStackExploreTools<{ id: string }>()([
+      {
+        id: "notes.list",
+        title: "List proof notes",
+        description: "Read proof notes from the application database.",
+        availableIn: ["dev", "verify"],
+        risk: "none",
+        input: z.object({ limit: z.number().int().positive().optional() }),
+        output: z.object({
+          notes: z.array(z.object({ id: z.string(), body: z.string() })),
+        }),
+        run: ({ input, handle }) => ({
+          notes: [{ id: handle.id, body: String(input.limit ?? 10) }],
+        }),
+      },
+      {
+        id: "postgres.query",
+        title: "Run PostgreSQL query",
+        description: "Run a SQL query against the local showcase database.",
+        availableIn: ["dev"],
+        risk: "local-mutation",
+        input: z.object({ sql: z.string().min(1) }),
+        output: z.object({ rows: z.array(z.unknown()), rowCount: z.number().nullable() }),
+        run: () => ({ rows: [], rowCount: 0 }),
+      },
+    ]);
+    const provider: StackProvider<{ id: string }> = {
+      id: "explorable-stack",
+      explore,
+      start: async () => {
+        throw new Error("stack.explore.list must not start the stack");
+      },
+      status: () => ({
+        status: "ready",
+        summary: "ready",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+      stop: () => ({
+        status: "stopped",
+        summary: "stopped",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({ stackProvider: provider });
+
+    expect(router.listTools().map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(["stack.explore.list"]),
+    );
+    await expect(router.callTool("stack.explore.list")).resolves.toMatchObject({
+      status: "ok",
+      tool: "stack.explore.list",
+      tools: [
+        {
+          id: "notes.list",
+          availableIn: ["dev", "verify"],
+          risk: "none",
+          inputSchema: expect.objectContaining({ type: "object" }),
+          outputSchema: expect.objectContaining({ type: "object" }),
+        },
+        {
+          id: "postgres.query",
+          availableIn: ["dev"],
+          risk: "local-mutation",
+          inputSchema: expect.objectContaining({ type: "object" }),
+          outputSchema: expect.objectContaining({ type: "object" }),
+        },
+      ],
+    });
+  });
+
+  it("rejects verify-visible stack exploration tools with mutation risk", () => {
+    expect(() =>
+      defineStackExploreTools<{ id: string }>()([
+        {
+          id: "postgres.query",
+          title: "Run PostgreSQL query",
+          description: "Run a SQL query against the local database.",
+          availableIn: ["dev", "verify"],
+          risk: "local-mutation",
+          input: z.object({ sql: z.string() }),
+          output: z.object({ rows: z.array(z.unknown()) }),
+          run: () => ({ rows: [] }),
+        },
+      ]),
+    ).toThrow("cannot be available in verify unless risk is none");
+  });
+
+  it("runs provider-declared stack exploration tools through Dev MCP validation", async () => {
+    const provider: StackProvider<{ multiplier: number }> = {
+      id: "explore-run-stack",
+      explore: defineStackExploreTools<{ multiplier: number }>()([
+        {
+          id: "notes.count",
+          title: "Count notes",
+          description: "Count notes visible to a limit.",
+          availableIn: ["dev", "verify"],
+          risk: "none",
+          input: z.object({ limit: z.number().int().positive() }),
+          output: z.object({ count: z.number().int() }),
+          run: ({ input, handle }) => ({ count: input.limit * handle.multiplier }),
+        },
+      ]),
+      start: async () => ({ multiplier: 2 }),
+      status: () => ({
+        status: "ready",
+        summary: "ready",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+      stop: () => ({
+        status: "stopped",
+        summary: "stopped",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({ stackProvider: provider });
+
+    expect(router.listTools().map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(["stack.explore.run"]),
+    );
+    await expect(
+      router.callTool("stack.explore.run", { toolId: "notes.count", input: { limit: 2 } }),
+    ).resolves.toMatchObject({
+      status: "failed",
+      tool: "stack.explore.run",
+      code: "stack-not-running",
+    });
+
+    await router.callTool("stack.start");
+    await expect(
+      router.callTool("stack.explore.run", { toolId: "notes.count", input: { limit: 3 } }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      tool: "stack.explore.run",
+      toolId: "notes.count",
+      output: { count: 6 },
+    });
+  });
+
+  it("returns simple failed responses for stack exploration run failures", async () => {
+    const provider: StackProvider<{ id: string }> = {
+      id: "explore-failures-stack",
+      explore: defineStackExploreTools<{ id: string }>()([
+        {
+          id: "notes.count",
+          title: "Count notes",
+          description: "Count notes visible to a limit.",
+          availableIn: ["dev", "verify"],
+          risk: "none",
+          input: z.object({ limit: z.number().int().positive() }),
+          output: z.object({ count: z.number().int() }),
+          run: ({ input }) => ({ count: input.limit }),
+        },
+        {
+          id: "provider.throws",
+          title: "Throw from provider",
+          description: "Throw from a provider handler.",
+          availableIn: ["dev"],
+          risk: "local-mutation",
+          input: z.object({}),
+          output: z.object({ ok: z.boolean() }),
+          run: () => {
+            throw new Error("provider exploded");
+          },
+        },
+        {
+          id: "provider.bad-output",
+          title: "Return bad output",
+          description: "Return output that fails schema validation.",
+          availableIn: ["dev"],
+          risk: "none",
+          input: z.object({}),
+          output: z.object({ ok: z.boolean() }),
+          run: () => ({ ok: "not boolean" }) as never,
+        },
+      ]),
+      start: async () => ({ id: "stack-1" }),
+      status: () => ({
+        status: "ready",
+        summary: "ready",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+      stop: () => ({
+        status: "stopped",
+        summary: "stopped",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({ stackProvider: provider });
+
+    await router.callTool("stack.start");
+    await expect(
+      router.callTool("stack.explore.run", { toolId: "missing.tool", input: {} }),
+    ).resolves.toMatchObject({
+      status: "failed",
+      code: "stack-explore-tool-not-found",
+    });
+    await expect(
+      router.callTool("stack.explore.run", { toolId: "notes.count", input: { limit: 0 } }),
+    ).resolves.toMatchObject({
+      status: "failed",
+      code: "stack-explore-invalid-input",
+    });
+    await expect(
+      router.callTool("stack.explore.run", { toolId: "provider.throws", input: {} }),
+    ).resolves.toMatchObject({
+      status: "failed",
+      code: "stack-explore-handler-failed",
+      message: "provider exploded",
+    });
+    await expect(
+      router.callTool("stack.explore.run", { toolId: "provider.bad-output", input: {} }),
+    ).resolves.toMatchObject({
+      status: "failed",
+      code: "stack-explore-invalid-output",
+    });
   });
 
   it("cleans up a started stack when readiness/status fails", async () => {

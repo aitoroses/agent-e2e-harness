@@ -3,8 +3,13 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { z } from "zod/v4";
 import { defineJourney, type HarnessTypes } from "@agent-e2e/harness/core";
 import { runVerifySuite, type VerifyBrowser } from "@agent-e2e/harness/verify";
+import {
+  defineStackExploreTools,
+  type StackExecutionSurface,
+} from "@agent-e2e/harness/stack";
 
 type VerifyHarness = HarnessTypes<
   {
@@ -265,5 +270,114 @@ describe("verify runner", () => {
     expect(report.errors).toContain("database did not start");
     expect(browserCreated).toBe(false);
     expect(stopped).toBe(true);
+  });
+
+  it("injects verify-safe stack exploration into journey execution", async () => {
+    const artifactRoot = await tempRoot();
+    const events: string[] = [];
+    const explore = defineStackExploreTools<{ multiplier: number }>()([
+      {
+        id: "notes.count",
+        title: "Count notes",
+        description: "Read note count from the active stack.",
+        availableIn: ["dev", "verify"],
+        risk: "none",
+        input: z.object({ limit: z.number().int().positive() }),
+        output: z.object({ count: z.number().int() }),
+        run: ({ input, handle }) => {
+          events.push(`safe:${input.limit}`);
+          return { count: input.limit * handle.multiplier };
+        },
+      },
+      {
+        id: "postgres.query",
+        title: "Run PostgreSQL query",
+        description: "Run local SQL against the active stack.",
+        availableIn: ["dev"],
+        risk: "local-mutation",
+        input: z.object({ sql: z.string() }),
+        output: z.object({ rows: z.array(z.unknown()) }),
+        run: () => {
+          events.push("dev-only");
+          return { rows: [] };
+        },
+      },
+    ]);
+    type VerifyExploreHarness = HarnessTypes<
+      {
+        browser: VerifyBrowser;
+        context: unknown;
+        page: { screenshot: (options: { path: string }) => Promise<void> };
+        stack: StackExecutionSurface<typeof explore>;
+      },
+      Record<string, never>,
+      { ok: true; count: number; devOnlyHidden: true },
+      { kind: "record"; id: string }
+    >;
+    const journey = defineJourney<VerifyExploreHarness>({
+      id: "notes:verify-explore",
+      title: "Verify explore",
+      profiles: [{ id: "default", data: {}, isDefault: true }],
+      phases: [
+        {
+          id: "phase:observe",
+          title: "Observe",
+          steps: [
+            {
+              id: "step:observe",
+              title: "Observe",
+              execute: async ({ execution }) => {
+                const output = await execution.stack.explore.run("notes.count", { limit: 3 });
+                let devOnlyHidden = false;
+                try {
+                  await execution.stack.explore.run("postgres.query", { sql: "select 1" });
+                } catch {
+                  devOnlyHidden = true;
+                }
+                return {
+                  status: "passed",
+                  observed: { ok: true, count: output.count, devOnlyHidden },
+                };
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const report = await runVerifySuite<VerifyExploreHarness, { multiplier: number }>({
+      journeys: [journey],
+      stackProvider: {
+        id: "verify-explore-stack",
+        explore,
+        start: async () => ({ multiplier: 4 }),
+        status: () => ({
+          status: "ready",
+          summary: "ready",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+        stop: () => ({
+          status: "stopped",
+          summary: "stopped",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+      },
+      options: {
+        configPath: "/repo/agent-e2e.config.ts",
+        artifactRoot,
+        createBrowser: async () => fakeBrowser(),
+        reporter: "quiet",
+      },
+    });
+
+    expect(report.status).toBe("passed");
+    expect(report.runs[0]).toMatchObject({ status: "passed" });
+    expect(events).toEqual(["safe:3"]);
   });
 });
