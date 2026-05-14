@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { agentE2EDefaultHarnessApi } from '@agent-e2e/harness';
 import { agentE2ECoreApi } from '@agent-e2e/harness/core';
 import { DEFAULT_AGENT_E2E_ARTIFACT_ROOT } from '@agent-e2e/harness/artifacts';
+import { renderTerminalReport } from '@agent-e2e/harness/verify';
 
 describe('public package exports', () => {
   it('loads the package-root API contract through the package export map', () => {
@@ -22,5 +23,9 @@ describe('public package exports', () => {
 
   it('loads the artifact utilities through the /artifacts subpath export', () => {
     expect(DEFAULT_AGENT_E2E_ARTIFACT_ROOT).toBe('.agents-e2e/artifacts');
+  });
+
+  it('loads verify utilities through the /verify subpath export', () => {
+    expect(typeof renderTerminalReport).toBe('function');
   });
 });

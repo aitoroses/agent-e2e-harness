@@ -5,6 +5,7 @@ import {
 } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { AnyHarnessTypes, ExecutableJourney, OwnedResource, ResourceAdapter, ResourceRegistry } from "../core/index.js";
+import type { AgentE2EVerifyConfig } from "../verify/index.js";
 import { createMcpHarnessServer, type McpHarnessServer } from "../mcp/index.js";
 import type { McpToolResponse } from "../mcp/index.js";
 import { normalizeToolResponse, type ToolStatus } from "../mcp/response.js";
@@ -147,6 +148,7 @@ export interface AgentE2EDevMcpConfig<
   port?: number;
   path?: string;
   allowedOrigins?: readonly string[];
+  verify?: AgentE2EVerifyConfig;
   installSignalHandlers?: boolean;
   logger?: Pick<Console, "log" | "error"> | false;
 }
@@ -323,8 +325,11 @@ function logDevMcpReady<
   const logger = config.logger ?? console;
   logger.log("Agent E2E Dev MCP ready");
   logger.log(`  MCP:       ${server.url}`);
+  logger.log(`  Codex:     codex mcp add agent-e2e --url ${server.url}`);
+  logger.log(`  Claude:    claude mcp add --scope project --transport http agent-e2e ${server.url}`);
   logger.log(`  Stack:     ${config.stackProvider ? "call stack.start; use returned service URLs as browser targets" : "not configured"}`);
   logger.log("  Browser:   Playwright-owned MCP sessions enabled");
+  logger.log("  Tools:     stack.*, run.*, journey.*, browser.*, artifact.*, cleanup.*");
   logger.log(`  Artifacts: ${artifactRoot}`);
 }
 

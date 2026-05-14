@@ -14,7 +14,9 @@ import type {
 
 export interface RunArtifactScope {
   artifactRoot?: string | undefined;
+  suiteId?: string | undefined;
   journeyId: string;
+  profileId?: string | undefined;
   runId: string;
 }
 
@@ -51,8 +53,11 @@ export const DEFAULT_AGENT_E2E_ARTIFACT_ROOT = ".agents-e2e/artifacts";
 export function createRunArtifacts(scope: RunArtifactScope): RunArtifacts {
   const root = resolve(scope.artifactRoot ?? DEFAULT_AGENT_E2E_ARTIFACT_ROOT);
   const journeySegment = safePathSegment(scope.journeyId);
+  const profileSegment = safePathSegment(scope.profileId ?? "default");
   const runSegment = safePathSegment(scope.runId);
-  const absDir = resolve(root, journeySegment, runSegment);
+  const absDir = scope.suiteId
+    ? resolve(root, "_suites", safePathSegment(scope.suiteId), "runs", journeySegment, profileSegment, runSegment)
+    : resolve(root, journeySegment, runSegment);
   return {
     journeyId: scope.journeyId,
     runId: scope.runId,

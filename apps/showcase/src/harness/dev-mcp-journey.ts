@@ -1,5 +1,6 @@
 import { defineJourney, type HarnessTypes } from "@agent-e2e/harness/core";
 import type { StackStatusPacket } from "@agent-e2e/harness/stack";
+import type { Page } from "playwright";
 import {
   BASELINE_USER,
   BASELINE_WORKSPACE,
@@ -26,7 +27,7 @@ interface ShowcaseMcpObserved {
 }
 
 export type ShowcaseMcpHarness = HarnessTypes<
-  { stack?: StackStatusPacket },
+  { stack?: StackStatusPacket; page?: Page },
   Record<string, never>,
   ShowcaseMcpObserved,
   ShowcaseResource
@@ -94,9 +95,28 @@ export function createShowcaseMcpJourney() {
                 };
               }
               const snapshot = await response.json() as NotesApiSnapshot;
-              const note = snapshot.notes?.find(
+              let note = snapshot.notes?.find(
                 (candidate) => candidate.body === PROOF_NOTE_BODY && candidate.ownedByRun === runId,
               );
+              if (!note && execution.page) {
+                const targetUrl = new URL(baseUrl);
+                targetUrl.searchParams.set("agentE2ERunId", runId);
+                await execution.page.goto(targetUrl.toString());
+                await execution.page.getByRole("button", { name: "Create proof note" }).click();
+                await execution.page.getByLabel("Proof status").getByText(/Proof note persisted:/).waitFor();
+                const updated = await fetch(notesApiUrl(baseUrl), { cache: "no-store" });
+                if (!updated.ok) {
+                  return {
+                    status: "failed",
+                    errors: [`Notes API returned ${updated.status} after browser action`],
+                    guidance: [{ type: "inspect", label: "Inspect managed stack", target: "stack.status" }],
+                  };
+                }
+                const updatedSnapshot = await updated.json() as NotesApiSnapshot;
+                note = updatedSnapshot.notes?.find(
+                  (candidate) => candidate.body === PROOF_NOTE_BODY && candidate.ownedByRun === runId,
+                );
+              }
               if (!note) {
                 return {
                   status: "failed",

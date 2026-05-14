@@ -10,4 +10,7 @@ export default defineAgentE2EConfig<ShowcaseMcpHarness>({
   journeys: [createShowcaseMcpJourney()],
   resourceRegistry: createShowcaseResourceRegistry(),
   stackProvider: createShowcaseDevStackProvider(),
+  verify: {
+    suites: [{ id: "smoke", journeys: ["showcase:*"] }],
+  },
 });
