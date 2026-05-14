@@ -19,9 +19,16 @@ The default Dev MCP grammar defines reusable Agent E2E Harness vocabulary for lo
 ### Stack and seed
 
 - `stack.start` — starts the managed dev stack.
-- `stack.status` — returns service readiness, URLs, warnings, and artifacts.
+- `stack.status` — returns the unified stack-state packet: services, endpoints, readiness checks, warnings, errors, artifacts, and next actions.
+- `stack.logs` — reads recent live logs for one active service; requires `serviceId` and `tail`, with optional `stream`.
+- `stack.explore.list` — lists provider-declared stack exploration tools with JSON Schemas derived from Zod input/output schemas.
+- `stack.explore.run` — runs one provider-declared stack exploration tool against the active stack.
 - `stack.stop` — stops provider-owned infrastructure/processes.
 - `run.reseed` — cleans journey-owned resources, then applies Environment Seed.
+
+There are no native `stack.services`, `stack.health`, or `stack.env` tools in v1. Service and health data live in `stack.status`; provider-specific config or database/queue/cache inspection belongs in `stack.explore.*`.
+
+Provider-declared stack exploration tools must declare `id`, `title`, `description`, `availableIn`, `risk`, Zod `input`, Zod `output`, and a handler. `agent-e2e verify` can use only Verify Observation Tools: `availableIn` includes `verify` and `risk` is `none`.
 
 ### Run lifecycle
 

@@ -18,6 +18,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
+## [1.1.0] - 2026-05-14
+
+### Added
+
+- Dev MCP stack exploration surface with unified `stack.status`, live `stack.logs`, provider-declared `stack.explore.list` / `stack.explore.run`, and Zod-validated exploration tools.
+- Verify-safe stack observation client under `execution.stack.explore.run(...)` for journeys and `agent-e2e verify`.
+- Showcase stack exploration examples for `notes.list` and `postgres.query`, plus updated `agent-e2e-harness` skill guidance.
+
 ## [1.0.1] - 2026-05-14
 
 ### Added

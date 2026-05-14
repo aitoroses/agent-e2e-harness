@@ -17,7 +17,12 @@ import {
   writeJsonArtifact,
   type RunArtifactRecorder,
 } from "../artifacts/index.js";
-import type { StackProvider, StackStatusPacket } from "../stack/index.js";
+import {
+  createStackExecutionSurface,
+  type StackExecutionSurface,
+  type StackProvider,
+  type StackStatusPacket,
+} from "../stack/index.js";
 import {
   attachRunSignals,
   captureStepScreenshot,
@@ -101,6 +106,7 @@ export async function runVerifySuite<
 
   let stackHandle: TStackHandle | undefined;
   let stackStatus: StackStatusPacket | undefined;
+  let stackExecution: StackExecutionSurface | undefined;
   const runs: VerifyRunReport[] = [];
   const suiteEndCleanups: Array<{
     journey: ExecutableJourney<TTypes>;
@@ -117,6 +123,7 @@ export async function runVerifySuite<
     if (input.stackProvider) {
       stackHandle = await input.stackProvider.start();
       stackStatus = await input.stackProvider.status(stackHandle);
+      stackExecution = createStackExecutionSurface(stackStatus, input.stackProvider, stackHandle);
       if (stackStatus.status !== "ready") {
         suiteErrors.push(stackStatus.summary);
         stopScheduling = true;
@@ -140,7 +147,7 @@ export async function runVerifySuite<
             resourceAdapters: input.resourceAdapters ?? [],
             cleanup: resolved.cleanup,
             warningsAsErrors: resolved.warningsAsErrors,
-            ...(stackStatus ? { stackStatus } : {}),
+            ...(stackExecution ? { stack: stackExecution } : {}),
           });
           runs.push(result.report);
           if (resolved.cleanup === "suite-end" && result.ledger) {
@@ -220,6 +227,7 @@ async function runSingleVerifyRun<TTypes extends AnyHarnessTypes>(input: {
   index: number;
   browser: VerifyBrowser;
   stackStatus?: StackStatusPacket;
+  stack?: StackExecutionSurface;
   resourceAdapters: readonly ResourceAdapter<TTypes>[];
   cleanup: VerifyCleanupMode;
   warningsAsErrors: boolean;
@@ -242,7 +250,7 @@ async function runSingleVerifyRun<TTypes extends AnyHarnessTypes>(input: {
     browser: input.browser,
     context,
     page,
-    ...(input.stackStatus ? { stack: input.stackStatus } : {}),
+    ...(input.stack ? { stack: input.stack } : {}),
   } as TTypes["executionSurface"];
   const stepStatuses: Array<{ phaseId: string; stepId: string; status: string }> = [];
   const warnings: string[] = [];

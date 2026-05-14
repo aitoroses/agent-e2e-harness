@@ -1,6 +1,6 @@
 # Dev MCP proof transcript
 
-Captured on 2026-05-13 against the local showcase Dev MCP endpoint using the public user path. Dev MCP used the stable URL `http://127.0.0.1:3766/mcp`; the app URL was returned by `stack.start`.
+Captured on 2026-05-14 against the local showcase Dev MCP endpoint using the public user path. Dev MCP used the stable URL `http://127.0.0.1:3766/mcp`; the app URL was returned by `stack.start`.
 
 Generated `.agents-e2e/` evidence remains ignored. This transcript preserves the durable command path and observed checkpoints.
 
@@ -11,7 +11,9 @@ npm install
 npm run dev:mcp --workspace @agent-e2e/showcase
 
 mcporter list http://127.0.0.1:3766/mcp --allow-http --schema --json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.explore.list --args '{}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.start --args '{}' --output json --timeout 120000
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.logs --args '{"serviceId":"showcase-next-dev","tail":80,"stream":"combined"}' --output json
 
 APP_URL="http://127.0.0.1:58589"
 RUN_ID="showcase-dev"
@@ -22,6 +24,7 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.o
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.snapshot --args '{"browserSessionId":"browser-1778691174645-4ba879"}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.act --args '{"browserSessionId":"browser-1778691174645-4ba879","ref":"@e2","action":"click"}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool journey.step --args '{"runId":"showcase-dev","phaseId":"phase:proof-notes","stepId":"step:create-proof-note","browserSessionId":"browser-1778691174645-4ba879"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.explore.run --args '{"toolId":"notes.list","input":{"limit":10}}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool artifact.read --args '{"path":".agents-e2e/artifacts/showcase-proof-notes/showcase-dev/01-phase-phase-proof-notes/01-step-step-create-proof-note/step-feedback.json"}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool cleanup.plan --args '{"runId":"showcase-dev"}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool run.teardown --args '{"runId":"showcase-dev"}' --output json
@@ -33,14 +36,17 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.sto
 
 - `npm install`: completed with `found 0 vulnerabilities`.
 - `npm run dev:mcp --workspace @agent-e2e/showcase`: printed `Agent E2E Dev MCP ready` and `MCP: http://127.0.0.1:3766/mcp`.
-- `mcporter list`: status `ok`; 19 tools discovered.
+- `mcporter list`: status `ok`; 22 tools discovered, including `stack.logs`, `stack.explore.list`, and `stack.explore.run`.
+- `stack.explore.list`: status `ok`; listed concrete showcase tools `notes.list` and `postgres.query` with JSON Schemas.
 - `stack.start`: status `ok`; stack status `ready`; `showcase-next-dev` ready at `http://127.0.0.1:58589`; PostgreSQL ready through the showcase Testcontainers provider.
+- `stack.logs`: status `ok`; returned recent combined logs for `showcase-next-dev`.
 - `journey.list`: listed `showcase:proof-notes`.
 - `run.begin`: seed gate `ready`; `canRunSteps: true`; baseline workspace/user checked.
 - `browser.open`: returned headed MCP browser session `browser-1778691174645-4ba879`.
 - `browser.snapshot`: title `Proof Notes Showcase`; refs included `@e2` button `Create proof note`.
 - `browser.act`: clicked `@e2` and wrote a forensics screenshot.
 - `journey.step`: passed `phase:proof-notes / step:create-proof-note`; both proofs passed; returned before/after screenshots, console/network logs, result, and `step-feedback` artifacts.
+- `stack.explore.run`: ran verify-safe `notes.list`; returned the created proof note inline without adding artifacts.
 - `artifact.read`: read `step-feedback.json`; content status `passed`; console errors `0`.
 - `cleanup.plan`: planned one run-owned `note`.
 - `run.teardown`: deleted one run-owned `note` through `resource-registry-adapter`.

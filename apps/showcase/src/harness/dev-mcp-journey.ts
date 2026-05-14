@@ -1,6 +1,6 @@
 import { defineJourney, type HarnessTypes } from "@agent-e2e/harness/core";
-import type { StackStatusPacket } from "@agent-e2e/harness/stack";
 import type { Page } from "playwright";
+import type { ShowcaseStackExecution } from "./dev-stack.js";
 import {
   BASELINE_USER,
   BASELINE_WORKSPACE,
@@ -24,10 +24,11 @@ interface ShowcaseMcpObserved {
   persistedAfterReload: boolean;
   baselineWorkspaceId: string;
   baselineUserId: string;
+  stackObservedNoteCount: number;
 }
 
 export type ShowcaseMcpHarness = HarnessTypes<
-  { stack?: StackStatusPacket; page?: Page },
+  { stack?: ShowcaseStackExecution; page?: Page },
   Record<string, never>,
   ShowcaseMcpObserved,
   ShowcaseResource
@@ -117,6 +118,14 @@ export function createShowcaseMcpJourney() {
                   (candidate) => candidate.body === PROOF_NOTE_BODY && candidate.ownedByRun === runId,
                 );
               }
+              const stackObservation = execution.stack?.explore
+                ? await execution.stack.explore.run("notes.list", { limit: 10 })
+                : undefined;
+              if (stackObservation) {
+                note = stackObservation.notes.find(
+                  (candidate) => candidate.body === PROOF_NOTE_BODY && candidate.ownedByRun === runId,
+                ) ?? note;
+              }
               if (!note) {
                 return {
                   status: "failed",
@@ -137,6 +146,7 @@ export function createShowcaseMcpJourney() {
                   persistedAfterReload: true,
                   baselineWorkspaceId: snapshot.workspace.id,
                   baselineUserId: snapshot.user.id,
+                  stackObservedNoteCount: stackObservation?.notes.length ?? snapshot.notes?.length ?? 0,
                 },
                 ownedResources: [{ kind: PROOF_NOTE_RESOURCE_KIND, id: note.id, baseUrl }],
                 artifacts: [{ id: "artifact:showcase-proof-note", kind: "json", uri: notesApiUrl(baseUrl) }],
@@ -155,7 +165,9 @@ export function createShowcaseMcpJourney() {
                 id: "proof:seed-baseline-survived",
                 title: "Seeded baseline survived proof note creation",
                 check: async ({ observed }) =>
-                  observed.baselineWorkspaceId === BASELINE_WORKSPACE.id && observed.baselineUserId === BASELINE_USER.id,
+                  observed.baselineWorkspaceId === BASELINE_WORKSPACE.id &&
+                  observed.baselineUserId === BASELINE_USER.id &&
+                  observed.stackObservedNoteCount >= 1,
               },
             ],
           },

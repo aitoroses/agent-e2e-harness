@@ -100,11 +100,18 @@ Agent E2E Dev MCP ready
 
 That log proves the MCP server booted. It is not a proof run yet. A development proof must call MCP tools, create/read artifacts, and prove cleanup or reseed.
 
-Then connect Codex, Claude Code, or any other Streamable HTTP MCP client to `http://127.0.0.1:3766/mcp`. The agent should see `stack.start` in its MCP tools:
+Then connect Codex, Claude Code, or any other Streamable HTTP MCP client to `http://127.0.0.1:3766/mcp`. The agent should see the fixed stack grammar in its MCP tools:
 
 ```text
 stack.start
+stack.status
+stack.stop
+stack.logs
+stack.explore.list
+stack.explore.run
 ```
+
+`stack.status` is the unified stack-state packet: services, stable service ids, endpoints, checks, warnings, errors, artifacts, and next actions. There are no native `stack.services`, `stack.health`, or `stack.env` tools in v1. Runtime-specific inspection is provider-owned through `stack.explore.*`.
 
 ## Build the proof loop
 
@@ -281,6 +288,10 @@ That prompt maps to standard MCP tool calls:
 journey.list
 journey.inspect
 stack.start
+stack.status
+stack.logs
+stack.explore.list
+stack.explore.run
 run.begin
 browser.open
 browser.snapshot
@@ -289,6 +300,8 @@ artifact.read
 cleanup.plan
 run.reseed
 ```
+
+Use `stack.logs` for live service logs after the stack is active. It requires one `serviceId`, a required `tail`, and optional `stream`. Use `stack.explore.list` to discover provider-declared tools and `stack.explore.run` to run one of them with Zod-validated input/output.
 
 `journey.inspect` returns the full contract for one journey: phases, steps, proofs, profiles, and descriptions. Agents use it to plan, humans use it to read, and CI uses it to diff.
 
@@ -300,7 +313,7 @@ mcporter list http://127.0.0.1:3766/mcp --schema --json --allow-http
 mcporter call \
   --http-url http://127.0.0.1:3766/mcp \
   --allow-http \
-  --tool journey.list \
+  --tool stack.explore.list \
   --args '{}' \
   --output json
 ```
@@ -346,6 +359,8 @@ Together with seed, cleanup, and reseed, these artifacts let the agent move thro
 ### 6. Promote journeys with verify
 
 A development run becomes CI proof when `agent-e2e verify` reruns the configured journeys from clean seed, non-interactively, with no agent in the loop. The command uses the same `agent-e2e.config.ts`, starts the configured stack once for the suite, creates an isolated Playwright context/page for each selected run, cleans owned resources, and writes one suite report directory.
+
+Verify runs the crystallized journey. It does not expose arbitrary Dev MCP exploration or generic shell execution. Journey code can use only Verify Observation Tools through `execution.stack.explore.run(...)`: provider-declared tools with `availableIn: ["dev", "verify"]` and `risk: "none"`. Product-visible mutations must still come from the app path, seed, journey steps, reseed, or cleanup.
 
 ```sh
 agent-e2e verify

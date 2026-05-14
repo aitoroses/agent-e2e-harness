@@ -85,7 +85,21 @@ describe("showcase PostgreSQL Testcontainers provider", () => {
     });
     expect(provider.status(handle)).toMatchObject({
       status: "ready",
-      services: [{ id: "postgres", status: "ready" }],
+      services: [
+        {
+          id: "postgres",
+          kind: "database",
+          status: "ready",
+          endpoints: [
+            {
+              id: "postgres",
+              kind: "postgres",
+              sensitive: true,
+            },
+          ],
+          checks: [{ id: "postgres.ready", status: "passed" }],
+        },
+      ],
     });
     await expect(provider.stop(handle)).resolves.toMatchObject({
       status: "stopped",
