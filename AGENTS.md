@@ -1,6 +1,6 @@
 # agent-e2e-harness — Repo Operating Contract
 
-This repository contains a reusable E2E harness for agent workflows. It defines MCP-driven journey harness patterns so agent-built products can run browser/API proofs, collect artifacts, and clean up owned resources.
+This repository contains a reusable E2E harness for agent workflows. It defines MCP-driven journey harness patterns so agent-built products can run browser/API proofs, collect artifacts, clean up owned resources, and verify configured journey suites in CI.
 
 ## Agent skills
 
@@ -40,13 +40,21 @@ Do not substitute Browser Skill, raw Playwright scripts, direct function calls, 
 
 ### Lifecycle expectation
 
-The stable path is:
+The stable development path is:
 
 ```sh
 npm run dev:mcp --workspace @agent-e2e/showcase
 ```
 
-`dev:mcp` is the canonical Dev MCP entrypoint and should delegate to `agent-e2e-harness dev-mcp`. It uses a stable MCP URL by default, `http://127.0.0.1:3766/mcp`, and keeps app URLs as stack-owned data returned by `stack.start` / `stack.status`. Fixed MCP ports are configured with `AGENT_E2E_MCP_PORT`. Consumer usage should connect a standard MCP client to the stable Dev MCP URL. Dev MCP/server/browser sessions must be managed by documented commands with clear start/status/stop behavior. A browser session must not depend on a temporary shell or hidden `.scratch` process staying alive.
+`dev:mcp` is the canonical Dev MCP entrypoint and should delegate to `agent-e2e dev`. It uses a stable MCP URL by default, `http://127.0.0.1:3766/mcp`, and keeps app URLs as stack-owned data returned by `stack.start` / `stack.status`. Fixed MCP ports are configured with `AGENT_E2E_MCP_PORT`. Consumer usage should connect a standard MCP client to the stable Dev MCP URL. Dev MCP/server/browser sessions must be managed by documented commands with clear start/status/stop behavior. A browser session must not depend on a temporary shell or hidden `.scratch` process staying alive.
+
+The stable CI verification path is:
+
+```sh
+npm run e2e:verify --workspace @agent-e2e/showcase
+```
+
+`e2e:verify` should delegate to `agent-e2e verify`, load `agent-e2e.config.ts`, start the configured stack once, run the configured journey suite, write suite reports under `.agents-e2e/artifacts/_suites/<suite-id>/`, and exit cleanly. For public command or package-bin changes, validate the exact documented command, not only an equivalent internal import or test helper.
 
 ### Browser proof expectation
 
@@ -68,16 +76,84 @@ For showcase-facing changes, minimum evidence is:
 - Playwright-owned MCP browser can open the app;
 - `browser.snapshot` has no visible app/runtime errors;
 - screenshot looks acceptable for the claimed UX state;
+- `npm run e2e:verify --workspace @agent-e2e/showcase` passes and exits cleanly when the change affects journey/config/CLI/CI behavior;
 - targeted harness/showcase tests pass.
 
 ### Validation artifact standard
 
-Generated proof/debug evidence belongs under `.agents-e2e/artifacts/<journey>/<run>/` and should be returned through MCP artifact refs. Do not use `.scratch`, `ui-e2e/`, or an extra `steps/` nesting layer as the primary validation artifact layout.
+Generated proof/debug evidence belongs under `.agents-e2e/artifacts/<journey>/<run>/` for interactive runs and `.agents-e2e/artifacts/_suites/<suite-id>/` for verify suite reports. Interactive artifacts should be returned through MCP artifact refs. Do not use `.scratch`, `ui-e2e/`, or an extra `steps/` nesting layer as the primary validation artifact layout.
 
 Expected run evidence includes top-level `seed-manifest.json`, `result.json`, `timeline.json`, `metrics.json`, `owned-resources.json`, cleanup artifacts when applicable, `forensics/` browser snapshots/screenshots, and numbered `01-phase-.../01-step-.../` step folders with `before.png`, `after.png` or `failure.png`, `console.json`, `network.json`, `result.json`, and `step-feedback.json`.
 
+Expected verify suite evidence includes `report.json`, `report.md`, and `runs/<journey>/<profile>/<run>/` entries inside the suite directory.
+
 ### Skill and transcript standard
 
-- The consumer workflow skill lives at `skills/agent-e2e-harness/SKILL.md`, initialized through `npx skills init`.
+- The consumer workflow skill lives at `skills/agent-e2e-harness/SKILL.md` with one-level progressive references under `skills/agent-e2e-harness/references/`.
+- Public README surfaces should show installation through `npx skills add aitoroses/agent-e2e-harness --skill agent-e2e-harness ...`.
+- Validate skill packaging with `npx skills add . --list` and validate skill structure with the skill validator when changing the skill.
 - Do not version local installed skill copies under `.codex/` or `.agents/`.
 - Preserve meaningful dogfood runs in `docs/showcase/mcporter-proof-transcript.md` rather than relying on terminal scrollback.
+
+## Branch and PR Protocol
+
+Branch names should describe the work surface, not the first file touched:
+
+```txt
+<type>/<issue-or-release>-<short-slug>
+```
+
+Use `feat/` for user-facing behavior or public API, `fix/` for regressions, `docs/` for docs-only work, `chore/` for release workflow/repo hygiene, `release/` for release-prep branches, and `audit/` for read-only investigations. Include the issue number and PRD slug when the work came from a PRD or issue, for example `feat/18-agent-e2e-dev-verify-cli`.
+
+PR titles should use the same intent-oriented type as the branch, for example `feat: add agent-e2e dev/verify launch surface`. Keep PR bodies release-aware:
+
+- `Summary` lists the public behavior and docs surfaces changed.
+- `Issues / PRDs` names every GitHub issue and PRD covered by the PR, including the local PRD path when one exists.
+- `Validation` lists local commands, GitHub CI state, and any unavailable checks.
+- `Release Notes` calls out public CLI/package/skill/release workflow effects when present.
+- Link completed GitHub issues and PRDs with closing keywords, for example `Closes #18` plus `PRD: docs/prd/agent-e2e-dev-verify-cli.md`. If a PR only partially implements a PRD, say `Part of #<id>` instead of `Closes`.
+
+Open broad launch-surface PRs as draft until local validation and GitHub CI are both green. Tagging and publishing are post-merge release actions, not part of ordinary PR completion.
+
+## Release Maintainer Protocol
+
+Release work in this repo spans code, docs, package metadata, changelog, release notes, tags, GitHub Releases, npm, and skills. Agents working on release-facing changes must keep those surfaces aligned.
+
+### Version and changelog surfaces
+
+- Published package version lives in `packages/harness/package.json`. The root `package.json` is workspace-private and is not the published package version.
+- `CHANGELOG.md` is the durable project changelog. Keep `[Unreleased]` current during normal PR work. When preparing a version, move relevant entries into `## [x.y.z] - YYYY-MM-DD`.
+- Version-specific GitHub Release notes live in `docs/RELEASE_NOTES-vx.y.z.md`. The release workflow derives the notes path from `packages/harness/package.json` and fails before publish if the matching file is missing.
+- Release-facing README/package README examples, `skills/agent-e2e-harness`, and `docs/RELEASE_NOTES-*` must use the same public CLI and install language.
+
+### Release workflow and tags
+
+- The release workflow is `.github/workflows/release.yml`.
+- It publishes on `workflow_dispatch` or pushed `v*` tags, checks out the tag, reads `packages/harness/package.json`, and fails unless the tag is exactly `v<package version>`.
+- Do not create, move, or push tags without explicit user authorization for that action.
+- Before a release tag is created, verify:
+  - package version is correct in `packages/harness/package.json`;
+  - `package-lock.json` reflects package metadata and bin changes;
+  - `CHANGELOG.md` has the release section;
+  - `docs/RELEASE_NOTES-vx.y.z.md` exists and release workflow points at it;
+  - `npm run check` passes;
+  - `npm run e2e:verify --workspace @agent-e2e/showcase` passes and exits cleanly when the release touches harness runtime, CLI, journeys, stack, or docs that claim verify behavior;
+  - `npx skills add . --list` still discovers `agent-e2e-harness` when skill surfaces changed.
+
+### npm publish constraints
+
+- npm publish is performed by GitHub Actions using `secrets.NPM_TOKEN`.
+- The token must be valid for `@agent-e2e/harness`, have publish rights to the `@agent-e2e` organization/package, and satisfy npm 2FA requirements, typically by using a granular automation token configured to bypass interactive 2FA.
+- Do not paste npm tokens into repo files, logs, comments, or issue bodies.
+- If publish fails with auth, org/package, or 2FA errors, treat it as release-infrastructure blocked; do not retry by changing package code unless the error proves a package metadata problem.
+
+### Post-release evidence
+
+After a release workflow succeeds, verify and report:
+
+```sh
+npm view @agent-e2e/harness@<version> version
+gh release view v<version>
+```
+
+If a workflow fails after npm publish but before GitHub Release creation, do not republish. The workflow is idempotent for already-published npm versions; rerun after fixing the release blocker.
