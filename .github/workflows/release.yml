@@ -66,7 +66,15 @@ jobs:
           fi
 
       - name: Verify npm package
-        run: npm view "@agent-e2e/harness@${{ steps.package.outputs.version }}" version
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            if npm view "@agent-e2e/harness@${{ steps.package.outputs.version }}" version; then
+              exit 0
+            fi
+            echo "npm registry has not exposed @agent-e2e/harness@${{ steps.package.outputs.version }} yet; retrying..."
+            sleep 10
+          done
+          npm view "@agent-e2e/harness@${{ steps.package.outputs.version }}" version
 
       - name: Create GitHub Release
         env:
@@ -77,6 +85,5 @@ jobs:
           else
             gh release create "$RELEASE_TAG" \
               --title "$RELEASE_TAG" \
-              --notes-file "${{ steps.package.outputs.notes_file }}" \
-              --target "$RELEASE_TAG"
+              --notes-file "${{ steps.package.outputs.notes_file }}"
           fi
