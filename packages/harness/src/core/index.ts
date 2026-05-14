@@ -196,8 +196,13 @@ export interface ResourceKindDefinition<
   delete?: (resource: TResource) => MaybePromise<void | { artifact?: ArtifactRef }>;
 }
 
+type RegistryResourceKindDefinition<TResource extends { kind: string; id: string }> =
+  TResource extends { kind: infer TKind extends string; id: string }
+    ? ResourceKindDefinition<TKind, any, TResource>
+    : never;
+
 export interface ResourceRegistry<TResource extends { kind: string; id: string } = { kind: string; id: string }> {
-  definitions: readonly ResourceKindDefinition<string, object, TResource>[];
+  definitions: readonly RegistryResourceKindDefinition<TResource>[];
   create: <TCreateInput extends object>(kind: string, input: TCreateInput) => Promise<TResource>;
   adapter: ResourceAdapter<HarnessTypes<unknown, Record<string, unknown>, Record<string, unknown>, TResource>>;
 }
@@ -520,9 +525,10 @@ export function defineResourceKind<
 }
 
 export function createResourceRegistry<TResource extends { kind: string; id: string }>(
-  definitions: readonly ResourceKindDefinition<string, object, TResource>[]
+  definitions: readonly RegistryResourceKindDefinition<TResource>[]
 ): ResourceRegistry<TResource> {
-  const byKind = new Map(definitions.map((definition) => [definition.kind, definition]));
+  const runtimeDefinitions = definitions as readonly ResourceKindDefinition<string, any, TResource>[];
+  const byKind = new Map(runtimeDefinitions.map((definition) => [definition.kind, definition]));
 
   return {
     definitions,

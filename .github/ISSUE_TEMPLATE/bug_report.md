@@ -14,9 +14,10 @@ Describe the bug and the user-visible harness workflow it affects.
 
 Which area is involved?
 
+Public surfaces shipped at v1.0:
+
 - [ ] `@agent-e2e/harness/core`
 - [ ] `@agent-e2e/harness`
-- [ ] `@agent-e2e/harness/mcp`
 - [ ] `@agent-e2e/harness/dev-mcp`
 - [ ] `@agent-e2e/harness/playwright-mcp`
 - [ ] `@agent-e2e/harness/stack`

@@ -16,7 +16,7 @@ Coding agents can produce working code faster than teams can reliably inspect it
 - Closure Command path that consolidates a successful development proof into a CI E2E test.
 - MCP-Owned Browser Sessions with Playwright-backed `browser.open`, `browser.snapshot`, `browser.act`, and `browser.screenshot` operations.
 - Artifact contract under `.agents-e2e/artifacts/`, including top-level run metadata and numbered phase/step folders.
-- Reference Showcase App with Node-sidecar PostgreSQL/Testcontainers under Bun-backed Dev MCP.
+- Reference Showcase App with in-process PostgreSQL/Testcontainers composition under Bun-backed Dev MCP, including explicit readiness and retry.
 
 ## Public Package Surface
 
@@ -41,11 +41,14 @@ npm install -D @agent-e2e/harness playwright @modelcontextprotocol/sdk zod
 
 Start with the [README 5-minute walkthrough](../README.md#install-in-5-minutes). It shows the install command, the `dev:mcp` script, the `agent-e2e.config.ts` shape, and standard MCP discovery against `http://127.0.0.1:3766/mcp`.
 
+## Local Runtime Prerequisite
+
+Reference Showcase runs require Docker-compatible Testcontainers support, such as Docker Desktop or OrbStack, so the Bun-backed Dev MCP server can start the showcase-managed PostgreSQL container directly through the in-process stack provider.
+
 ## Known Gaps and Deferred Work
 
 - `/mcp` subpath export is deferred for v1.x. The internal MCP implementation remains in source, but the legacy in-process embedding mode is not public until its grammar settles.
 - `journey.prompt` and `journey.validate` are deferred for v1.x because the Textual Journey Plan payload is not designed yet.
-- The Showcase App uses a Node sidecar for PostgreSQL/Testcontainers while the Dev MCP server runs under Bun. That limitation is known and tracked for v1.x.
 
 ## Breaking Changes
 
