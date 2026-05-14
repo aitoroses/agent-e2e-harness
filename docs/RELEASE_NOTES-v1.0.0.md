@@ -2,6 +2,8 @@
 
 `@agent-e2e/harness` is a TypeScript harness for turning agent development proof into repeatable browser/API E2E journeys.
 
+Historical note: v1.0.0 was published before the final `agent-e2e` CLI and config-backed verify surface landed. Use v1.0.1 for the completed Dev/Verify launch surface.
+
 ## Why Now
 
 Coding agents can produce working code faster than teams can reliably inspect it. The missing layer is a deterministic proof loop: seeded state, controlled browser/API actions, durable artifacts, and cleanup boundaries that make it clear what the agent proved and what it owned. v1.0.0 freezes that public surface so projects can install the harness, expose a stable Dev MCP endpoint, and carry the same proof path from development into CI.
@@ -13,11 +15,9 @@ Coding agents can produce working code faster than teams can reliably inspect it
 - Dev MCP server with a stable Streamable HTTP endpoint and a hot-reloaded journey registry.
 - Typed Resource Registry threading from `defineAgentE2EConfig`, with `defineResourceKind` and `createResourceRegistry` as the canonical resource pattern.
 - Ownership Ledger plus Resource Adapters for bounded teardown of resources the harness created or verified.
-- Public `agent-e2e` CLI with `agent-e2e dev` for Dev MCP and `agent-e2e verify` for CI verification.
-- Config-backed verify runner that loads `agent-e2e.config.ts`, starts the stack once, isolates each run with a Playwright context/page, cleans owned resources, and writes Markdown plus JSON suite reports.
-- Bundled `agent-e2e-harness` adoption skill installable with `npx skills`.
+- Initial `agent-e2e-harness` CLI with the Dev MCP command surface.
 - MCP-Owned Browser Sessions with Playwright-backed `browser.open`, `browser.snapshot`, `browser.act`, and `browser.screenshot` operations.
-- Artifact contract under `.agents-e2e/artifacts/`, including top-level run metadata, numbered phase/step folders, and verify suite reports under `_suites/<suite-id>/`.
+- Artifact contract under `.agents-e2e/artifacts/`, including top-level run metadata and numbered phase/step folders.
 - Reference Showcase App with in-process PostgreSQL/Testcontainers composition under Bun-backed Dev MCP, including explicit readiness and retry.
 
 ## Public Package Surface
@@ -27,7 +27,6 @@ Coding agents can produce working code faster than teams can reliably inspect it
 - `@agent-e2e/harness/stack` - stack lifecycle contracts for starting, checking, and stopping app dependencies.
 - `@agent-e2e/harness/artifacts` - artifact path and writer utilities for the published run layout.
 - `@agent-e2e/harness/dev-mcp` - Dev MCP server and config entrypoints for the stable local MCP endpoint.
-- `@agent-e2e/harness/verify` - config-backed verify runner, suite selection, reports, and built-in reporter modes.
 - `@agent-e2e/harness/playwright-mcp` - Playwright-owned browser session helpers exposed through MCP tools.
 
 The legacy in-process `/mcp` subpath is intentionally not part of the v1.0.0 public package surface.
