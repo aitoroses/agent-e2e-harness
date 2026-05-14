@@ -14,6 +14,14 @@ The agent is the primary user. Humans and CI read the same evidence the agent le
 
 The quick path is: install the adoption skill for your agent, install the package, declare a config, start the Dev MCP server, and connect your agent to it. The journey is the domain code. The rest is one CLI command and an `agent-e2e.config.ts`.
 
+There are three names to keep straight:
+
+| Thing | Name |
+| --- | --- |
+| npm package | `@agent-e2e/harness` |
+| adoption skill / repository | `agent-e2e-harness` |
+| CLI binary | `agent-e2e` |
+
 **1. Install the adoption skill for your agent.** This gives Codex the setup, journey-building, Dev MCP, and CI verification workflow as a reusable skill.
 
 ```sh
@@ -89,6 +97,8 @@ Expected line in the server log:
 ```text
 Agent E2E Dev MCP ready
 ```
+
+That log proves the MCP server booted. It is not a proof run yet. A development proof must call MCP tools, create/read artifacts, and prove cleanup or reseed.
 
 Then connect Codex, Claude Code, or any other Streamable HTTP MCP client to `http://127.0.0.1:3766/mcp`. The agent should see `stack.start` in its MCP tools:
 
@@ -281,6 +291,21 @@ run.reseed
 ```
 
 `journey.inspect` returns the full contract for one journey: phases, steps, proofs, profiles, and descriptions. Agents use it to plan, humans use it to read, and CI uses it to diff.
+
+For a fresh or remote agent session that does not already have this MCP server registered, use `mcporter` as a portable dynamic client. Local HTTP endpoints require `--allow-http`:
+
+```sh
+mcporter list http://127.0.0.1:3766/mcp --schema --json --allow-http
+
+mcporter call \
+  --http-url http://127.0.0.1:3766/mcp \
+  --allow-http \
+  --tool journey.list \
+  --args '{}' \
+  --output json
+```
+
+Prefer the `--http-url ... --tool ...` form for localhost. Do not rely on dotted URL selector shapes such as `http://127.0.0.1:3766/mcp.journey.list`.
 
 ### 5. Read the artifacts a run left behind
 

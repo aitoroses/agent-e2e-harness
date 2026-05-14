@@ -14,6 +14,7 @@ This repo is both a reusable library and a dogfood showcase. The organization ru
 - `packages/harness/test-d` — public type fixtures for exported harness subpaths.
 - `apps/showcase` — the Proof Notes consumer app. App code lives under `app/` and `src/`; showcase tests live under `apps/showcase/test/`, not inside the harness package.
 - `skills/agent-e2e-harness` — consumer workflow skill created with `npx skills init`.
+- `skills/agent-e2e-adoption-smoke` — maintainer dogfood skill for running fresh-agent adoption smokes and capturing README/skill/package learnings.
 - `.codex/` and `.agents/` — local agent install/state directories; do not version installed skill copies there.
 
 ## Generated/local-only paths

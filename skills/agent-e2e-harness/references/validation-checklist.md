@@ -41,7 +41,7 @@ When the task includes interactive setup, capture:
 - exact command used to start Dev MCP
 - MCP URL, usually `http://127.0.0.1:3766/mcp`
 - agent MCP client setup command or config
-- `tools/list` or equivalent tool discovery evidence
+- `tools/list`, `mcporter list`, or equivalent tool discovery evidence
 - `journey.inspect` result summary
 - `stack.start` ready services
 - `run.begin` seed status
@@ -53,6 +53,13 @@ When the task includes interactive setup, capture:
 - cleanup/reseed result
 - browser close result
 - stack stop result
+
+Startup logs are not sufficient. `Agent E2E Dev MCP ready` only proves the server booted; the proof loop must call tools. For fresh sessions that do not have the MCP registered, use the portable `mcporter` form:
+
+```sh
+mcporter list http://127.0.0.1:3766/mcp --schema --json --allow-http
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool journey.list --args '{}' --output json
+```
 
 Do not leave required dev servers running unless the user asked for a runnable handoff.
 
@@ -93,7 +100,9 @@ Stop only when:
 
 - setup files are committed to the working tree changes
 - at least one journey exists and is wired into `agent-e2e.config.ts`
-- Dev MCP proof loop works or a specific blocker is documented
+- Dev MCP proof loop works through tool calls or a specific blocker is documented
 - `agent-e2e verify` works or a specific blocker is documented
+- cleanup/reseed restores seeded state or a specific blocker is documented
+- artifact paths for both verify and Dev MCP runs are reported
 - generated artifacts are ignored by git
 - final response names changed files and validation evidence

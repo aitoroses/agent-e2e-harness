@@ -28,6 +28,14 @@ Tags:
 
 ## Install This Skill
 
+Keep the public names distinct:
+
+| Thing | Name |
+| --- | --- |
+| npm package | `@agent-e2e/harness` |
+| adoption skill / repository | `agent-e2e-harness` |
+| CLI binary | `agent-e2e` |
+
 Tell downstream agents how to install the adoption skill from this repository:
 
 ```sh

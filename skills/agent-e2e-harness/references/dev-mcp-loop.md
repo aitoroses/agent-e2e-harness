@@ -20,6 +20,8 @@ Claude:    claude mcp add --scope project --transport http agent-e2e http://127.
 Tools:     stack.*, run.*, journey.*, browser.*, artifact.*, cleanup.*
 ```
 
+This log is a boot check only. It is not a development proof until tools have been called, artifacts have been read, and cleanup or reseed has been proven.
+
 Use `--host`, `--port`, `--path`, or environment variables only when the app requires a different endpoint.
 
 ## Configure Standard MCP Clients
@@ -46,6 +48,25 @@ claude mcp get agent-e2e
 ```
 
 Do not write a custom MCP client script for normal adoption.
+
+## Dynamic MCP Client For Fresh Agents
+
+Use `mcporter` when the current agent/session does not already have the Dev MCP server registered. This is common for fresh AOE sessions, remote agents, or one-off adoption smokes.
+
+Local HTTP endpoints require `--allow-http`:
+
+```sh
+mcporter list http://127.0.0.1:3766/mcp --schema --json --allow-http
+
+mcporter call \
+  --http-url http://127.0.0.1:3766/mcp \
+  --allow-http \
+  --tool journey.list \
+  --args '{}' \
+  --output json
+```
+
+Prefer `--http-url ... --tool ...` for localhost. Do not rely on dotted URL selector shapes such as `http://127.0.0.1:3766/mcp.journey.list`; they can fail for local MCP URLs.
 
 ## Proof Tool Sequence
 
