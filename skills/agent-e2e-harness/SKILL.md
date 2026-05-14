@@ -1,200 +1,48 @@
 ---
 name: agent-e2e-harness
-description: "Instrument an application with the Agent E2E Harness: install the dependency, expose a hot-reload Dev MCP server, define seeded journeys, drive browser/API proof loops, time-travel with artifacts, clean owned resources, and crystallize the proof into CI."
+description: "Install and adopt Agent E2E Harness in an application: add the package and npx skills setup, create agent-e2e.config.ts, define seeded journeys, wire stack and cleanup resources, run agent-e2e dev with standard MCP clients, build proof loops from artifacts, and run agent-e2e verify in CI."
 ---
 
 # Agent E2E Harness
 
-Use this skill when a user wants an app instrumented with Agent E2E Harness, asks to add journey-based E2E proof, dogfood the harness, or turn an interactive agent proof into CI.
+Use this skill to help agents install, set up, build journeys for, operate, and verify an application with Agent E2E Harness.
 
-The goal is not "write a Playwright test." The goal is: give agents a public MCP control surface for iterative development, seeded state, headed browser/API evidence, artifact time travel, owned-resource cleanup, reseed, and a closure test that can run in CI.
+The target outcome is not a hand-written Playwright test. The target outcome is an application that exposes a standard MCP development surface with `agent-e2e dev`, lets an agent prove one real user flow from seeded state, cleans owned resources, time-travels through artifacts, and verifies the configured journey suite in CI with `agent-e2e verify`.
 
-## First Decision
+## Load References
 
-Assume the user's application is the source of truth. Before editing, inspect:
+Read only the references needed for the current task:
 
-- framework and package manager
-- existing dev command and test runner
-- database, queues, containers, or other required services
-- existing Playwright, MCP, or E2E setup
-- one user-visible flow worth proving first
+- `references/adoption-workflow.md` - install dependencies, add scripts, choose file layout, inspect the app, and install this skill with `npx skills`.
+- `references/journey-patterns.md` - templates for journeys, typed resources, seed, stack providers, tags, profiles, and `agent-e2e.config.ts`.
+- `references/dev-mcp-loop.md` - run `agent-e2e dev`, configure Codex or Claude as standard MCP clients, drive the MCP proof loop, and read artifacts.
+- `references/verify-ci.md` - run `agent-e2e verify`, define suites, selectors, profiles, reporters, workers, cleanup mode, and GitHub Actions.
+- `references/validation-checklist.md` - exact validation evidence required before final response.
 
-Build the harness integration in that app using public `@agent-e2e/harness` entrypoints. If you are using this repository for reference, treat `apps/showcase` as an example only. Do not copy its exact journey ids, UI text, resource names, ports, or app-specific proof-note semantics unless the user's app really has that domain.
+## Operating Rules
 
-## Adoption Target
+- Treat the user's application as the source of truth. Inspect its framework, package manager, dev command, service dependencies, existing E2E setup, and one real user-visible flow before editing.
+- Use public `@agent-e2e/harness` entrypoints only. Do not copy private showcase details unless the target app has the same domain.
+- Use `agent-e2e dev` for development MCP. Do not expose old `agent-e2e-harness dev-mcp` instructions.
+- Use `agent-e2e verify` as the default CI path. Do not ask users to write a Playwright, Vitest, or custom wrapper unless the harness cannot express the required orchestration.
+- Put app-specific domain logic in the consumer app: routes, selectors, schemas, stack commands, seed data, resource ids, and assertions.
+- Keep cleanup ownership-ledger bounded. Never delete by broad prefix, tenant, timestamp, or unscoped query alone.
+- Use artifacts as the debugging surface before changing code again.
 
-By the end, the app should have:
+## Adoption Flow
 
-- A package dependency on `@agent-e2e/harness` and any needed optional runtime deps such as Playwright or a stack provider.
-- Bun `>=1.3.0` available for the Dev MCP TypeScript runtime.
-- A conventional `agent-e2e.config.ts` plus public dev command, usually `npm run dev:mcp`, that calls `agent-e2e-harness dev-mcp`.
-- At least one executable journey that proves a real user-visible behavior from seeded state.
-- A seed that prepares prerequisites without pre-creating the behavior under proof.
-- A stack provider that starts and stops required local services and app processes.
-- Resource adapters or a typed resource registry for every resource the journey may create and later delete.
-- Artifact recording under `.agents-e2e/artifacts/<journey>/<run>/`.
-- A closure/CI test that reruns the journey from clean seed without agent intervention.
+1. Read `references/adoption-workflow.md`; inspect the app and add the package/scripts/files.
+2. Read `references/journey-patterns.md`; implement one thin journey for a real flow with seed, proof, and cleanup.
+3. Read `references/dev-mcp-loop.md`; start `agent-e2e dev`, connect the user's agent MCP client, and drive the proof through MCP tools.
+4. Iterate from artifacts until the journey passes interactively and reseed/cleanup is proven.
+5. Read `references/verify-ci.md`; add `agent-e2e verify` config and CI wiring.
+6. Read `references/validation-checklist.md`; run the required validations and report evidence.
 
-## Development Loop
+## Done Means
 
-Use a tracer-bullet loop. One thin vertical proof is better than a broad incomplete harness.
-
-1. Pick one user-real path and write it as a short textual journey: seed state, browser/API action, expected proof, resources created, cleanup rule.
-2. Add the minimal stack provider needed to start the app and dependencies through the harness.
-3. Add the minimal seed and resource adapter. Cleanup must only delete resources recorded in the run ownership ledger.
-4. Add `agent-e2e.config.ts` with the stack provider, journeys, and resource adapters, then make `npm run dev:mcp` call `agent-e2e-harness dev-mcp`.
-5. Start the Dev MCP server with the app's public command. It should keep running while code and journey files change so the agent can iterate without restarting hidden scratch scripts.
-6. Configure the agent's normal MCP client with `http://127.0.0.1:3766/mcp` as a Streamable HTTP MCP server, unless the app intentionally overrides `AGENT_E2E_MCP_PORT`.
-7. Drive the proof through MCP tools: `stack.start`, `run.begin`, `browser.open`, `browser.snapshot`, `browser.act`, `journey.step` or `journey.phase`, `artifact.read`, `cleanup.plan`, `run.reseed`, `browser.close`, `stack.stop`.
-8. Use artifacts for time travel: inspect `seed-manifest.json`, snapshots, screenshots, console/network logs, `result.json`, `step-feedback.json`, cleanup, timeline, and metrics before changing code again.
-9. When the interactive loop passes, crystallize it into a normal test command that runs from clean seed in CI.
-
-## Dev MCP Shape
-
-Prefer an app-owned command like:
-
-```sh
-npm run dev:mcp
-```
-
-The command should:
-
-- Run `agent-e2e-harness dev-mcp`.
-- Start a local HTTP MCP endpoint for development. The default MCP port is stable; use `AGENT_E2E_MCP_PORT` when the user needs a different one.
-- Start no hidden long-lived process outside the documented command.
-- Keep app URLs in `stack.start` / `stack.status` service URLs, not in Dev MCP configuration.
-- Keep the Dev MCP endpoint stable while Bun reloads the TypeScript journey/config source behind it during agent iteration.
-- Shut down cleanly on `SIGINT`/`SIGTERM`; the proof loop should still call `stack.stop` for managed app infrastructure.
-
-Do not substitute private scripts, direct function calls, or raw Playwright snippets as the final proof for an MCP workflow. Those are acceptable only as lower-level debugging and must be labeled as such.
-
-## Minimal File Pattern
-
-Adapt to the user's stack, but keep the boundaries clear:
-
-```text
-<app>/
-  agent-e2e.config.ts              # conventional config: stack provider, journeys, resource adapters
-  src/e2e-harness/
-    journey.ts                     # executable journeys
-    seed.ts                        # environment seed
-    stack.ts                       # app/service lifecycle
-    resources.ts                   # owned resource adapters/registry
-  test/
-    agent-e2e.test.ts              # closure/CI crystallization
-```
-
-Reusable lifecycle mechanics belong in `@agent-e2e/harness`; app-specific ids, routes, schemas, and domain assertions belong in the app integration code.
-
-## MCP Proof Checklist
-
-The exact tool names may evolve, but the proof must establish these facts:
-
-- Tool discovery works against the local Dev MCP endpoint.
-- `stack.start` returns every required service as `ready`; use returned `services[].url` values as browser/API targets.
-- `run.begin` returns seed `status: "ready"` and `canRunSteps: true`.
-- `browser.open` returns an MCP-owned browser session. Use headed mode for interactive dev proof unless the user asks for headless.
-- `browser.snapshot` shows the expected app state and no visible runtime errors.
-- `browser.act` performs a user-visible action using a fresh snapshot ref, not a hardcoded stale ref.
-- `journey.step` or `journey.phase` returns `status: "passed"` and records owned resources created by the journey.
-- `artifact.read` can read the returned `stepFeedbackArtifact.path` or equivalent primary artifact ref.
-- `cleanup.plan` includes only resources owned by the current run.
-- `run.reseed` deletes planned owned resources and returns seed ready again.
-- `browser.close` closes MCP-owned browser state.
-- `stack.stop` stops app processes, containers, databases, and other managed services.
-
-Consumer adoption should use the agent's MCP client, not a repo-specific CLI. A typical MCP client config is:
-
-```json
-{
-  "mcpServers": {
-    "agent-e2e": {
-      "url": "http://127.0.0.1:<port>/mcp"
-    }
-  }
-}
-```
-
-For maintainers developing this harness repository, `mcporter` can still be used as a low-level MCP server smoke-test tool. Do not require it in consumer app instructions.
-
-## Artifact Contract
-
-Generated proof/debug artifacts are part of the validation result, not temporary scratch output. Default to:
-
-```text
-.agents-e2e/artifacts/<journey>/<run>/
-  seed-manifest.json
-  result.json
-  timeline.json
-  metrics.json
-  owned-resources.json
-  cleanup-plan.json
-  cleanup.json
-  forensics/
-    browser-snapshot-*.json
-    screenshot-*.png
-  01-phase-<phase-id>/01-step-<step-id>/
-    before.png
-    after.png
-    failure.png
-    console.json
-    network.json
-    result.json
-    step-feedback.json
-```
-
-Do not put primary proof evidence in `.scratch`, product-specific legacy layouts, or generic `steps/` nesting. Use returned artifact refs and safe artifact reads.
-
-## TDD And Time Travel
-
-The intended development rhythm is:
-
-- Write or update the textual journey intent first.
-- Run the MCP loop and observe the first missing behavior or failing proof.
-- Implement the smallest app/harness slice that moves that proof forward.
-- Re-run from MCP without bypassing seed, stack, browser, or cleanup.
-- Use artifacts to compare before/after state instead of relying on terminal scrollback.
-- Once the journey passes interactively, crystallize the same behavior into a deterministic test.
-
-Time travel means an agent can answer "what happened in that run?" from artifacts alone: seed manifest, browser snapshots, screenshots, console/network logs, step feedback, owned resources, cleanup, and metrics.
-
-## Architecture Rules
-
-- Core journey contracts must not import app frameworks, databases, MCP HTTP transports, Playwright browser implementations, or consumer infrastructure providers directly.
-- Stack providers own infrastructure lifecycle; seed owns repeatable application state inside a ready stack.
-- Seed must not create the behavior the journey is supposed to prove.
-- Cleanup must be ownership-ledger bounded; never delete by broad prefix, tenant, timestamp, or ad-hoc query alone.
-- Browser refs are volatile. Always act on refs from a fresh snapshot.
-- Generated artifacts must be ignored by git, but meaningful proof transcripts or docs may be committed when they explain a durable workflow.
-
-## Showcase Reference
-
-In this repository, `apps/showcase` demonstrates the pattern with a Proof Notes app:
-
-```sh
-npm run dev:mcp --workspace @agent-e2e/showcase
-```
-
-Use it to inspect structure and expected behavior, not as a template to copy blindly. Good reference files include:
-
-- `apps/showcase/package.json` for the public `agent-e2e-harness dev-mcp` command shape.
-- `apps/showcase/src/harness/` for app-specific Dev MCP composition.
-- `apps/showcase/src/journey.ts` for a typed Playwright journey.
-- `apps/showcase/test/showcase.e2e.test.ts` for crystallized closure proof.
-- `packages/harness/src/dev-mcp`, `playwright-mcp`, `stack`, and `artifacts` for reusable package surfaces.
-
-## Validation Before Final Answer
-
-For app adoption, final evidence should include:
-
-- Dev MCP command and configured MCP URL.
-- MCP client configured against `http://127.0.0.1:3766/mcp` unless the app intentionally overrides the MCP port.
-- Tool discovery result.
-- Stack ready services.
-- Seed status.
-- Headed browser session id and snapshot result.
-- Browser action result.
-- Journey proof status and primary artifact refs.
-- Cleanup/reseed deletion count.
-- Stack stopped status.
-- CI/closure command added or the explicit gap if not yet crystallized.
+- The app has `@agent-e2e/harness` installed and scripts for `agent-e2e dev` and `agent-e2e verify`.
+- `agent-e2e.config.ts` loads journeys, stack provider, resources, and verify defaults.
+- At least one journey proves a real app behavior from seed.
+- The MCP loop can start the stack, begin a run, open/snapshot/act in a browser, run a journey step or phase, read artifacts, cleanup/reseed, close the browser, and stop the stack.
+- `agent-e2e verify` runs from config and writes suite reports under `.agents-e2e/artifacts/_suites/<suite-id>/`.
+- Final evidence includes commands run, MCP URL, selected journey/profile, artifact paths, cleanup result, stack stop result, and CI/verify status.

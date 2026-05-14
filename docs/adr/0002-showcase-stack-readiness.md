@@ -48,7 +48,7 @@ These compose directly: Bun → `agent-e2e.config.ts` → `createShowcaseDevStac
 
 ### 3.1 Pre-sidecar architecture re-verified to hang (status quo of the C-spike bisect)
 
-`git checkout main -- apps/showcase/src/harness/{dev-stack,postgres-testcontainers}.ts`, then `npm run build --workspace @agent-e2e/harness`, then `bun packages/harness/dist/cli/index.js dev-mcp`, then `stack.start` over MCP:
+`git checkout main -- apps/showcase/src/harness/{dev-stack,postgres-testcontainers}.ts`, then `npm run build --workspace @agent-e2e/harness`, then `bun packages/harness/dist/cli/index.js dev`, then `stack.start` over MCP:
 
 ```
 [audit] connected; calling stack.start with timeoutMs=180000

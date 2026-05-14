@@ -10,7 +10,7 @@ Prerequisites:
 node --version   # expect v22+
 bun --version    # expect 1.3+
 docker --version # Docker must be running
-mcporter --version
+mcporter --version # optional low-level MCP smoke-test client
 ```
 
 Install dependencies from the repo root. The showcase `postinstall` script installs Playwright's Chromium browser so a fresh consumer can open MCP-owned browser sessions without an extra manual step.
@@ -21,7 +21,7 @@ npm install
 
 Expected checkpoint: `found 0 vulnerabilities`.
 
-Start the Bun-backed Dev MCP server. The showcase runs `agent-e2e-harness dev-mcp`, which uses Bun to load `agent-e2e.config.ts` directly, starts the framework-owned Dev MCP server at `127.0.0.1:3766/mcp` by default, and hot-reloads the journey registry when the config changes. Set `AGENT_E2E_MCP_PORT` only when you intentionally need a different MCP port.
+Start the Bun-backed Dev MCP server. The showcase runs `agent-e2e dev`, which uses Bun to load `agent-e2e.config.ts` directly, starts the framework-owned Dev MCP server at `127.0.0.1:3766/mcp` by default, and hot-reloads the journey registry when the config changes. Set `AGENT_E2E_MCP_PORT` only when you intentionally need a different MCP port.
 
 ```sh
 npm run dev:mcp --workspace @agent-e2e/showcase
@@ -125,7 +125,7 @@ Consumer apps should implement `stackProvider` directly in `agent-e2e.config.ts`
 
 ## Artifacts
 
-Artifacts are generated under `.agents-e2e/artifacts/<journey>/<run>/`:
+Interactive artifacts are generated under `.agents-e2e/artifacts/<journey>/<run>/`:
 
 ```text
 .agents-e2e/artifacts/showcase-proof-notes/showcase-dev/
@@ -147,6 +147,15 @@ Artifacts are generated under `.agents-e2e/artifacts/<journey>/<run>/`:
     step-feedback.json
 ```
 
+Verify suite reports are generated under `.agents-e2e/artifacts/_suites/<suite-id>/`:
+
+```text
+.agents-e2e/artifacts/_suites/<suite-id>/
+  report.json
+  report.md
+  runs/showcase-proof-notes/default/<run>/
+```
+
 ## Framework Surfaces Demonstrated
 
 - `@agent-e2e/harness/dev-mcp`: local Streamable HTTP MCP server.
@@ -154,13 +163,24 @@ Artifacts are generated under `.agents-e2e/artifacts/<journey>/<run>/`:
 - `apps/showcase/src/harness/postgres-testcontainers.ts`: showcase-owned PostgreSQL Testcontainers provider with explicit readiness and schema initialization.
 - `@agent-e2e/harness/playwright-mcp`: headed browser sessions, snapshots, actions, screenshots.
 
-`agent-e2e.config.ts` is the conventional integration point for journeys, the typed resource registry, and the showcase stack provider. The runnable entrypoint is the package CLI, `agent-e2e-harness dev-mcp`. Showcase-specific harness composition lives in `src/harness/`; shared ids, schema SQL, proof body, and resource-kind behavior live in `src/proof-notes-contract.ts`; lifecycle mechanics belong in the framework.
+`agent-e2e.config.ts` is the conventional integration point for journeys, the typed resource registry, the showcase stack provider, and verify suites. The runnable entrypoints are the package CLI commands `agent-e2e dev` and `agent-e2e verify`. Showcase-specific harness composition lives in `src/harness/`; shared ids, schema SQL, proof body, and resource-kind behavior live in `src/proof-notes-contract.ts`; lifecycle mechanics belong in the framework.
+
+## CI Verify
+
+The showcase verifies through the same config-backed CLI path consumers should use:
+
+```sh
+npm run e2e:verify --workspace @agent-e2e/showcase
+```
+
+Expected checkpoint: `Agent E2E verify: 1 passed, 0 failed` and a suite report under `.agents-e2e/artifacts/_suites/`.
 
 ## Validation
 
 ```sh
 npm run build --workspace @agent-e2e/harness
 npm run typecheck --workspace @agent-e2e/showcase
+npm run e2e:verify --workspace @agent-e2e/showcase
 npm run test --workspace @agent-e2e/showcase -- --reporter=verbose
 npm audit --json
 ```

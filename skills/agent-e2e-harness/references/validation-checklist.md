@@ -1,0 +1,99 @@
+# Validation Checklist
+
+Use this reference before final response.
+
+## Local Static Checks
+
+Run the target repo's relevant checks. Prefer:
+
+```sh
+npm run typecheck
+npm run lint
+npm test
+```
+
+Adapt to the package manager and scripts actually present. If a command is unavailable, state the gap and run the closest check.
+
+## Harness Setup Checks
+
+Verify:
+
+```sh
+npm pkg get scripts.dev:mcp
+npm pkg get scripts.e2e:verify
+bun --version
+agent-e2e --help
+agent-e2e dev --help
+agent-e2e verify --help
+```
+
+Expected:
+
+- dev script calls `agent-e2e dev`
+- verify script calls `agent-e2e verify`
+- help text shows `dev` and `verify`
+- no adoption doc points users to `agent-e2e-harness dev-mcp`
+
+## Dev MCP Evidence
+
+When the task includes interactive setup, capture:
+
+- exact command used to start Dev MCP
+- MCP URL, usually `http://127.0.0.1:3766/mcp`
+- agent MCP client setup command or config
+- `tools/list` or equivalent tool discovery evidence
+- `journey.inspect` result summary
+- `stack.start` ready services
+- `run.begin` seed status
+- browser session id
+- snapshot evidence
+- action result
+- step or phase proof status
+- primary artifact path read with `artifact.read`
+- cleanup/reseed result
+- browser close result
+- stack stop result
+
+Do not leave required dev servers running unless the user asked for a runnable handoff.
+
+## Verify Evidence
+
+Run at least:
+
+```sh
+npm run e2e:verify
+```
+
+or:
+
+```sh
+agent-e2e verify
+```
+
+For focused local validation, acceptable variants include:
+
+```sh
+agent-e2e verify --suite smoke
+agent-e2e verify --journey "<pattern>"
+agent-e2e verify --reporter json
+```
+
+Final evidence must include:
+
+- selected suite or selectors
+- run count and pass/fail count
+- report directory
+- `report.json` and `report.md` existence
+- cleanup status
+- exit code
+
+## Stop Conditions
+
+Stop only when:
+
+- setup files are committed to the working tree changes
+- at least one journey exists and is wired into `agent-e2e.config.ts`
+- Dev MCP proof loop works or a specific blocker is documented
+- `agent-e2e verify` works or a specific blocker is documented
+- generated artifacts are ignored by git
+- final response names changed files and validation evidence

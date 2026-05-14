@@ -8,6 +8,14 @@ Reusable TypeScript package for agent-driven E2E proof loops. Consumer apps use 
 npm install @agent-e2e/harness
 ```
 
+Install the adoption skill for the agent that will wire the app:
+
+```sh
+npx skills add aitoroses/agent-e2e-harness --skill agent-e2e-harness --agent codex -y
+```
+
+Then invoke `$agent-e2e-harness` in the target app.
+
 Add optional peers for the integrations you use:
 
 ```sh
@@ -21,6 +29,7 @@ npm install -D @modelcontextprotocol/sdk playwright
 ```ts
 import { defineJourney } from '@agent-e2e/harness/core';
 import { defineAgentE2EConfig } from '@agent-e2e/harness/dev-mcp';
+import { runAgentE2EVerifyFromConfig } from '@agent-e2e/harness/verify';
 import { createProcessStackProvider } from '@agent-e2e/harness/stack';
 import { createRunArtifactRecorder } from '@agent-e2e/harness/artifacts';
 ```
@@ -29,6 +38,7 @@ Subpaths are intentionally split:
 
 - `core` has no Playwright, MCP transport, consumer infrastructure, database, or app-framework imports.
 - `dev-mcp` exposes the local MCP control server and tool grammar.
+- `verify` runs configured journeys in CI and writes suite reports.
 - `playwright-mcp` owns browser sessions and browser forensics.
 - `stack` owns generic app/service lifecycle.
 - `artifacts` records and reads validation evidence.
@@ -104,7 +114,10 @@ const orderKind = defineResourceKind({
 export default defineAgentE2EConfig({
   stackProvider: appStackProvider,
   journeys: [checkoutJourney],
-  resourceRegistry: createResourceRegistry([orderKind])
+  resourceRegistry: createResourceRegistry([orderKind]),
+  verify: {
+    suites: [{ id: 'smoke', journeys: ['checkout:*'] }]
+  }
 });
 ```
 
@@ -115,7 +128,8 @@ Then run the Dev MCP server through the package CLI:
 ```json
 {
   "scripts": {
-    "dev:mcp": "agent-e2e-harness dev-mcp"
+    "dev:mcp": "agent-e2e dev",
+    "e2e:verify": "agent-e2e verify"
   }
 }
 ```
@@ -153,6 +167,14 @@ stack.stop
 
 Use returned artifact refs to inspect failures instead of relying on terminal scrollback.
 
-## CI Closure
+## CI Verify
 
-After the interactive proof passes, add a normal test that starts from a clean seed and runs the same journey deterministically. The reference shape is in `apps/showcase/test/showcase.e2e.test.ts`.
+After the interactive proof passes, run the same configured journeys in CI:
+
+```sh
+agent-e2e verify
+agent-e2e verify --suite smoke
+agent-e2e verify --all-profiles --workers 4 --reporter github
+```
+
+`verify` loads `agent-e2e.config.ts`, starts the configured stack once, creates an isolated Playwright context/page per selected run, performs per-run cleanup by default, and writes `report.json` plus `report.md` under `.agents-e2e/artifacts/_suites/<suite-id>/`.

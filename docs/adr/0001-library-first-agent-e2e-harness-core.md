@@ -4,7 +4,7 @@ We will build `agent-e2e-harness` as a library-first toolkit with an optional re
 
 The public model stays intentionally small. Every **Executable Journey** has at least one **Journey Profile** for variations of the same proof. **Environment Seed** prepares repeatable setup for the selected profile, can compose journey-level and profile-level setup, and must produce a **Seed Manifest**. Seed is a gate: errors block journey execution, warnings are structured and surfaced to the agent with guidance actions.
 
-A proof is not crystallized by MCP step success alone. A **Crystallized Proof** requires the same journey to pass through its non-interactive **Closure Command** from clean seed, so development-time agent evidence can consolidate into CI E2E coverage. Teardown is bounded by a run-scoped **Ownership Ledger**; resource adapters may provide deletion mechanics but cannot widen ownership implicitly.
+A proof is not verified by MCP step success alone. A **Verified Proof** requires the configured journey to pass through non-interactive `agent-e2e verify` from clean seed, so development-time agent evidence can consolidate into CI E2E coverage. Teardown is bounded by a run-scoped **Ownership Ledger**; resource adapters may provide deletion mechanics but cannot widen ownership implicitly.
 
 We reject a broad predefined product schema. The **Minimal Core Contract** predefines only what agents, CI, artifact readers, and teardown safety need. Product-specific observations and profile data remain typed product-owned payloads inside the harness-owned envelopes.
 
