@@ -87,6 +87,7 @@ describe("verify runner", () => {
       options: {
         configPath: "/repo/agent-e2e.config.ts",
         artifactRoot,
+        env: {},
         now: () => new Date("2026-05-14T12:00:00.000Z"),
         randomSuffix: () => "unit",
         createBrowser: async () => fakeBrowser(),
