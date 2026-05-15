@@ -10,6 +10,10 @@ import {
   type RunArtifacts,
 } from "../artifacts/index.js";
 import type { ArtifactRef } from "../core/index.js";
+import { runBrowserAction } from "./actions.js";
+import { runPageCode, runPlaywrightCode, effectiveTimeout, type BrowserCodeRunInput, type BrowserCodeRunResult } from "./code-runner.js";
+import { createBrowserRefStore, descriptorForSelector, locatorFor, type BrowserLocatorDescriptor, type BrowserRefStore, type BrowserRefTarget } from "./refs.js";
+import { createBrowserSignalBuffer, type BrowserConsoleLevel, type BrowserConsoleReadInput, type BrowserNetworkReadInput, type BrowserSignalBuffer } from "./signals.js";
 
 export interface AgentE2EPlaywrightMcpApiContract {
   surface: "playwright-backed-mcp-contracts";
@@ -78,19 +82,82 @@ export interface BrowserActInput {
   browserSessionId: string;
   ref?: string;
   selector?: string;
-  action: "click" | "fill" | "press";
+  action: "click" | "fill" | "press" | "hover" | "focus" | "check" | "uncheck" | "select" | "scroll";
   text?: string;
   key?: string;
+  value?: string;
+  values?: string[];
+  deltaX?: number;
+  deltaY?: number;
 }
 
 export interface BrowserActResult {
   status: "ok" | "not-found" | "failed";
   browserSessionId: string;
   action?: BrowserActInput["action"];
-  target?: { ref?: string; selector: string; role?: string; name?: string };
-  artifact?: ArtifactRef | undefined;
+  target?: { ref?: string; selector?: string; role?: string; name?: string };
   error?: { code: string; message: string };
   next: { actions: Array<{ id: string; tool?: string; why: string }> };
+}
+
+export interface BrowserFindInput {
+  browserSessionId: string;
+  by: "role" | "text" | "label" | "placeholder" | "testId" | "selector";
+  value: string;
+  name?: string;
+  exact?: boolean;
+  limit?: number;
+}
+
+export interface BrowserFindResult {
+  status: "ok" | "not-found" | "failed";
+  browserSessionId: string;
+  targets: BrowserRefTarget[];
+  error?: { code: string; message: string };
+  next: { actions: Array<{ id: string; tool?: string; why: string }> };
+}
+
+export interface BrowserGetInput {
+  browserSessionId: string;
+  ref?: string;
+  selector?: string;
+  kind: "text" | "html" | "value" | "attribute" | "title" | "url" | "count";
+  attribute?: string;
+}
+
+export interface BrowserGetResult {
+  status: "ok" | "not-found" | "failed";
+  browserSessionId: string;
+  kind: BrowserGetInput["kind"];
+  value?: unknown;
+  error?: { code: string; message: string };
+}
+
+export interface BrowserWaitInput {
+  browserSessionId: string;
+  until: BrowserWaitCondition;
+  timeoutMs?: number;
+}
+
+export type BrowserWaitCondition =
+  | { kind: "ref"; ref: string; state?: "attached" | "detached" | "visible" | "hidden" }
+  | { kind: "selector"; selector: string; state?: "attached" | "detached" | "visible" | "hidden" }
+  | { kind: "text"; text: string; exact?: boolean }
+  | { kind: "url"; pattern: string }
+  | { kind: "load"; state?: "load" | "domcontentloaded" | "networkidle" }
+  | { kind: "function"; code: string; input?: unknown };
+
+export interface BrowserWaitResult {
+  status: "ok" | "not-found" | "failed";
+  browserSessionId: string;
+  matched?: BrowserWaitCondition;
+  durationMs: number;
+  timeoutMs: number;
+  error?: { code: string; message: string };
+}
+
+export interface BrowserSignalToolInput extends BrowserConsoleReadInput, BrowserNetworkReadInput {
+  browserSessionId: string;
 }
 
 interface BrowserSession {
@@ -100,7 +167,8 @@ interface BrowserSession {
   mode: BrowserSessionMode;
   createdAt: string;
   lastUsedAt: string;
-  refs: Map<string, { selector: string; role?: string; name?: string }>;
+  refs: BrowserRefStore;
+  signals: BrowserSignalBuffer;
   run: RunArtifacts;
 }
 
@@ -131,6 +199,7 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
         : { headless: mode.headless },
     );
     const page = await browser.newPage();
+    const signals = createBrowserSignalBuffer(page);
     if (input.targetUrl) await page.goto(input.targetUrl);
     const id = `browser-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
     const run = createRunArtifacts({
@@ -145,7 +214,8 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
       mode,
       createdAt: new Date().toISOString(),
       lastUsedAt: new Date().toISOString(),
-      refs: new Map(),
+      refs: createBrowserRefStore(),
+      signals,
       run,
     });
     return {
@@ -283,12 +353,7 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
       };
     });
 
-    session.refs = new Map(
-      pageData.refs.map((ref) => [
-        ref.ref,
-        { selector: ref.selector, role: ref.role, name: ref.name },
-      ]),
-    );
+    session.refs.replaceSnapshot(pageData.refs);
     const packet = {
       status: "ok",
       browserSessionId,
@@ -403,33 +468,14 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
       };
 
     try {
-      const locator = session.page.locator(target.selector);
-      if (input.action === "click") {
-        await locator.click();
-      } else if (input.action === "fill") {
-        if (input.text === undefined)
-          throw new Error("browser.act fill requires text.");
-        await locator.fill(input.text);
-      } else if (input.action === "press") {
-        if (input.key === undefined)
-          throw new Error("browser.act press requires key.");
-        await locator.press(input.key);
-      } else {
-        throw new Error(`Unsupported browser.act action: ${input.action}`);
-      }
-
+      await runBrowserAction(session.page, target, input);
       await session.page.waitForTimeout(250);
-      const actionScreenshot = await screenshot({
-        browserSessionId: input.browserSessionId,
-        path: `action-${input.action}-${timestampSegment()}.png`,
-      });
       session.lastUsedAt = new Date().toISOString();
       return {
         status: "ok",
         browserSessionId: input.browserSessionId,
         action: input.action,
-        target,
-        artifact: actionScreenshot.artifact,
+        target: publicTarget(target),
         next: {
           actions: [
             {
@@ -445,7 +491,7 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
         status: "failed",
         browserSessionId: input.browserSessionId,
         action: input.action,
-        target,
+        target: publicTarget(target),
         error: {
           code: "browser-act-failed",
           message: error instanceof Error ? error.message : String(error),
@@ -461,6 +507,255 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
         },
       };
     }
+  }
+
+  async function find(input: BrowserFindInput): Promise<BrowserFindResult> {
+    const session = sessions.get(input.browserSessionId);
+    if (!session)
+      return {
+        status: "not-found",
+        browserSessionId: input.browserSessionId,
+        targets: [],
+        error: {
+          code: "browser-session-not-found",
+          message: `No browser session exists for ${input.browserSessionId}`,
+        },
+        next: openBrowserNext(),
+      };
+
+    try {
+      const base = findDescriptor(input);
+      const locator = locatorFor(session.page, base);
+      const count = await locator.count();
+      const limit = Math.min(Math.max(1, input.limit ?? 10), 50);
+      const targets: Array<Omit<BrowserRefTarget, "ref" | "source">> = [];
+      for (let index = 0; index < Math.min(count, limit); index += 1) {
+        const nth = locator.nth(index);
+        const name = await readableLocatorName(nth);
+        targets.push({
+          locator: base.kind === "selector" ? base : { ...base, index },
+          ...(base.kind === "selector" ? { selector: base.selector } : {}),
+          ...(input.by === "role" ? { role: input.value } : {}),
+          ...(name ? { name } : {}),
+        });
+      }
+      const storedTargets = session.refs.replaceFind(targets);
+      session.lastUsedAt = new Date().toISOString();
+      return {
+        status: "ok",
+        browserSessionId: input.browserSessionId,
+        targets: storedTargets,
+        next: {
+          actions: [
+            {
+              id: "act-or-get",
+              tool: "browser.act",
+              why: "Use returned refs for actions or targeted reads.",
+            },
+          ],
+        },
+      };
+    } catch (error) {
+      return {
+        status: "failed",
+        browserSessionId: input.browserSessionId,
+        targets: [],
+        error: {
+          code: "browser-find-failed",
+          message: error instanceof Error ? error.message : String(error),
+        },
+        next: {
+          actions: [
+            {
+              id: "snapshot",
+              tool: "browser.snapshot",
+              why: "Inspect visible state before retrying the semantic lookup.",
+            },
+          ],
+        },
+      };
+    }
+  }
+
+  async function get(input: BrowserGetInput): Promise<BrowserGetResult> {
+    const session = sessions.get(input.browserSessionId);
+    if (!session)
+      return {
+        status: "not-found",
+        browserSessionId: input.browserSessionId,
+        kind: input.kind,
+        error: {
+          code: "browser-session-not-found",
+          message: `No browser session exists for ${input.browserSessionId}`,
+        },
+      };
+
+    try {
+      if (input.kind === "title")
+        return { status: "ok", browserSessionId: input.browserSessionId, kind: input.kind, value: await session.page.title() };
+      if (input.kind === "url")
+        return { status: "ok", browserSessionId: input.browserSessionId, kind: input.kind, value: session.page.url() };
+
+      const target = resolveTarget(session, input);
+      if (!target)
+        return {
+          status: "failed",
+          browserSessionId: input.browserSessionId,
+          kind: input.kind,
+          error: {
+            code: "browser-target-missing",
+            message: "browser.get requires a ref or selector for this kind.",
+          },
+        };
+      const locator = locatorFor(session.page, target);
+      if (input.kind === "count")
+        return { status: "ok", browserSessionId: input.browserSessionId, kind: input.kind, value: await locator.count() };
+      if (await locator.count() === 0)
+        return {
+          status: "not-found",
+          browserSessionId: input.browserSessionId,
+          kind: input.kind,
+          error: {
+            code: "browser-target-not-found",
+            message: "No element matched the requested ref or selector.",
+          },
+        };
+      if (input.kind === "text")
+        return { status: "ok", browserSessionId: input.browserSessionId, kind: input.kind, value: await locator.first().textContent() };
+      if (input.kind === "html")
+        return { status: "ok", browserSessionId: input.browserSessionId, kind: input.kind, value: await locator.first().innerHTML() };
+      if (input.kind === "value")
+        return { status: "ok", browserSessionId: input.browserSessionId, kind: input.kind, value: await locator.first().inputValue() };
+      if (input.kind === "attribute") {
+        if (!input.attribute)
+          throw new Error("browser.get attribute requires attribute.");
+        return {
+          status: "ok",
+          browserSessionId: input.browserSessionId,
+          kind: input.kind,
+          value: await locator.first().getAttribute(input.attribute),
+        };
+      }
+      throw new Error(`Unsupported browser.get kind: ${input.kind}`);
+    } catch (error) {
+      return {
+        status: "failed",
+        browserSessionId: input.browserSessionId,
+        kind: input.kind,
+        error: {
+          code: "browser-get-failed",
+          message: error instanceof Error ? error.message : String(error),
+        },
+      };
+    }
+  }
+
+  async function wait(input: BrowserWaitInput): Promise<BrowserWaitResult> {
+    const session = sessions.get(input.browserSessionId);
+    const timeoutMs = effectiveTimeout(input.timeoutMs);
+    const start = Date.now();
+    if (!session)
+      return {
+        status: "not-found",
+        browserSessionId: input.browserSessionId,
+        durationMs: Date.now() - start,
+        timeoutMs,
+        error: {
+          code: "browser-session-not-found",
+          message: `No browser session exists for ${input.browserSessionId}`,
+        },
+      };
+
+    try {
+      if (input.until.kind === "ref" || input.until.kind === "selector") {
+        const target = input.until.kind === "ref"
+          ? session.refs.get(input.until.ref)
+          : descriptorForSelector(input.until.selector);
+        if (!target)
+          throw new Error(input.until.kind === "ref"
+            ? `Unknown browser ref: ${input.until.ref}`
+            : "Unknown browser selector target.");
+        await locatorFor(session.page, target).waitFor({
+          state: input.until.state ?? "visible",
+          timeout: timeoutMs,
+        });
+      } else if (input.until.kind === "text") {
+        await session.page.getByText(input.until.text, {
+          ...(input.until.exact !== undefined ? { exact: input.until.exact } : {}),
+        }).waitFor({ state: "visible", timeout: timeoutMs });
+      } else if (input.until.kind === "url") {
+        await session.page.waitForURL(input.until.pattern, { timeout: timeoutMs });
+      } else if (input.until.kind === "load") {
+        await session.page.waitForLoadState(input.until.state ?? "load", { timeout: timeoutMs });
+      } else {
+        await session.page.waitForFunction(
+          ({ code, input: pageInput }) => {
+            const fn = new Function("input", code) as (input: unknown) => unknown;
+            return fn(pageInput);
+          },
+          { code: input.until.code, input: input.until.input ?? null },
+          { timeout: timeoutMs },
+        );
+      }
+      session.lastUsedAt = new Date().toISOString();
+      return {
+        status: "ok",
+        browserSessionId: input.browserSessionId,
+        matched: input.until,
+        durationMs: Date.now() - start,
+        timeoutMs,
+      };
+    } catch (error) {
+      return {
+        status: "failed",
+        browserSessionId: input.browserSessionId,
+        durationMs: Date.now() - start,
+        timeoutMs,
+        error: {
+          code: isTimeoutError(error) ? "browser-wait-timeout" : "browser-wait-failed",
+          message: error instanceof Error ? error.message : String(error),
+        },
+      };
+    }
+  }
+
+  async function evaluate(input: BrowserCodeRunInput): Promise<BrowserCodeRunResult> {
+    const session = sessions.get(input.browserSessionId);
+    if (!session) return missingCodeRun(input.browserSessionId, input.timeoutMs);
+    const result = await runPageCode(session.page, input);
+    session.lastUsedAt = new Date().toISOString();
+    return result;
+  }
+
+  async function playwright(input: BrowserCodeRunInput): Promise<BrowserCodeRunResult> {
+    const session = sessions.get(input.browserSessionId);
+    if (!session) return missingCodeRun(input.browserSessionId, input.timeoutMs);
+    const result = await runPlaywrightCode(
+      {
+        browser: session.browser,
+        page: session.page,
+        refs: session.refs.selected(input.refs),
+      },
+      input,
+    );
+    session.lastUsedAt = new Date().toISOString();
+    return result;
+  }
+
+  async function console(input: BrowserSignalToolInput) {
+    const session = sessions.get(input.browserSessionId);
+    if (!session)
+      return { status: "not-found", browserSessionId: input.browserSessionId, entries: [], nextCursor: input.since ?? 0 };
+    session.lastUsedAt = new Date().toISOString();
+    return { browserSessionId: input.browserSessionId, ...session.signals.console(input) };
+  }
+
+  async function network(input: BrowserSignalToolInput) {
+    const session = sessions.get(input.browserSessionId);
+    if (!session)
+      return { status: "not-found", browserSessionId: input.browserSessionId, entries: [], nextCursor: input.since ?? 0 };
+    session.lastUsedAt = new Date().toISOString();
+    return { browserSessionId: input.browserSessionId, ...session.signals.network(input) };
   }
 
   async function close(browserSessionId: string): Promise<BrowserCloseResult> {
@@ -495,7 +790,23 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
     return session ? { browser: session.browser, page: session.page } : undefined;
   }
 
-  return { open, snapshot, act, screenshot, close, closeAll, list, execution };
+  return {
+    open,
+    snapshot,
+    find,
+    act,
+    wait,
+    get,
+    evaluate,
+    playwright,
+    console,
+    network,
+    screenshot,
+    close,
+    closeAll,
+    list,
+    execution,
+  };
 }
 
 async function closeBrowserBounded(browser: Browser): Promise<void> {
@@ -515,12 +826,108 @@ function screenshotFilename(value: string): string {
 function resolveActTarget(
   session: BrowserSession,
   input: BrowserActInput,
-): { ref?: string; selector: string; role?: string; name?: string } | undefined {
-  if (input.selector) return { selector: input.selector };
+): BrowserRefTarget | BrowserLocatorDescriptor | undefined {
+  if (input.selector) return descriptorForSelector(input.selector);
   if (!input.ref) return undefined;
   const ref = session.refs.get(input.ref);
   if (!ref) return undefined;
-  return { ref: input.ref, ...ref };
+  return ref;
+}
+
+function resolveTarget(
+  session: BrowserSession,
+  input: { ref?: string; selector?: string },
+): BrowserRefTarget | BrowserLocatorDescriptor | undefined {
+  if (input.selector) return descriptorForSelector(input.selector);
+  return input.ref ? session.refs.get(input.ref) : undefined;
+}
+
+function publicTarget(
+  target: BrowserRefTarget | BrowserLocatorDescriptor,
+): { ref?: string; selector?: string; role?: string; name?: string } {
+  if ("ref" in target) {
+    return {
+      ref: target.ref,
+      ...(target.selector ? { selector: target.selector } : {}),
+      ...(target.role ? { role: target.role } : {}),
+      ...(target.name ? { name: target.name } : {}),
+    };
+  }
+  return target.kind === "selector" ? { selector: target.selector } : {};
+}
+
+function findDescriptor(input: BrowserFindInput): BrowserLocatorDescriptor {
+  if (input.by === "selector") return { kind: "selector", selector: input.value };
+  if (input.by === "role")
+    return {
+      kind: "role",
+      role: input.value,
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.exact !== undefined ? { exact: input.exact } : {}),
+    };
+  if (input.by === "text")
+    return {
+      kind: "text",
+      text: input.value,
+      ...(input.exact !== undefined ? { exact: input.exact } : {}),
+    };
+  if (input.by === "label")
+    return {
+      kind: "label",
+      text: input.value,
+      ...(input.exact !== undefined ? { exact: input.exact } : {}),
+    };
+  if (input.by === "placeholder")
+    return {
+      kind: "placeholder",
+      text: input.value,
+      ...(input.exact !== undefined ? { exact: input.exact } : {}),
+    };
+  return { kind: "testId", testId: input.value };
+}
+
+async function readableLocatorName(locator: ReturnType<Page["locator"]>): Promise<string | undefined> {
+  const text = (await locator.first().textContent().catch(() => null))?.replace(/\s+/g, " ").trim();
+  if (text) return text.slice(0, 120);
+  const aria = await locator.first().getAttribute("aria-label").catch(() => null);
+  if (aria) return aria.slice(0, 120);
+  const placeholder = await locator.first().getAttribute("placeholder").catch(() => null);
+  if (placeholder) return placeholder.slice(0, 120);
+  const value = await locator.first().inputValue().catch(() => null);
+  return value ? value.slice(0, 120) : undefined;
+}
+
+function missingCodeRun(
+  browserSessionId: string,
+  timeoutMs: number | undefined,
+): BrowserCodeRunResult {
+  return {
+    status: "not-found",
+    browserSessionId,
+    durationMs: 0,
+    timeoutMs: effectiveTimeout(timeoutMs),
+    error: {
+      code: "browser-session-not-found",
+      message: `No browser session exists for ${browserSessionId}`,
+    },
+    next: openBrowserNext(),
+  };
+}
+
+function openBrowserNext() {
+  return {
+    actions: [
+      {
+        id: "open-browser",
+        tool: "browser.open",
+        why: "Create an MCP-owned browser session before using browser workbench tools.",
+      },
+    ],
+  };
+}
+
+function isTimeoutError(error: unknown): boolean {
+  return error instanceof Error && /timeout/i.test(error.message);
 }
 
 function browserMode(input: BrowserOpenInput): BrowserSessionMode {

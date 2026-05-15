@@ -202,6 +202,54 @@ _Avoid_: invisible default, CI-only headless browser, screenshot-only debugging
 The primary dev-mode browser forensics tool exposed through MCP. It should summarize the current page as an agent-usable investigation packet: URL, title, semantic structure, interactive targets, stable refs, visible errors, relevant network/console signals, screenshots or crops when useful, artifacts, and next guidance.
 _Avoid_: raw DOM dump, screenshot-only artifact, selector list, generic Playwright snapshot
 
+**Browser Workbench**:
+The fixed **Dev MCP Tool Grammar** for universal browser exploration and interaction: snapshot-driven refs, user-like actions, waits, targeted reads, console and network inspection, page evaluation, screenshots, tabs, and browser session controls.
+_Avoid_: provider-owned browser action registry, journey helper registry, generic `browser.explore.run`, hidden Playwright script, raw CDP shell
+
+**Browser Playwright Escape Hatch**:
+The explicit `browser.playwright` Dev MCP tool for agent-only live exploration that needs direct Playwright `page`, `browser`, and context access before the interaction is crystallized into journey code. It executes an async function body supplied by the agent against the live **MCP-Owned Browser Session** and returns that body's JSON-serializable output as the tool result. Execution is timeout-bounded by default, and responses report elapsed duration plus the effective timeout. It may mutate the live browser session; snapshot refs should be treated as stale afterward. JSON `input` is passed separately from code, and latest snapshot `refs` are provided as a lightweight bridge to Playwright selectors.
+_Avoid_: primary browser workflow, verify helper, registered journey closure, hidden generic code runner
+
+**Browser Page Evaluation**:
+The `browser.eval` Dev MCP tool for running an async function body in the page context during live exploration, separate from `browser.get` for simple reads and `browser.playwright` for full Playwright access. It shares the `browser.playwright` timeout and JSON-serializable output response shape. It may mutate page state; snapshot refs should be treated as stale afterward. JSON `input` is passed separately from code.
+_Avoid_: primary interaction grammar, Playwright closure, journey helper, unbounded script
+
+**Browser Targeted Read**:
+The `browser.get` Dev MCP tool for simple targeted reads from the active browser session, using a `kind` such as text, HTML, value, attribute, title, URL, or count instead of many separate read tools.
+_Avoid_: second snapshot format, raw DOM dump, Playwright escape hatch, tool-per-property sprawl
+
+**Browser Conditional Wait**:
+The `browser.wait` Dev MCP tool for waiting on browser-visible conditions such as a ref, selector, text, URL pattern, load state, or page-context function, with timeout feedback and no unconditional sleep primitive.
+_Avoid_: fixed delay, hidden retry loop, Playwright-only wait script, unbounded wait
+
+**Browser Semantic Find**:
+The `browser.find` Dev MCP tool for resolving semantic locator queries such as role, text, label, placeholder, test id, or CSS selector into agent-usable targets without requiring a prior snapshot. It returns reusable targets; actions stay in `browser.act`.
+_Avoid_: replacing snapshot workflow, raw DOM search, product-specific selector helper, hidden Playwright locator string
+
+**Browser Ref Store**:
+The per-**MCP-Owned Browser Session** target store shared by snapshot refs and find refs. `browser.snapshot` emits `@eN` refs, `browser.find` emits `@fN` refs, and both can be used by browser workbench tools until browser state changes make them stale.
+_Avoid_: incompatible ref namespaces, selector retyping, hidden stale target reuse
+
+**Browser Signal Buffer**:
+The per-**MCP-Owned Browser Session** console and network event buffer exposed through `browser.console` and `browser.network` with cursor-based incremental reads.
+_Avoid_: stuffing detailed logs into snapshot, global log stream, hidden terminal-only signals, unbounded event dump
+
+**Browser Action Set**:
+The user-like actions supported directly by `browser.act` for common agent exploration: click, fill, press, hover, focus, check, uncheck, select, and scroll.
+_Avoid_: rare interaction kitchen sink, file transfer policy, coordinate-level mouse API, hidden Playwright script
+
+**Browser Screenshot Artifact**:
+An explicit screenshot artifact captured by `browser.screenshot` from an **MCP-Owned Browser Session**, returning the artifact location for agent inspection and later reference.
+_Avoid_: automatic screenshot after every action, hidden visual side effect, screenshot-only debugging
+
+**Browser Workbench Output Policy**:
+The browser workbench persistence rule: structured `browser.snapshot` packets are lightweight primary forensics and may be artifacted automatically; screenshots are explicit artifacts; targeted reads, waits, signal queries, eval, and Playwright escape-hatch calls return inline output unless a future tool explicitly asks to persist.
+_Avoid_: artifact spam, hidden screenshots, losing snapshot history, treating every exploratory output as durable proof
+
+**MCP Tool Discoverability**:
+The contract that every agent-facing MCP tool and input field must carry clear descriptions so an agent can choose and call the tool correctly from `tools/list` without reading source code.
+_Avoid_: schema-only discovery, terse placeholder descriptions, hidden argument semantics, README-dependent tool usage
+
 **Run Forensics**:
 The per-step evidence capture for a **Journey Run**: before/after/failure screenshots, scoped console/network signals, result artifacts, and step feedback.
 _Avoid_: router-owned screenshot logic, unscoped browser logs, hidden debug side effects
@@ -294,6 +342,27 @@ _Avoid_: per-adapter status enum, tool-specific response shape, unchecked respon
 - The **Dev MCP Server** should own Playwright through **MCP-Owned Browser Sessions**, not require callers to inject browser/page objects into tool calls.
 - **Visible Dev Browser** is the default for dev-mode MCP operations; closure and CI may use headless browser execution.
 - **Browser Snapshot** should be the default forensics entry point for visible browser state, combining semantic page structure, interactive refs, visual evidence, and debugging signals into one agent-readable packet.
+- Browser exploration should use a fixed **Browser Workbench** grammar under `browser.*`, not a provider-owned `browser.explore.list` / `browser.explore.run` pattern. Browser primitives are universal enough to deserve direct tools, unlike stack-specific runtime capabilities.
+- The **Browser Workbench** is agent-facing Dev MCP exploration, not a journey extension registry. Journey code already receives the configured execution objects such as Playwright `page` and `browser` through **Harness Types**.
+- `browser.playwright` is the named escape hatch for agent-only Dev MCP exploration that needs direct Playwright access. It executes an async closure-like body against the live `page`, `browser`, and context, returns the body output as the tool result, and should be documented as a last-resort exploration tool, not the primary workflow and not part of `agent-e2e verify`.
+- `browser.playwright` may mutate the live **MCP-Owned Browser Session**. After it runs, agents should assume previous `browser.snapshot` refs are stale and capture a fresh snapshot before ref-based actions.
+- `browser.eval` and `browser.playwright` should accept JSON `input` separately from `code` so agents can pass data without string interpolation or quoting hazards.
+- `browser.playwright` should receive latest snapshot `refs` alongside `page`, `browser`, context, and `input`, but should not grow a large internal helper SDK that duplicates MCP tools.
+- `browser.eval` and `browser.playwright` should treat `code` as an async function body with explicit `return`, not as a single expression.
+- `browser.get`, `browser.eval`, and `browser.playwright` are distinct browser read/escape layers: `browser.get` for simple targeted reads, `browser.eval` for page-context JavaScript, and `browser.playwright` for full Playwright access.
+- `browser.eval` may mutate page state because page-context JavaScript cannot be reliably constrained to read-only behavior. After it runs, agents should assume previous `browser.snapshot` refs are stale and capture a fresh snapshot before ref-based actions.
+- `browser.get` should be one targeted-read tool with a `kind` selector rather than separate tools per property, keeping the browser tool list compact while still covering common reads.
+- `browser.wait` should wait for explicit browser-visible conditions with elapsed-duration and timeout feedback. It should not expose an unconditional sleep primitive in the first browser workbench design.
+- `browser.find` should provide direct semantic locator resolution for role, text, label, placeholder, test id, and CSS selector queries. It complements, but does not replace, `browser.snapshot`; refs from snapshots remain the default visible-state workflow. It returns reusable targets and should not perform actions itself.
+- `browser.snapshot` refs and `browser.find` refs should share one **Browser Ref Store** per browser session. Snapshot refs use `@eN`, find refs use `@fN`, and both are valid inputs for `browser.act`, `browser.get`, `browser.wait`, and `browser.playwright.refs`.
+- Semantic locator grammar should live in `browser.find` only. `browser.act`, `browser.get`, and `browser.wait` should accept refs or selectors rather than duplicating role/text/label/test-id inputs inline.
+- Browser console and network details should be exposed as separate `browser.console` and `browser.network` tools backed by per-session **Browser Signal Buffers**. `browser.snapshot` may summarize visible browser state, but it should not become a full console or network dump.
+- `browser.act` should cover the common **Browser Action Set** directly and leave rare interactions such as drag, upload, download, raw mouse, or raw keyboard APIs to `browser.playwright` until they earn first-class contracts.
+- `browser.act` should not capture screenshots automatically. Agents should call `browser.screenshot` explicitly when they need visual evidence, and `browser.screenshot` should return the artifact location.
+- `browser.snapshot` should continue to write a lightweight structured artifact automatically because it is the primary browser forensics packet and ref source. Other browser workbench calls should return inline output unless they are explicitly artifact-producing tools such as `browser.screenshot`.
+- Agent-facing MCP tools must be self-describing through `tools/list`: every browser workbench tool and every input field should have descriptions that explain when to use it, accepted values, defaults, and important side effects such as stale refs or mutation.
+- `browser.tabs` should stay out of the first **Browser Workbench** slice because it changes the **MCP-Owned Browser Session** model from one active page to multi-page management. New-tab and multi-page flows can use `browser.playwright` until tabs earn a first-class follow-up.
+- `browser.network` should be read-only in the first **Browser Workbench** slice. Network routing, mocking, aborting, and HAR recording are deferred because they change product behavior or artifact weight and need a separate contract.
 - **Run Forensics** should be owned by a focused Module below the **MCP Control Surface**, keeping browser evidence capture local while the tool router stays orchestration-focused.
 - The default **Dev MCP Tool Grammar** should use reusable harness vocabulary and avoid product-specific tool names.
 - The **Reference Showcase App** README should include a **Showcase Build Narrative** so future agents and humans can understand how the app was built through journeys, not just how to run it.
@@ -347,6 +416,31 @@ _Avoid_: per-adapter status enum, tool-specific response shape, unchecked respon
 - Dev MCP mode resolved: development should use an HTTP **Dev MCP Server**, not only one-shot stdio, so journey definitions and app code can hot-reload during agent iteration.
 - MCP browser ownership resolved: dev-mode MCP operations should create and manage Playwright browser/page sessions themselves, headed by default for visibility, with headless reserved for closure/CI paths.
 - Browser forensics resolved: `browser.snapshot` should be the primary MCP browser forensics tool, not a narrow DOM or screenshot helper.
+- Browser workbench grammar resolved: browser tooling should expand through fixed universal `browser.*` tools rather than copying the provider-declared `stack.explore.list` / `stack.explore.run` model.
+- Browser workbench audience resolved: browser workbench tools serve the agent's live MCP exploration loop, while crystallized journeys continue to use direct execution objects such as Playwright `page` and `browser`.
+- Browser escape hatch shape resolved: `browser.playwright` executes an async closure-like body with direct live Playwright access rather than a declarative mini-language or page-only evaluation.
+- Browser escape hatch output resolved: `browser.playwright` returns the closure output as the tool result and does not create automatic evidence artifacts by default.
+- Browser escape hatch serialization resolved: `browser.playwright` may use arbitrary Playwright objects inside the closure, but the returned output must be JSON-serializable for MCP transport.
+- Browser escape hatch timeout resolved: `browser.playwright` defaults to a 5s timeout and accepts an override capped at 30s so exploratory Playwright code cannot hang the Dev MCP server indefinitely. The tool response reports elapsed duration and effective timeout so agents can distinguish fast failures from timeout-bound failures.
+- Browser escape hatch mutation resolved: `browser.playwright` can mutate the live browser session during exploration, and any previous snapshot refs must be considered stale afterward.
+- Browser eval boundary resolved: keep `browser.eval` as a separate page-context JavaScript tool even though `browser.playwright` exists, because agents need a lighter escape hatch for `window`, DOM, localStorage, and app globals.
+- Browser eval/playwright symmetry resolved: `browser.eval` and `browser.playwright` share timeout defaults, timeout caps, elapsed-duration reporting, and JSON-serializable output requirements; only the execution context differs.
+- Browser eval/playwright input resolved: both tools accept JSON `input` separately from `code`, and expose that input to the executed code.
+- Browser playwright refs resolved: `browser.playwright` receives selected snapshot/find refs as selector or locator metadata so agents can bridge from `@eN`/`@fN` exploration to direct Playwright calls without a larger helper SDK.
+- Browser code shape resolved: `browser.eval` and `browser.playwright` execute async function bodies with explicit `return`, allowing multi-line exploratory code instead of expression-only snippets.
+- Browser eval mutation resolved: `browser.eval` can mutate page state during exploration, so previous snapshot refs must be considered stale afterward.
+- Browser targeted read resolved: `browser.get` uses a `kind` field for text, HTML, value, attribute, title, URL, and count reads instead of expanding the MCP vocabulary with one tool per property.
+- Browser wait resolved: `browser.wait` uses an `until` condition for ref, selector, text, URL pattern, load state, or page-context function, shares the browser timeout feedback shape, and intentionally omits fixed sleep in v1.
+- Browser semantic find resolved: include `browser.find` in v1 for role, text, label, placeholder, test id, and CSS selector queries, returning reusable targets rather than performing actions, while keeping `browser.snapshot` as the primary visible-state and ref workflow.
+- Browser ref store resolved: snapshot refs use `@eN`, find refs use `@fN`, and both share one browser session ref store accepted by the browser workbench tools.
+- Browser locator ownership resolved: `browser.find` owns semantic locator resolution; `browser.act`, `browser.get`, and `browser.wait` consume refs or selectors and do not repeat the semantic locator grammar.
+- Browser signal buffers resolved: expose console and network events through `browser.console` and `browser.network` with cursor/since incremental reads per browser session rather than embedding detailed signal history in every snapshot.
+- Browser action set resolved: `browser.act` supports click, fill, press, hover, focus, check, uncheck, select, and scroll in the browser workbench v1; rarer interactions stay behind `browser.playwright`.
+- Browser screenshot capture resolved: `browser.act` does not auto-capture screenshots; `browser.screenshot` is explicit and returns the screenshot artifact location.
+- Browser workbench output policy resolved: `browser.snapshot` auto-artifacts its structured packet, `browser.screenshot` is explicit and artifact-producing, and other browser workbench tools return inline output by default.
+- MCP discoverability resolved: browser workbench implementation must include high-quality tool and input descriptions in the MCP schemas, not rely on README prose or source inspection for correct agent usage.
+- Browser tabs deferred: avoid `browser.tabs` in the first Browser Workbench slice because it changes browser session shape; use `browser.playwright` for exceptional multi-page exploration until a tab model is designed.
+- Browser network mutation deferred: `browser.network` v1 observes network events only; route/mock/abort/HAR capabilities stay out of scope until mutation and artifact semantics are designed.
 - Dev MCP tool direction resolved: use a Playwright-backed MCP tool grammar shaped around stack, run, browser, journey, artifact, cleanup, and proof operations.
 - Showcase documentation outcome resolved: the showcase README should tell how the showcase was built through the harness, producing a working app, agent-inspectable proof history, and CI-demonstrable verification.
 - Journey UX priority resolved: design the journey authoring and agent execution experience upfront before building the richer showcase, so the app demonstrates an intentional proof workflow rather than accidental tool plumbing.

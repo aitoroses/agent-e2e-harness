@@ -24,6 +24,13 @@ import {
   resolveAgentE2EConfigPath,
   type LoadAgentE2EConfigOptions,
 } from "./config-loader.js";
+import {
+  browserWorkbenchInputSchema,
+  browserWorkbenchSummary,
+  DEV_MCP_BROWSER_WORKBENCH_TOOLS,
+  implementedBrowserWorkbenchToolNames,
+  type DevMcpBrowserWorkbenchController,
+} from "./browser-workbench-tools.js";
 import { createReloadingHarnessSource, type ReloadingHarnessSourceOptions } from "./reloading-harness.js";
 
 type RuntimeZod = typeof import("zod/v4").z;
@@ -70,12 +77,7 @@ export const DEV_MCP_TOOL_GRAMMAR = [
   "journey.step",
   "journey.untilPhase",
   "journey.phase",
-  "browser.open",
-  "browser.sessions",
-  "browser.snapshot",
-  "browser.act",
-  "browser.screenshot",
-  "browser.close",
+  ...DEV_MCP_BROWSER_WORKBENCH_TOOLS,
 ] as const;
 
 export type DevMcpToolName = (typeof DEV_MCP_TOOL_GRAMMAR)[number];
@@ -93,13 +95,11 @@ export interface DevMcpToolResponse {
   [key: string]: unknown;
 }
 
-export interface DevMcpBrowserSessionController {
+export interface DevMcpBrowserSessionController extends DevMcpBrowserWorkbenchController {
   open: (input?: Record<string, unknown>) => Promise<unknown>;
   snapshot: (browserSessionId: string) => Promise<unknown>;
-  act?: (input: Record<string, unknown>) => Promise<unknown>;
   close: (browserSessionId: string) => Promise<unknown>;
   closeAll?: () => Promise<unknown>;
-  screenshot?: (input: Record<string, unknown>) => Promise<unknown>;
   execution?: (browserSessionId: string) => unknown;
   list: () => unknown;
 }
@@ -529,6 +529,13 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             result: await options.browserSessions.snapshot(browserSessionId),
           });
         }
+        case "browser.find": {
+          if (!options.browserSessions)
+            return missingDependency(name, "browserSessions");
+          if (!options.browserSessions.find)
+            return blocked(name, "browser-find-not-wired", "The browser session controller does not expose browser.find.");
+          return ok(name, { result: await options.browserSessions.find(args) });
+        }
         case "browser.close": {
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
@@ -553,6 +560,48 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           return ok(name, {
             result: await options.browserSessions.act(args),
           });
+        }
+        case "browser.wait": {
+          if (!options.browserSessions)
+            return missingDependency(name, "browserSessions");
+          if (!options.browserSessions.wait)
+            return blocked(name, "browser-wait-not-wired", "The browser session controller does not expose conditional browser waits.");
+          return ok(name, { result: await options.browserSessions.wait(args) });
+        }
+        case "browser.get": {
+          if (!options.browserSessions)
+            return missingDependency(name, "browserSessions");
+          if (!options.browserSessions.get)
+            return blocked(name, "browser-get-not-wired", "The browser session controller does not expose targeted browser reads.");
+          return ok(name, { result: await options.browserSessions.get(args) });
+        }
+        case "browser.eval": {
+          if (!options.browserSessions)
+            return missingDependency(name, "browserSessions");
+          if (!options.browserSessions.evaluate)
+            return blocked(name, "browser-eval-not-wired", "The browser session controller does not expose page-context code execution.");
+          return ok(name, { result: await options.browserSessions.evaluate(args) });
+        }
+        case "browser.playwright": {
+          if (!options.browserSessions)
+            return missingDependency(name, "browserSessions");
+          if (!options.browserSessions.playwright)
+            return blocked(name, "browser-playwright-not-wired", "The browser session controller does not expose direct Playwright code execution.");
+          return ok(name, { result: await options.browserSessions.playwright(args) });
+        }
+        case "browser.console": {
+          if (!options.browserSessions)
+            return missingDependency(name, "browserSessions");
+          if (!options.browserSessions.console)
+            return blocked(name, "browser-console-not-wired", "The browser session controller does not expose browser console signal reads.");
+          return ok(name, { result: await options.browserSessions.console(args) });
+        }
+        case "browser.network": {
+          if (!options.browserSessions)
+            return missingDependency(name, "browserSessions");
+          if (!options.browserSessions.network)
+            return blocked(name, "browser-network-not-wired", "The browser session controller does not expose browser network signal reads.");
+          return ok(name, { result: await options.browserSessions.network(args) });
         }
         case "browser.screenshot": {
           if (!options.browserSessions)
@@ -682,20 +731,20 @@ function implementedToolNames(
     );
 
   if (options.browserSessions) {
-    tools.push(
-      "browser.open",
-      "browser.sessions",
-      "browser.snapshot",
-      "browser.close",
-    );
-    if (options.browserSessions.act) tools.push("browser.act");
-    if (options.browserSessions.screenshot) tools.push("browser.screenshot");
+    tools.push(...implementedBrowserWorkbenchToolNames(options.browserSessions));
   }
 
   return tools;
 }
 
+function isBrowserWorkbenchToolName(
+  name: DevMcpToolName,
+): name is (typeof DEV_MCP_BROWSER_WORKBENCH_TOOLS)[number] {
+  return (DEV_MCP_BROWSER_WORKBENCH_TOOLS as readonly string[]).includes(name);
+}
+
 function summaryFor(name: DevMcpToolName): string {
+  if (isBrowserWorkbenchToolName(name)) return browserWorkbenchSummary(name);
   const summaries: Record<DevMcpToolName, string> = {
     "journey.list": "List available journeys and profiles.",
     "journey.inspect": "Read the full Inspectable Journey Contract for a journey.",
@@ -709,12 +758,19 @@ function summaryFor(name: DevMcpToolName): string {
     "run.reseed":
       "Delete journey-owned resources and run environment seed again.",
     "run.teardown": "Delete journey-owned resources for a run.",
-    "browser.open": "Open an MCP-owned browser session.",
-    "browser.sessions": "List MCP-owned browser sessions.",
-    "browser.snapshot": "Capture the primary browser forensics packet.",
-    "browser.act": "Act on a current browser snapshot ref.",
-    "browser.screenshot": "Capture a supporting screenshot artifact.",
-    "browser.close": "Close an MCP-owned browser session.",
+    "browser.open": browserWorkbenchSummary("browser.open"),
+    "browser.sessions": browserWorkbenchSummary("browser.sessions"),
+    "browser.snapshot": browserWorkbenchSummary("browser.snapshot"),
+    "browser.find": browserWorkbenchSummary("browser.find"),
+    "browser.act": browserWorkbenchSummary("browser.act"),
+    "browser.wait": browserWorkbenchSummary("browser.wait"),
+    "browser.get": browserWorkbenchSummary("browser.get"),
+    "browser.eval": browserWorkbenchSummary("browser.eval"),
+    "browser.playwright": browserWorkbenchSummary("browser.playwright"),
+    "browser.console": browserWorkbenchSummary("browser.console"),
+    "browser.network": browserWorkbenchSummary("browser.network"),
+    "browser.screenshot": browserWorkbenchSummary("browser.screenshot"),
+    "browser.close": browserWorkbenchSummary("browser.close"),
     "journey.step": "Run one journey step.",
     "journey.untilPhase": "Run journey steps until a phase boundary.",
     "journey.phase": "Run a journey phase.",
@@ -728,6 +784,9 @@ function inputSchemaForTool(
   name: DevMcpToolName,
   z: RuntimeZod,
 ): Record<string, unknown> {
+  if (isBrowserWorkbenchToolName(name))
+    return browserWorkbenchInputSchema(name, z);
+
   const stringId = () => z.string().min(1);
   const optionalArray = () => z.array(z.unknown()).optional();
 
@@ -737,7 +796,6 @@ function inputSchemaForTool(
     case "stack.stop":
     case "stack.explore.list":
     case "journey.list":
-    case "browser.sessions":
       return {};
     case "stack.explore.run":
       return {
@@ -794,35 +852,6 @@ function inputSchemaForTool(
       return {
         runId: stringId(),
         phaseId: stringId(),
-      };
-    case "browser.open":
-      return {
-        headed: z.boolean().optional(),
-        slowMoMs: z.number().nonnegative().optional(),
-        targetUrl: stringId().optional(),
-        journeyId: stringId().optional(),
-        runId: stringId().optional(),
-        artifactRoot: stringId().optional(),
-      };
-    case "browser.snapshot":
-    case "browser.close":
-      return {
-        browserSessionId: stringId(),
-      };
-    case "browser.act":
-      return {
-        browserSessionId: stringId(),
-        action: z.enum(["click", "fill", "press"]),
-        ref: stringId().optional(),
-        selector: stringId().optional(),
-        text: z.string().optional(),
-        key: z.string().optional(),
-      };
-    case "browser.screenshot":
-      return {
-        browserSessionId: stringId(),
-        path: stringId().optional(),
-        fullPage: z.boolean().optional(),
       };
   }
 }

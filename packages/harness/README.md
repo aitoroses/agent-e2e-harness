@@ -167,7 +167,15 @@ stack.explore.run
 run.begin
 browser.open
 browser.snapshot
+browser.find
 browser.act
+browser.wait
+browser.get
+browser.console
+browser.network
+browser.eval
+browser.playwright
+browser.screenshot
 journey.step
 artifact.read
 cleanup.plan

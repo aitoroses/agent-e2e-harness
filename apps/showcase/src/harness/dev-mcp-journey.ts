@@ -133,7 +133,9 @@ export function createShowcaseMcpJourney() {
                   guidance: [
                     { type: "inspect", label: "Open headed browser", target: "browser.open" },
                     { type: "inspect", label: "Capture browser snapshot", target: "browser.snapshot" },
+                    { type: "inspect", label: "Resolve Create proof note button", target: "browser.find" },
                     { type: "continue", label: "Click Create proof note", target: "browser.act" },
+                    { type: "inspect", label: "Wait for persisted status", target: "browser.wait" },
                   ],
                 };
               }

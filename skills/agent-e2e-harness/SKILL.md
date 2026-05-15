@@ -64,6 +64,34 @@ Provider-declared `stack.explore.*` tools must have:
 
 Only Verify Observation Tools can be used from journey execution during `agent-e2e verify`: `availableIn` includes `verify` and `risk` is exactly `none`. Dev-only tools must not fake product-visible behavior in CI. Mutations must come through the app path, seed, journey steps, reseed, or cleanup.
 
+## Browser Workbench Surface
+
+The fixed browser MCP grammar is:
+
+```text
+browser.open
+browser.sessions
+browser.snapshot
+browser.find
+browser.act
+browser.wait
+browser.get
+browser.eval
+browser.playwright
+browser.console
+browser.network
+browser.screenshot
+browser.close
+```
+
+Use `browser.snapshot` first to read visible state and receive `@eN` refs. Use `browser.find` when a semantic locator is clearer than a snapshot ref; it returns `@fN` refs for role, text, label, placeholder, test id, or selector queries.
+
+Use `browser.act` for one UI mutation at a time. It accepts refs or CSS selectors and supports click, fill, press, hover, focus, check, uncheck, select, and scroll. It does not take screenshots automatically; call `browser.screenshot` explicitly when visual evidence is useful.
+
+Use `browser.wait` instead of sleep. Wait conditions can target a ref, selector, text, URL pattern, load state, or page-context function and return `durationMs` plus `timeoutMs`.
+
+Use `browser.get` for targeted reads. Use `browser.console` and `browser.network` for cursor-based signal buffers. Use `browser.eval` or `browser.playwright` only when the standard workbench tools are too small for the exploration step; both require JSON input/output and report timeout feedback.
+
 ## Adoption Flow
 
 1. Read `references/adoption-workflow.md`; inspect the app and add the package/scripts/files.
@@ -106,7 +134,7 @@ Before claiming adoption works, prove:
 - The app has `@agent-e2e/harness` installed and scripts for `agent-e2e dev` and `agent-e2e verify`.
 - `agent-e2e.config.ts` loads journeys, stack provider, resources, and verify defaults.
 - At least one journey proves a real app behavior from seed.
-- The MCP loop can start the stack, begin a run, open/snapshot/act in a browser, run a journey step or phase, read artifacts, cleanup/reseed, close the browser, and stop the stack.
+- The MCP loop can start the stack, begin a run, open/snapshot/find/act/wait/get in a browser, inspect console/network signals when useful, run a journey step or phase, read artifacts, cleanup/reseed, close the browser, and stop the stack.
 - Stack exploration is proven: `stack.status`, `stack.logs`, `stack.explore.list`, and at least one `stack.explore.run` call work against concrete app tools.
 - `agent-e2e verify` runs from config and writes suite reports under `.agents-e2e/artifacts/_suites/<suite-id>/`.
 - Final evidence includes commands run, MCP URL, selected journey/profile, artifact paths, cleanup result, stack stop result, and CI/verify status.

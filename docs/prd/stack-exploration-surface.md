@@ -105,7 +105,7 @@ Dev MCP exposes every stack-provider-declared exploration tool, subject to risk 
 
 ## Out of Scope
 
-- Browser exploration tools. They will be designed separately as `browser.explore.*`.
+- Browser exploration tools. They are designed separately as the Browser Workbench under `browser.*`.
 - Native `stack.env`.
 - Separate `stack.services` or `stack.health`.
 - General shell execution as a universal harness tool.

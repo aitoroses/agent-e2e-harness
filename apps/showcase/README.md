@@ -35,7 +35,7 @@ In another terminal, discover the tools:
 mcporter list http://127.0.0.1:3766/mcp --allow-http --schema --json
 ```
 
-Expected checkpoint: `"status": "ok"` and 22 tools, including `stack.start`, `stack.logs`, `stack.explore.list`, `stack.explore.run`, `run.begin`, `browser.open`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.teardown`, and `stack.stop`.
+Expected checkpoint: `"status": "ok"` and 29 tools, including `stack.start`, `stack.logs`, `stack.explore.list`, `stack.explore.run`, `run.begin`, `browser.open`, `browser.find`, `browser.wait`, `browser.get`, `browser.console`, `browser.network`, `browser.eval`, `browser.playwright`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.teardown`, and `stack.stop`.
 
 Discover the provider-owned stack exploration surface:
 
@@ -84,14 +84,19 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.o
 
 Expected checkpoint: `"status": "open"` and a `browserSessionId`.
 
-Capture a snapshot, then click the fresh button ref:
+Capture a snapshot, resolve the button with `browser.find`, then click the fresh find ref:
 
 ```sh
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.snapshot --args '{"browserSessionId":"<browserSessionId>"}' --output json
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.act --args '{"browserSessionId":"<browserSessionId>","ref":"@e2","action":"click"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.find --args '{"browserSessionId":"<browserSessionId>","by":"role","value":"button","name":"Create proof note"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.act --args '{"browserSessionId":"<browserSessionId>","ref":"@f1","action":"click"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.wait --args '{"browserSessionId":"<browserSessionId>","until":{"kind":"text","text":"Proof note persisted"},"timeoutMs":5000}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.get --args '{"browserSessionId":"<browserSessionId>","selector":"body","kind":"text"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.console --args '{"browserSessionId":"<browserSessionId>","since":0}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.network --args '{"browserSessionId":"<browserSessionId>","since":0,"urlIncludes":"api/notes"}' --output json
 ```
 
-Expected checkpoints: `"title": "Proof Notes Showcase"` and `"action": "click"`.
+Expected checkpoints: `"title": "Proof Notes Showcase"`, a returned `@f1` button ref, `"action": "click"`, a successful wait with `durationMs`, targeted text that includes the created note, and cursor-based console/network packets.
 
 Run the proof step:
 
@@ -161,7 +166,6 @@ Interactive artifacts are generated under `.agents-e2e/artifacts/<journey>/<run>
   cleanup-plan.json
   cleanup.json
   forensics/browser-snapshot-*.json
-  forensics/action-click-*.png
   01-phase-phase-proof-notes/01-step-step-create-proof-note/
     before.png
     after.png
