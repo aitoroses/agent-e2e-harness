@@ -18,6 +18,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
+## [1.2.0] - 2026-05-15
+
+### Added
+
+- Browser Workbench Dev MCP surface with `browser.find`, expanded `browser.act`, `browser.wait`, `browser.get`, `browser.eval`, `browser.playwright`, `browser.console`, and `browser.network`.
+- Browser ref store, semantic find refs, conditional waits, targeted reads, bounded page/Playwright code runners, and per-session console/network signal buffers.
+- Explicit `browser.screenshot` evidence flow and Browser Workbench documentation across README, package README, showcase docs, proof transcript, and `agent-e2e-harness` skill guidance.
+- Versioned launch image prompts and regeneration instructions under `docs/launch/v1.0/`.
+
+### Changed
+
+- `browser.act` no longer creates implicit screenshots; callers should request visual evidence explicitly with `browser.screenshot`.
+- Maintainer guidance now treats `npx skills` as the canonical public skill install surface and requires release preparation to merge through PRs before tag/workflow publishing.
+
 ## [1.1.0] - 2026-05-14
 
 ### Added
