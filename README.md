@@ -305,6 +305,8 @@ browser.eval
 browser.playwright
 browser.screenshot
 journey.step
+journey.phase
+journey.untilPhase
 artifact.read
 cleanup.plan
 run.reseed

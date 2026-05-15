@@ -9,7 +9,7 @@ Keep prompts here, not only in `/tmp`, so future image updates can start from th
 | Image | Source asset | README asset | Aspect | Prompt |
 | --- | --- | --- | --- | --- |
 | Hero journey | `hero-agent-journey.png` | `hero-agent-journey-readme.png` | 16:9 | `prompts/hero-agent-journey-v7.md` |
-| MCP tool surface | `mcp-tool-surface.png` | `mcp-tool-surface-readme.png` | 4:3 | `prompts/mcp-tool-surface-v9.md` |
+| MCP tool surface | `mcp-tool-surface.png` | `mcp-tool-surface-readme.png` | 4:3 | `prompts/mcp-tool-surface-v12-flash.md` |
 | Proof loop | `proof-loop.png` | `proof-loop-readme.png` | 16:9 | `prompts/proof-loop-v7.md` |
 
 Older prompt iterations are kept when they explain a useful correction path.
@@ -19,15 +19,15 @@ Older prompt iterations are kept when they explain a useful correction path.
 Use Nano Banana Pro from the local skill:
 
 ```sh
-PROMPT_FILE=docs/launch/v1.0/prompts/mcp-tool-surface-v9.md
+PROMPT_FILE=docs/launch/v1.0/prompts/mcp-tool-surface-v12-flash.md
 OUT=/tmp/mcp-tool-surface-next.png
 PROMPT=$(awk '/^---$/{flag=1; next} flag' "$PROMPT_FILE")
 
 uv run ~/.claude/skills/nano-banana-pro/scripts/generate.py "$PROMPT" \
   -o "$OUT" \
   -a 4:3 \
-  -m gemini-3-pro-image-preview \
-  -s 4K
+  -m gemini-3.1-flash-image-preview \
+  -s 2K
 ```
 
 Use `-a 16:9` for `hero-agent-journey` and `proof-loop`.
@@ -67,7 +67,7 @@ git diff --check
 Expected source dimensions:
 
 - `hero-agent-journey.png`: `5504 x 3072`
-- `mcp-tool-surface.png`: `4800 x 3584`
+- `mcp-tool-surface.png`: `2400 x 1792`
 - `proof-loop.png`: `5504 x 3072`
 
 Expected README derivatives:
