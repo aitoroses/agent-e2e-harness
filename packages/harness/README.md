@@ -36,7 +36,7 @@ npm install -D @modelcontextprotocol/sdk playwright
 import { defineJourney } from '@agent-e2e/harness/core';
 import { defineAgentE2EConfig } from '@agent-e2e/harness/dev-mcp';
 import { runAgentE2EVerifyFromConfig } from '@agent-e2e/harness/verify';
-import { createProcessStackProvider } from '@agent-e2e/harness/stack';
+import { createProcessStackProvider, createStackStartContext } from '@agent-e2e/harness/stack';
 import { createRunArtifactRecorder } from '@agent-e2e/harness/artifacts';
 ```
 
@@ -187,6 +187,8 @@ stack.stop
 ```
 
 The fixed stack grammar is intentionally small: `stack.start`, `stack.list`, `stack.status`, `stack.stop`, `stack.logs`, `stack.explore.list`, and `stack.explore.run`. `stack.start` accepts an optional caller-chosen `stackId` and returns the effective id. `stack.list` recovers running Stack Instances. `stack.status`, `stack.logs`, `stack.explore.run`, and `stack.stop` require an explicit `stackId`; there is no public stop-all tool. `stack.status` is the unified stack-state packet: services, stable service ids, endpoints, checks, warnings, errors, artifacts, and next actions. There are no native `stack.services`, `stack.health`, or `stack.env` tools in v1.
+
+When a provider starts, `start(ctx)` receives a `StackStartContext` with mode, stack id, serial worker identity, suite id when verify supplies one, and a stack artifact scope. Providers can call `ctx.allocatePort(name)` or `ctx.allocateArtifactPath(name, { kind: "file" | "directory" })`; the harness records those named allocations for stack evidence without requiring duplicate metadata in the provider handle or status packet. Product-specific helpers such as database or queue allocators stay outside the core stack contract.
 
 `stack.logs` is live exploration. It requires a `stackId`, one `serviceId`, a required `tail`, and an optional `stream` of `stdout`, `stderr`, or `combined`.
 

@@ -1,13 +1,13 @@
 import { resolve } from "node:path";
 import { z } from "zod/v4";
 import {
-  allocateTcpPort,
   createProcessStackProvider,
   defineStackExploreTools,
   type ProcessStackHandle,
   type StackLogsInput,
   type StackLogsOutput,
   type StackExecutionSurface,
+  type StackStartContext,
   type StackProvider,
   type StackStatusPacket,
 } from "@agent-e2e/harness/stack";
@@ -112,7 +112,6 @@ export function createShowcaseDevStackProvider(
   const configuredAppUrl = config.appUrl ?? process.env.AGENT_E2E_SHOWCASE_URL;
   const configuredAppPort = optionalPort(config.appPort ?? process.env.AGENT_E2E_SHOWCASE_PORT)
     ?? portFromUrl(configuredAppUrl);
-  const logPath = resolve(showcaseRoot, ".agents-e2e/logs/next-dev.log");
   const postgres = createPostgresTestcontainersProvider({
     image: config.postgresImage ?? process.env.AGENT_E2E_POSTGRES_IMAGE ?? "postgres:16-alpine",
     database: config.database ?? "proof_notes",
@@ -124,10 +123,19 @@ export function createShowcaseDevStackProvider(
   return {
     id: "showcase-devmode-stack",
     explore: showcaseExploreTools,
-    async start() {
-      const appPort = configuredAppPort ?? await allocateTcpPort(appHost);
-      const appUrl = configuredAppUrl ?? `http://${appHost}:${appPort}`;
-      const postgresHandle = await postgres.start();
+    async start(ctx: StackStartContext) {
+      let appPort: number;
+      let appUrl: string;
+      if (configuredAppPort !== undefined) {
+        appPort = configuredAppPort;
+        appUrl = configuredAppUrl ?? `http://${appHost}:${appPort}`;
+      } else {
+        const allocatedAppPort = await ctx.allocatePort("showcase next dev", { host: appHost });
+        appPort = allocatedAppPort.port;
+        appUrl = configuredAppUrl ?? allocatedAppPort.url;
+      }
+      const logPath = ctx.allocateArtifactPath("next dev log", { kind: "file", extension: "log" }).path;
+      const postgresHandle = await postgres.start(ctx);
       const app = createProcessStackProvider({
         id: "showcase-next-dev",
         serviceId: "showcase-next-dev",
@@ -152,7 +160,7 @@ export function createShowcaseDevStackProvider(
         logPath,
       });
       try {
-        const appHandle = await app.start();
+        const appHandle = await app.start(ctx);
         return { appUrl, postgresHandle, appHandle, app };
       } catch (error) {
         await postgres.stop(postgresHandle);

@@ -111,6 +111,7 @@ export interface DevMcpToolRouterOptions<TStackHandle = unknown> {
   harness?: DevMcpHarnessProvider;
   browserSessions?: DevMcpBrowserSessionController;
   stackProvider?: StackProvider<TStackHandle>;
+  artifactRoot?: string;
 }
 
 export interface DevMcpToolRouter {
@@ -263,6 +264,7 @@ export async function startAgentE2EDevMcp<
 
   const serverOptions: DevMcpHttpServerOptions<TStackHandle> = {
     harness,
+    artifactRoot,
     host,
     port,
     path,
@@ -389,7 +391,9 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
   options: DevMcpToolRouterOptions<TStackHandle> = {},
 ): DevMcpToolRouter {
   const stackInstances = options.stackProvider
-    ? new StackInstanceManager(options.stackProvider)
+    ? new StackInstanceManager(options.stackProvider, {
+        artifactRoot: options.artifactRoot ?? DEFAULT_AGENT_E2E_ARTIFACT_ROOT,
+      })
     : undefined;
 
   async function callTool(
@@ -436,6 +440,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
               stackId: started.stackId,
               handle: serializableHandle(started.handle),
               stack: started.stack,
+              allocations: started.allocations,
             });
           } catch (error) {
             if (error instanceof StackInstanceManagerError)

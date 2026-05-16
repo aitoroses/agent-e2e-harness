@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chromium, type Browser, type Page } from "playwright";
-import { allocateTcpPort } from "@agent-e2e/harness/stack";
+import { allocateTcpPort, createStackStartContext } from "@agent-e2e/harness/stack";
 import {
   beginJourneyRun,
   runClosure,
@@ -24,7 +24,11 @@ beforeAll(async () => {
     appPort: port,
     appUrl: baseUrl,
   });
-  stackHandle = await stackProvider.start();
+  stackHandle = await stackProvider.start(createStackStartContext({
+    mode: "dev",
+    stackId: "showcase-e2e",
+    artifactRoot: ".agents-e2e/artifacts",
+  }));
   await expect(stackProvider.status(stackHandle)).resolves.toMatchObject({
     status: "ready",
     services: expect.arrayContaining([

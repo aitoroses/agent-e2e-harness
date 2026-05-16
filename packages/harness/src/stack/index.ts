@@ -1,9 +1,22 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { createServer } from "node:net";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeSync } from "node:fs";
 import { dirname } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { z } from "zod/v4";
+export {
+  allocateTcpPort,
+  createStackStartContext,
+  type StackAllocationRecord,
+  type StackArtifactPathAllocation,
+  type StackArtifactPathAllocationOptions,
+  type StackArtifactScope,
+  type StackPortAllocation,
+  type StackPortAllocationOptions,
+  type StackStartContext,
+  type StackStartContextOptions,
+  type StackStartMode,
+} from "./allocation.js";
+import type { StackStartContext } from "./allocation.js";
 
 export interface AgentE2EStackApiContract {
   surface: 'stack-provider-contracts';
@@ -149,7 +162,7 @@ export interface StackProvider<THandle = unknown> {
   readonly id: string;
   readonly explore?: readonly StackExploreToolDefinition<THandle, any, any>[];
   prepare?(): Promise<StackStatusPacket> | StackStatusPacket;
-  start(): Promise<THandle>;
+  start(context: StackStartContext): Promise<THandle>;
   status(handle: THandle): Promise<StackStatusPacket> | StackStatusPacket;
   logs?(handle: THandle, input: StackLogsInput): Promise<StackLogsOutput> | StackLogsOutput;
   stop(handle: THandle): Promise<StackStatusPacket> | StackStatusPacket;
@@ -245,20 +258,6 @@ export function createStackExploreExecutionClient<
       return outputResult.data;
     },
   };
-}
-
-export async function allocateTcpPort(host = "127.0.0.1"): Promise<number> {
-  return await new Promise((resolve, reject) => {
-    const server = createServer();
-    server.once("error", reject);
-    server.listen(0, host, () => {
-      const address = server.address();
-      server.close(() => {
-        if (typeof address === "object" && address) resolve(address.port);
-        else reject(new Error("Could not allocate a TCP port."));
-      });
-    });
-  });
 }
 
 export function createProcessStackProvider(

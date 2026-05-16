@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
+import { createStackStartContext } from "@agent-e2e/harness/stack";
 import {
   createPostgresTestcontainersProvider,
   type PostgresTestcontainersRuntime,
 } from "../src/harness/postgres-testcontainers.js";
 
 describe("showcase PostgreSQL Testcontainers provider", () => {
+  function testStackContext(stackId: string) {
+    return createStackStartContext({
+      mode: "dev",
+      stackId,
+      artifactRoot: ".agents-e2e/artifacts",
+    });
+  }
+
   it("starts PostgreSQL, applies schema SQL, reports status, and stops through injected runtime", async () => {
     const events: string[] = [];
     const runtime: PostgresTestcontainersRuntime = {
@@ -77,7 +86,7 @@ describe("showcase PostgreSQL Testcontainers provider", () => {
       async () => runtime,
     );
 
-    const handle = await provider.start();
+    const handle = await provider.start(testStackContext("postgres-provider"));
     expect(handle).toMatchObject({
       host: "127.0.0.1",
       port: 15432,
@@ -193,7 +202,7 @@ describe("showcase PostgreSQL Testcontainers provider", () => {
       async () => runtime,
     );
 
-    await expect(provider.start()).rejects.toThrow("schema failed");
+    await expect(provider.start(testStackContext("postgres-schema-failure"))).rejects.toThrow("schema failed");
     expect(events).toEqual([
       "image:postgres:16-alpine",
       "database:proof_notes",

@@ -9,6 +9,7 @@ import { createDevMcpToolRouter } from "@agent-e2e/harness/dev-mcp";
 import { createMcpHarnessServer } from "../src/mcp/index.js";
 import {
   defineStackExploreTools,
+  type StackStartContext,
   type StackProvider,
 } from "@agent-e2e/harness/stack";
 
@@ -377,6 +378,84 @@ describe("Dev MCP Tool Router", () => {
       ],
     });
     expect(events).toEqual(["start:handle-1", "start:handle-2", "stop:handle-1"]);
+  });
+
+  it("passes a dev-mode StackStartContext to providers and returns recorded allocations", async () => {
+    const artifactRoot = await mkdtemp(join(tmpdir(), "agent-e2e-router-stack-"));
+    const contexts: StackStartContext[] = [];
+    const provider: StackProvider<{ portUrl: string; logPath: string }> = {
+      id: "context-stack",
+      start: async (ctx) => {
+        contexts.push(ctx);
+        const port = await ctx.allocatePort("app");
+        const log = ctx.allocateArtifactPath("app log", { kind: "file", extension: "log" });
+        return { portUrl: port.url, logPath: log.path };
+      },
+      status: (handle) => ({
+        status: "ready",
+        summary: "ready",
+        services: [{ id: "app", status: "ready", url: handle.portUrl }],
+        artifacts: [{ id: "app-log", kind: "log", uri: `file://${handle.logPath}` }],
+        warnings: [],
+        errors: [],
+      }),
+      stop: () => ({
+        status: "stopped",
+        summary: "stopped",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({ stackProvider: provider, artifactRoot });
+
+    await expect(router.callTool("stack.start", { stackId: "dev-main" })).resolves.toMatchObject({
+      status: "ok",
+      stackId: "dev-main",
+      stack: { services: [{ url: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/) }] },
+      allocations: [
+        {
+          kind: "port",
+          name: "app",
+          stackId: "dev-main",
+          resource: {
+            host: "127.0.0.1",
+            url: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
+          },
+        },
+        {
+          kind: "artifact-file",
+          name: "app log",
+          stackId: "dev-main",
+          resource: {
+            path: expect.stringContaining("/stacks/dev-main/app-log.log"),
+            uri: expect.stringContaining("/stacks/dev-main/app-log.log"),
+          },
+        },
+      ],
+    });
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0]).toMatchObject({
+      mode: "dev",
+      stackId: "dev-main",
+      workerCount: 1,
+      artifactScope: { stackDir: join(artifactRoot, "stacks", "dev-main") },
+    });
+    expect(contexts[0]?.workerIndex).toBeUndefined();
+    expect(contexts[0]?.suiteId).toBeUndefined();
+    await expect(router.callTool("stack.list")).resolves.toMatchObject({
+      status: "ok",
+      stacks: [
+        {
+          stackId: "dev-main",
+          allocations: expect.arrayContaining([
+            expect.objectContaining({ kind: "port", name: "app" }),
+          ]),
+        },
+      ],
+    });
+    await rm(artifactRoot, { recursive: true, force: true });
   });
 
   it("rejects stack-targeting tools without stackId instead of falling back to the first Stack Instance", async () => {

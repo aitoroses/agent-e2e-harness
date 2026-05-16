@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { safePathSegment } from "../artifacts/index.js";
+import type { StackAllocationRecord } from "../stack/index.js";
 
 export type VerifyReporterMode = "list" | "quiet" | "json" | "github";
 
@@ -41,6 +42,7 @@ export interface VerifySuiteReport {
   stack?: {
     status: string;
     summary: string;
+    allocations?: readonly StackAllocationRecord[];
   };
   runs: readonly VerifyRunReport[];
   warnings: readonly string[];
