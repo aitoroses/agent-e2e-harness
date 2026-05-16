@@ -434,7 +434,7 @@ The v1.0 package exports six entries. All are stable.
 - `@agent-e2e/harness/dev-mcp` - Dev MCP server facade: `defineAgentE2EConfig`, `startAgentE2EDevMcpFromConfig`, manifest types, defaults (`127.0.0.1:3766/mcp`, `.agents-e2e/artifacts`), and the Dev MCP tool grammar types.
 - `@agent-e2e/harness/verify` - config-backed verify runner, suite selection types, report types, built-in reporters, and `runAgentE2EVerifyFromConfig`.
 - `@agent-e2e/harness/playwright-mcp` - MCP-owned browser session factory and Browser Workbench packet types for `browser.open`, `browser.snapshot`, `browser.find`, `browser.act`, `browser.wait`, `browser.get`, `browser.eval`, `browser.playwright`, `browser.console`, `browser.network`, `browser.screenshot`, and `browser.close`.
-- `@agent-e2e/harness/stack` - stack provider contract, `StackStatusPacket`, `StackLifecyclePhase`, `createProcessStackProvider`, `allocateTcpPort`.
+- `@agent-e2e/harness/stack` - stack provider contract, `StackStartContext`, `StackStatusPacket`, `StackLifecyclePhase`, `createStackStartContext`, `createProcessStackProvider`, `allocateTcpPort`.
 - `@agent-e2e/harness/artifacts` - artifact recorder and reader helpers: `createRunArtifacts`, `createRunArtifactRecorder`, `readArtifact`, `resolveArtifactPath`, canonical filenames, and `DEFAULT_AGENT_E2E_ARTIFACT_ROOT`.
 
 The reference CLI is `agent-e2e`. It exposes `agent-e2e dev` for Dev MCP and `agent-e2e verify` for CI. Both accept `--config`, `--cwd`, and `--artifact-root`; `dev` also accepts `--host`, `--port`, and `--path`, while `verify` adds selectors, profiles, workers, reporters, cleanup mode, fail-fast, and warning strictness.

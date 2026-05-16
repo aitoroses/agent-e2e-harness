@@ -19,6 +19,8 @@ import {
 } from "../artifacts/index.js";
 import {
   createStackExecutionSurface,
+  createStackStartContext,
+  type StackAllocationRecord,
   type StackExecutionSurface,
   type StackProvider,
   type StackStatusPacket,
@@ -107,6 +109,7 @@ export async function runVerifySuite<
   let stackHandle: TStackHandle | undefined;
   let stackStatus: StackStatusPacket | undefined;
   let stackExecution: StackExecutionSurface | undefined;
+  let stackAllocations: readonly StackAllocationRecord[] = [];
   const runs: VerifyRunReport[] = [];
   const suiteEndCleanups: Array<{
     journey: ExecutableJourney<TTypes>;
@@ -121,7 +124,16 @@ export async function runVerifySuite<
 
   try {
     if (input.stackProvider) {
-      stackHandle = await input.stackProvider.start();
+      const stackContext = createStackStartContext({
+        mode: "verify",
+        suiteId,
+        stackId: "verify-suite",
+        workerIndex: 0,
+        workerCount: 1,
+        artifactRoot: resolved.artifactRoot,
+      });
+      stackHandle = await input.stackProvider.start(stackContext);
+      stackAllocations = stackContext.allocations();
       stackStatus = await input.stackProvider.status(stackHandle);
       stackExecution = createStackExecutionSurface(stackStatus, input.stackProvider, stackHandle);
       if (stackStatus.status !== "ready") {
@@ -207,7 +219,9 @@ export async function runVerifySuite<
     reporter: resolved.reporter,
     warningsAsErrors: resolved.warningsAsErrors,
     failFast: resolved.failFast,
-    ...(stackStatus ? { stack: { status: stackStatus.status, summary: stackStatus.summary } } : {}),
+    ...(stackStatus
+      ? { stack: { status: stackStatus.status, summary: stackStatus.summary, allocations: stackAllocations } }
+      : {}),
     runs: runs.sort((left, right) => runIndex(left.runId) - runIndex(right.runId)),
     warnings: suiteWarnings,
     errors: suiteErrors,

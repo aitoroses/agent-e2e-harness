@@ -1,5 +1,7 @@
 import {
   createStackExecutionSurface,
+  createStackStartContext,
+  type StackAllocationRecord,
   type StackExecutionSurface,
   type StackLogsInput,
   type StackLogsOutput,
@@ -21,11 +23,13 @@ export interface StackInstanceStartResult<TStackHandle> {
   stackId: string;
   handle: TStackHandle;
   stack: StackStatusPacket;
+  allocations: readonly StackAllocationRecord[];
 }
 
 export interface StackInstanceListItem {
   stackId: string;
   stack: StackStatusPacket;
+  allocations: readonly StackAllocationRecord[];
 }
 
 export interface StackInstanceDisposeResult {
@@ -41,10 +45,14 @@ export interface StackExploreRunResult {
 
 export class StackInstanceManager<TStackHandle> {
   private readonly handles = new Map<string, TStackHandle>();
+  private readonly allocations = new Map<string, readonly StackAllocationRecord[]>();
   private readonly stoppingStackIds = new Set<string>();
   private stackIdSequence = 0;
 
-  constructor(private readonly provider: StackProvider<TStackHandle>) {}
+  constructor(
+    private readonly provider: StackProvider<TStackHandle>,
+    private readonly options: { artifactRoot: string },
+  ) {}
 
   async start(input: { stackId?: string } = {}): Promise<StackInstanceStartResult<TStackHandle>> {
     const stackId = input.stackId ?? this.generateStackId();
@@ -55,13 +63,21 @@ export class StackInstanceManager<TStackHandle> {
       );
     }
 
-    const handle = await this.provider.start();
+    const context = createStackStartContext({
+      mode: "dev",
+      stackId,
+      workerCount: 1,
+      artifactRoot: this.options.artifactRoot,
+    });
+    const handle = await this.provider.start(context);
     let ready = false;
     try {
       const stack = await this.provider.status(handle);
       ready = true;
       this.handles.set(stackId, handle);
-      return { stackId, handle, stack };
+      const allocations = context.allocations();
+      this.allocations.set(stackId, allocations);
+      return { stackId, handle, stack, allocations };
     } finally {
       if (!ready) {
         try {
@@ -76,7 +92,11 @@ export class StackInstanceManager<TStackHandle> {
   async list(): Promise<StackInstanceListItem[]> {
     const stacks: StackInstanceListItem[] = [];
     for (const [stackId, handle] of this.handles) {
-      stacks.push({ stackId, stack: await this.provider.status(handle) });
+      stacks.push({
+        stackId,
+        stack: await this.provider.status(handle),
+        allocations: this.allocations.get(stackId) ?? [],
+      });
     }
     return stacks;
   }
@@ -159,6 +179,7 @@ export class StackInstanceManager<TStackHandle> {
 
     this.stoppingStackIds.add(resolvedStackId);
     this.handles.delete(resolvedStackId);
+    this.allocations.delete(resolvedStackId);
     try {
       return await this.provider.stop(handle);
     } finally {
@@ -179,7 +200,8 @@ export class StackInstanceManager<TStackHandle> {
 
     for (const stackId of [...this.handles.keys()]) {
       try {
-        stacks.push({ stackId, stack: await this.stop(stackId) });
+        const allocations = this.allocations.get(stackId) ?? [];
+        stacks.push({ stackId, stack: await this.stop(stackId), allocations });
       } catch (error) {
         errors.push(error instanceof Error ? error.message : String(error));
       }

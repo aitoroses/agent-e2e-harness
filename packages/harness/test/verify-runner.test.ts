@@ -9,6 +9,7 @@ import { runVerifySuite, type VerifyBrowser } from "@agent-e2e/harness/verify";
 import {
   defineStackExploreTools,
   type StackExecutionSurface,
+  type StackStartContext,
 } from "@agent-e2e/harness/stack";
 
 type VerifyHarness = HarnessTypes<
@@ -270,6 +271,95 @@ describe("verify runner", () => {
     expect(report.errors).toContain("database did not start");
     expect(browserCreated).toBe(false);
     expect(stopped).toBe(true);
+  });
+
+  it("passes a verify-mode StackStartContext to the suite stack and records allocations", async () => {
+    const artifactRoot = await tempRoot();
+    const contexts: StackStartContext[] = [];
+    const journey = defineJourney<VerifyHarness>({
+      id: "notes:stack-context",
+      title: "Stack context",
+      profiles: [{ id: "default", data: {}, isDefault: true }],
+      phases: [
+        {
+          id: "phase:context",
+          title: "Context",
+          steps: [{ id: "step:context", title: "Context", execute: async () => ({ status: "passed" }) }],
+        },
+      ],
+    });
+
+    const report = await runVerifySuite<VerifyHarness, { appUrl: string; logPath: string }>({
+      journeys: [journey],
+      stackProvider: {
+        id: "verify-context-stack",
+        start: async (ctx) => {
+          contexts.push(ctx);
+          const app = await ctx.allocatePort("app");
+          const log = ctx.allocateArtifactPath("app log", { kind: "file", extension: "log" });
+          return { appUrl: app.url, logPath: log.path };
+        },
+        status: (handle) => ({
+          status: "ready",
+          summary: "ready",
+          services: [{ id: "app", status: "ready", url: handle.appUrl }],
+          artifacts: [{ id: "app-log", kind: "log", uri: `file://${handle.logPath}` }],
+          warnings: [],
+          errors: [],
+        }),
+        stop: () => ({
+          status: "stopped",
+          summary: "stopped",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+      },
+      options: {
+        configPath: "/repo/agent-e2e.config.ts",
+        artifactRoot,
+        env: {},
+        now: () => new Date("2026-05-14T12:00:00.000Z"),
+        randomSuffix: () => "unit",
+        createBrowser: async () => fakeBrowser(),
+        reporter: "quiet",
+      },
+    });
+
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0]).toMatchObject({
+      mode: "verify",
+      stackId: "verify-suite",
+      workerIndex: 0,
+      workerCount: 1,
+      suiteId: "verify-2026-05-14t12-00-00-000z-unit",
+      artifactScope: {
+        stackDir: join(artifactRoot, "_suites", "verify-2026-05-14t12-00-00-000z-unit", "stacks", "verify-suite"),
+      },
+    });
+    expect(report.stack).toMatchObject({
+      status: "ready",
+      allocations: [
+        {
+          kind: "port",
+          name: "app",
+          stackId: "verify-suite",
+          workerIndex: 0,
+          resource: { url: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/) },
+        },
+        {
+          kind: "artifact-file",
+          name: "app log",
+          stackId: "verify-suite",
+          workerIndex: 0,
+          resource: {
+            path: expect.stringContaining("/_suites/verify-2026-05-14t12-00-00-000z-unit/stacks/verify-suite/app-log.log"),
+          },
+        },
+      ],
+    });
+    expect(report.status).toBe("passed");
   });
 
   it("injects verify-safe stack exploration into journey execution", async () => {
