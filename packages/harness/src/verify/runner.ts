@@ -132,6 +132,18 @@ export async function runVerifySuite<
       shouldSchedule: () => !stopScheduling,
       onSuiteWarning: (warning) => suiteWarnings.push(warning),
       onSuiteError: (error) => suiteErrors.push(error),
+      ...(resolved.cleanup === "suite-end"
+        ? {
+            afterRunsBeforeStop: async () => {
+              await cleanupSuiteEnd({
+                suiteId,
+                artifactRoot: resolved.artifactRoot,
+                cleanups: suiteEndCleanups,
+                resourceAdapters: input.resourceAdapters ?? [],
+              });
+            },
+          }
+        : {}),
       run: async (selectedRun, worker) => {
         const result = await runSingleVerifyRun({
           suiteId,
@@ -158,14 +170,6 @@ export async function runVerifySuite<
         if (resolved.failFast && result.report.status !== "passed") stopScheduling = true;
       },
     });
-    if (resolved.cleanup === "suite-end") {
-      await cleanupSuiteEnd({
-        suiteId,
-        artifactRoot: resolved.artifactRoot,
-        cleanups: suiteEndCleanups,
-        resourceAdapters: input.resourceAdapters ?? [],
-      });
-    }
   } catch (error) {
     suiteErrors.push(error instanceof Error ? error.message : String(error));
   } finally {

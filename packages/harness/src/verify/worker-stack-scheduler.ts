@@ -31,10 +31,12 @@ export async function runWorkerStackQueue<TSelected, TStackHandle>(input: {
   onSuiteWarning: (warning: string) => void;
   onSuiteError: (error: string) => void;
   run: (selected: TSelected, context: VerifyWorkerRunContext) => Promise<void>;
+  afterRunsBeforeStop?: () => Promise<void>;
 }): Promise<VerifyWorkerStackSnapshot[]> {
   if (input.selected.length === 0) return [];
 
   const stackSnapshots: VerifyWorkerStackSnapshot[] = [];
+  const startedStacks: Array<{ workerIndex: number; handle: TStackHandle }> = [];
   const configuredWorkers = Math.max(1, input.workers);
   const activeWorkerCount = Math.min(configuredWorkers, input.selected.length);
   let next = 0;
@@ -47,14 +49,14 @@ export async function runWorkerStackQueue<TSelected, TStackHandle>(input: {
 
   async function worker(workerIndex: number): Promise<void> {
     let workerStack: Awaited<ReturnType<typeof startWorkerStack<TStackHandle>>> | undefined;
-    try {
-      while (shouldSchedule()) {
-        const index = next++;
-        const item = input.selected[index];
-        if (!item) return;
+    while (shouldSchedule()) {
+      const index = next++;
+      const item = input.selected[index];
+      if (!item) return;
 
-        if (input.stackProvider) {
-          workerStack ??= await startWorkerStack({
+      if (input.stackProvider) {
+        if (!workerStack) {
+          workerStack = await startWorkerStack({
             provider: input.stackProvider,
             suiteId: input.suiteId,
             artifactRoot: input.artifactRoot,
@@ -64,28 +66,40 @@ export async function runWorkerStackQueue<TSelected, TStackHandle>(input: {
             snapshots: stackSnapshots,
             stopScheduling: stop,
           });
-          if (!workerStack.ready) return;
+          if (workerStack.handle !== undefined) {
+            startedStacks.push({ workerIndex, handle: workerStack.handle });
+          }
         }
+        if (!workerStack.ready) return;
+      }
 
-        await input.run(item, {
-          workerIndex,
-          ...(workerStack?.ready ? { stackId: workerStack.stackId, stack: workerStack.stack } : {}),
-        });
-      }
-    } finally {
-      if (workerStack?.handle !== undefined && input.stackProvider) {
-        try {
-          const stopped = await input.stackProvider.stop(workerStack.handle);
-          for (const warning of stopped.warnings) input.onSuiteWarning(warning.message);
-          for (const error of stopped.errors) input.onSuiteError(error.message);
-        } catch (error) {
-          input.onSuiteError(error instanceof Error ? error.message : String(error));
-        }
-      }
+      await input.run(item, {
+        workerIndex,
+        ...(workerStack?.ready ? { stackId: workerStack.stackId, stack: workerStack.stack } : {}),
+      });
     }
   }
 
-  await Promise.all(Array.from({ length: activeWorkerCount }, (_, workerIndex) => worker(workerIndex)));
+  try {
+    await Promise.all(Array.from({ length: activeWorkerCount }, (_, workerIndex) => worker(workerIndex)));
+    await input.afterRunsBeforeStop?.();
+  } finally {
+    const stackProvider = input.stackProvider;
+    if (stackProvider) {
+      await Promise.all(startedStacks
+        .sort((left, right) => left.workerIndex - right.workerIndex)
+        .map(async (workerStack) => {
+          try {
+            const stopped = await stackProvider.stop(workerStack.handle);
+            for (const warning of stopped.warnings) input.onSuiteWarning(warning.message);
+            for (const error of stopped.errors) input.onSuiteError(error.message);
+          } catch (error) {
+            input.onSuiteError(error instanceof Error ? error.message : String(error));
+          }
+        }));
+    }
+  }
+
   return stackSnapshots.sort((left, right) => left.workerIndex - right.workerIndex);
 }
 

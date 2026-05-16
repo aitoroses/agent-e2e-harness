@@ -532,6 +532,87 @@ describe("verify runner", () => {
     expect(report.runs).toHaveLength(6);
   });
 
+  it("runs suite-end cleanup before stopping the assigned worker stacks", async () => {
+    const artifactRoot = await tempRoot();
+    const events: string[] = [];
+    const stoppedStacks = new Set<string>();
+
+    const report = await runVerifySuite<StackVerifyHarness, { id: string }>({
+      journeys: [
+        makeStackJourney("notes:first", () => undefined),
+        makeStackJourney("notes:second", () => undefined),
+      ].map((journey) => ({
+        ...journey,
+        phases: journey.phases.map((phase) => ({
+          ...phase,
+          steps: phase.steps.map((step) => ({
+            ...step,
+            execute: async (input) => {
+              const result = await step.execute(input);
+              const stackId = input.execution.stack.summary.replace("ready:", "");
+              return {
+                ...result,
+                ownedResources: [{ kind: "record", id: stackId }],
+              };
+            },
+          })),
+        })),
+      })),
+      resourceAdapters: [
+        {
+          id: "stack-backed-cleanup",
+          supports: (resource) => resource.kind === "record",
+          delete: async (resource) => {
+            events.push(`cleanup:${resource.id}:stopped=${stoppedStacks.has(resource.id)}`);
+          },
+        },
+      ],
+      stackProvider: {
+        id: "suite-end-cleanup-stack",
+        start: async (ctx) => {
+          events.push(`start:${ctx.stackId}`);
+          return { id: ctx.stackId };
+        },
+        status: (handle) => ({
+          status: "ready",
+          summary: `ready:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+        stop: (handle) => {
+          stoppedStacks.add(handle.id);
+          events.push(`stop:${handle.id}`);
+          return {
+            status: "stopped",
+            summary: `stopped:${handle.id}`,
+            services: [],
+            artifacts: [],
+            warnings: [],
+            errors: [],
+          };
+        },
+      },
+      options: {
+        configPath: "/repo/agent-e2e.config.ts",
+        artifactRoot,
+        cleanup: "suite-end",
+        createBrowser: async () => fakeBrowser(),
+        reporter: "quiet",
+        workers: 2,
+      },
+    });
+
+    expect(report.status).toBe("passed");
+    expect(events.filter((event) => event.startsWith("cleanup:")).sort()).toEqual([
+      "cleanup:worker-0:stopped=false",
+      "cleanup:worker-1:stopped=false",
+    ]);
+    expect(events.at(-2)).toMatch(/^stop:worker-/);
+    expect(events.at(-1)).toMatch(/^stop:worker-/);
+  });
+
   it("stops scheduling new runs after a worker stack start failure while active workers clean up", async () => {
     const artifactRoot = await tempRoot();
     const events: string[] = [];
