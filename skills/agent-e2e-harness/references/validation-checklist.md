@@ -47,9 +47,12 @@ When the task includes interactive setup, capture:
 - `stack.start` returned a `stackId` and ready services
 - `stack.list` can recover the running Stack Instance
 - `stack.status` with `stackId` unified packet summary
+- multi-stack Dev MCP evidence when supported: two named Stack Instances, both visible in `stack.list`, with explicit `stack.status` calls for each id
 - `stack.logs` with `stackId` result for one service with required `tail`
 - `stack.explore.run` with `stackId` result for one concrete provider tool
-- `run.begin` seed status and Stack Binding for the selected `stackId`
+- `run.begin` seed status and Run Stack Binding for the selected `stackId`
+- `StackStatusPacket.services` evidence for the dynamic app URL used by the journey
+- StackStartContext / Named Stack Allocations evidence when a stack provider allocates ports, logs, or artifact paths
 - browser session id
 - `browser.snapshot` evidence with visible refs
 - `browser.find` evidence when semantic lookup is used
@@ -103,6 +106,7 @@ Final evidence must include:
 - cleanup status
 - exit code
 - evidence that verify used only Verify Observation Tools if journey code uses `execution.stack.explore.run(...)`
+- worker-scoped verify evidence when `--workers > 1` is configured: stack ids such as `worker-0`, per-run `stackId`, report `stacks[]`, and Named Stack Allocations
 
 ## Stop Conditions
 

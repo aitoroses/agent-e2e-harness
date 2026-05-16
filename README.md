@@ -112,7 +112,7 @@ stack.explore.list
 stack.explore.run
 ```
 
-`stack.start` returns a `stackId`; pass that id to `stack.status`, `run.begin`, `stack.logs`, `stack.explore.run`, and `stack.stop`. `stack.list` recovers currently running Stack Instances. `run.begin` requires a valid `stackId` when a stack provider exists, and rejects `stackId` when no provider exists. `stack.status` is the unified stack-state packet: services, stable service ids, endpoints, checks, warnings, errors, artifacts, and next actions. There are no native `stack.services`, `stack.health`, or `stack.env` tools in v1. Runtime-specific inspection is provider-owned through `stack.explore.*`.
+`stack.start` returns a `stackId`; pass that id to `stack.status`, `run.begin`, `stack.logs`, `stack.explore.run`, and `stack.stop`. `stack.list` recovers currently running Stack Instances. `run.begin` requires a valid `stackId` when a stack provider exists, creates a **Run Stack Binding** for that run, and rejects `stackId` when no provider exists. `stack.status` is the unified stack-state packet: `StackStatusPacket.services` is the journey-facing runtime contract for dynamic URLs, readiness, health checks, stable service ids, endpoints, warnings, errors, artifacts, and next actions. There are no native `stack.services`, `stack.health`, or `stack.env` tools in v1. Runtime-specific inspection is provider-owned through `stack.explore.*`.
 
 ## Build the proof loop
 
@@ -316,6 +316,10 @@ run.reseed
 
 Use `stack.logs` for live service logs after the stack is active. It requires a `stackId`, one `serviceId`, a required `tail`, and optional `stream`. Use `stack.explore.list` to discover provider-declared tools and `stack.explore.run` with `stackId` to run one of them with Zod-validated input/output. `stack.logs` and `stack.explore.run` accept optional `runId` only to capture artifacts, and reject capture when the run is bound to a different `stackId`.
 
+Stack providers should use **StackStartContext** as the default allocation pattern. `start(ctx)` receives the Stack Instance id, mode, worker identity, suite id when verify supplies one, and a stack artifact scope.
+
+Use **Named Stack Allocations** through `ctx.allocatePort(name)` and `ctx.allocateArtifactPath(name, ...)` for ports, logs, databases, and other per-stack paths so Dev MCP and verify reports can show which resources belonged to each Stack Instance. Named allocations are reporting and debugging evidence; journey code should still read runtime targets from `StackStatusPacket.services`.
+
 The Browser Workbench is the browser-side exploration surface. Use `browser.snapshot` for visible refs, `browser.find` for semantic lookup, `browser.act` for one UI mutation, `browser.wait` for explicit conditions, `browser.get` for targeted reads, `browser.console` / `browser.network` for signal buffers, `browser.screenshot` for explicit visual artifacts, and `browser.eval` / `browser.playwright` when exploration needs custom page or Playwright code.
 
 `journey.inspect` returns the full contract for one journey: phases, steps, proofs, profiles, and descriptions. Agents use it to plan, humans use it to read, and CI uses it to diff.
@@ -373,7 +377,7 @@ Together with seed, cleanup, and reseed, these artifacts let the agent move thro
 
 ### 6. Promote journeys with verify
 
-A development run becomes CI proof when `agent-e2e verify` reruns the configured journeys from clean seed, non-interactively, with no agent in the loop. The command uses the same `agent-e2e.config.ts`, starts the configured stack once for the suite, creates an isolated Playwright context/page for each selected run, cleans owned resources, and writes one suite report directory.
+A development run becomes CI proof when `agent-e2e verify` reruns the configured journeys from clean seed, non-interactively, with no agent in the loop. The command uses the same `agent-e2e.config.ts` and starts worker-scoped Stack Instances lazily: `--workers 4` means at most four active Verify Worker Stacks, with selected runs executing serially inside each worker stack. Every stack-backed run records its `stackId`, and the suite report includes a first-class Stack Instances section with services, Named Stack Allocations, timing, warnings, errors, and run-to-stack correlation.
 
 Verify runs the crystallized journey. It does not expose arbitrary Dev MCP exploration or generic shell execution. Journey code can use only Verify Observation Tools through `execution.stack.explore.run(...)`: provider-declared tools with `availableIn: ["dev", "verify"]` and `risk: "none"`. Product-visible mutations must still come from the app path, seed, journey steps, reseed, or cleanup.
 

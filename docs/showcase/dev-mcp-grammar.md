@@ -20,7 +20,7 @@ The default Dev MCP grammar defines reusable Agent E2E Harness vocabulary for lo
 
 - `stack.start` — starts a Stack Instance and returns the effective `stackId`.
 - `stack.list` — lists currently running Stack Instances.
-- `stack.status` — returns the unified stack-state packet for one explicit `stackId`: services, endpoints, readiness checks, warnings, errors, artifacts, and next actions.
+- `stack.status` — returns the unified stack-state packet for one explicit `stackId`: `StackStatusPacket.services`, endpoints, readiness checks, warnings, errors, artifacts, and next actions.
 - `stack.logs` — reads recent live logs for one active service on one explicit `stackId`; requires `serviceId` and `tail`, with optional `stream`; optional `runId` captures artifacts only when the run is bound to the same `stackId`.
 - `stack.explore.list` — lists provider-declared stack exploration tools with JSON Schemas derived from Zod input/output schemas.
 - `stack.explore.run` — runs one provider-declared stack exploration tool against one explicit `stackId`; optional `runId` captures artifacts only when the run is bound to the same `stackId`.
@@ -33,8 +33,12 @@ Provider-declared stack exploration tools must declare `id`, `title`, `descripti
 
 ### Run lifecycle
 
-- `run.begin` — creates or resumes a proof workspace, requires `stackId` when a stack provider exists, rejects `stackId` when no provider exists, and returns the run's Stack Binding.
+- `run.begin` — creates or resumes a proof workspace, requires `stackId` when a stack provider exists, rejects `stackId` when no provider exists, and returns the run's **Run Stack Binding**.
 - `run.teardown` — deletes journey-owned resources and may close an MCP-owned browser session.
+
+### Stack provider contract
+
+Stack providers receive a **StackStartContext** for every Stack Instance. Use **Named Stack Allocations** through `ctx.allocatePort(name)` and `ctx.allocateArtifactPath(name, ...)` as the default pattern for dynamic app ports, service log paths, database files, and per-worker artifact directories. `StackStatusPacket.services` remains the journey-facing runtime contract for dynamic URLs, readiness, health, and stable service ids; named allocations explain where the resources came from in Dev MCP responses and verify reports.
 
 ### Browser session and forensics
 

@@ -72,4 +72,50 @@ describe('repository organization contract', () => {
       expect(source).toContain('npm run e2e:verify --workspace @agent-e2e/showcase -- --workers 2');
     }
   });
+
+  it('keeps public docs on the Stack Instance provider and verify contract', () => {
+    const rootReadme = text('README.md');
+    const packageReadme = text('packages/harness/README.md');
+    const grammar = text('docs/showcase/dev-mcp-grammar.md');
+
+    for (const source of [rootReadme, packageReadme, grammar]) {
+      expect(source).toContain('StackStatusPacket.services');
+      expect(source).toContain('StackStartContext');
+      expect(source).toContain('Named Stack Allocations');
+      expect(source).toContain('Run Stack Binding');
+      expect(source).not.toContain('starts the configured stack once');
+      expect(source).not.toContain('starts the configured stack once for the suite');
+    }
+
+    expect(rootReadme).toContain('stack.start');
+    expect(rootReadme).toContain('stack.list');
+    expect(rootReadme).toContain('stackId');
+    expect(rootReadme).toContain(
+      'dynamic URLs, readiness, health checks, stable service ids, endpoints, warnings, errors, artifacts, and next actions',
+    );
+    expect(packageReadme).toContain('worker-scoped Stack Instances');
+    expect(packageReadme).toContain('worker-0');
+  });
+
+  it('keeps the self-contained skill teaching multi-stack dev and worker-scoped verify evidence', () => {
+    const skill = [
+      text('skills/agent-e2e-harness/SKILL.md'),
+      text('skills/agent-e2e-harness/references/dev-mcp-loop.md'),
+      text('skills/agent-e2e-harness/references/validation-checklist.md'),
+      text('skills/agent-e2e-harness/references/verify-ci.md'),
+      text('skills/agent-e2e-harness/references/journey-patterns.md'),
+    ].join('\n');
+
+    expect(skill).toContain('Stack Instance');
+    expect(skill).toContain('Run Stack Binding');
+    expect(skill).toContain('StackStatusPacket.services');
+    expect(skill).toContain('StackStartContext');
+    expect(skill).toContain('Named Stack Allocations');
+    expect(skill).toContain('multi-stack');
+    expect(skill).toContain('optional second Stack Instance');
+    expect(skill).toContain('worker-scoped verify');
+    expect(skill).toContain('worker-0');
+    expect(skill).not.toContain('starts the configured stack once');
+    expect(skill).not.toContain('active app stack');
+  });
 });

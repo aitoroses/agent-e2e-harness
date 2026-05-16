@@ -77,6 +77,7 @@ journey.list
 journey.inspect
 stack.explore.list
 stack.start
+stack.start  # optional second Stack Instance for multi-stack exploration
 stack.list
 stack.status
 stack.logs
@@ -107,11 +108,12 @@ Capture these facts before changing implementation again:
 - `journey.inspect` shows the intended journey, tags, profiles, phases, steps, and proofs.
 - `stack.explore.list` shows provider-owned tools with input/output schemas.
 - `stack.start` returns a `stackId` and all required services as `ready`.
-- `stack.list` can recover the running Stack Instance id.
-- `stack.status` with `stackId` returns the unified stack-state packet. Do not expect native `stack.services`, `stack.health`, or `stack.env`.
+- Multi-stack Dev MCP checks work when the provider can run two local stacks: start two named Stack Instances, confirm `stack.list` shows both ids, and use `stack.status` against each explicit `stackId`.
+- `stack.list` can recover the running Stack Instance id after compaction or handoff.
+- `stack.status` with `stackId` returns the unified stack-state packet. `StackStatusPacket.services` is the journey-facing runtime contract for dynamic URLs and readiness. Do not expect native `stack.services`, `stack.health`, or `stack.env`.
 - `stack.logs` with `stackId` returns recent live logs for one active service using `serviceId` and required `tail`.
 - `stack.explore.run` with `stackId` can run at least one concrete provider tool.
-- `run.begin` with `stackId` returns seed `status: "passed"` or `"warning"`, `canRunSteps: true`, and the run's Stack Binding.
+- `run.begin` with `stackId` returns seed `status: "passed"` or `"warning"`, `canRunSteps: true`, and the run's Run Stack Binding.
 - `browser.open` returns a browser session id.
 - `browser.snapshot` shows expected app state and no visible runtime error.
 - `browser.find` resolves semantic targets when a role, label, text, placeholder, test id, or selector is clearer than a snapshot ref.
