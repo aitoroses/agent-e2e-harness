@@ -18,6 +18,15 @@ export interface VerifyWorkerStackSnapshot {
   workerIndex: number;
   status: string;
   summary: string;
+  timing: {
+    startedAt: string;
+    endedAt: string;
+    durationMs: number;
+  };
+  services: StackStatusPacket["services"];
+  artifacts: StackStatusPacket["artifacts"];
+  warnings: StackStatusPacket["warnings"];
+  errors: StackStatusPacket["errors"];
   allocations: readonly StackAllocationRecord[];
 }
 
@@ -126,6 +135,8 @@ async function startWorkerStack<TStackHandle>(input: {
     }
 > {
   const stackId = `worker-${input.workerIndex}`;
+  const startedAtDate = new Date();
+  const startedAt = startedAtDate.toISOString();
   const context = createStackStartContext({
     mode: "verify",
     suiteId: input.suiteId,
@@ -139,7 +150,14 @@ async function startWorkerStack<TStackHandle>(input: {
   try {
     handle = await input.provider.start(context);
     const status = await input.provider.status(handle);
-    input.snapshots.push(snapshotFor(stackId, input.workerIndex, status, context.allocations()));
+    input.snapshots.push(snapshotFor({
+      stackId,
+      workerIndex: input.workerIndex,
+      status,
+      allocations: context.allocations(),
+      startedAt,
+      startedAtMs: startedAtDate.getTime(),
+    }));
     if (status.status !== "ready") {
       input.onSuiteError(status.summary);
       input.stopScheduling();
@@ -152,23 +170,53 @@ async function startWorkerStack<TStackHandle>(input: {
       stack: createStackExecutionSurface(status, input.provider, handle),
     };
   } catch (error) {
-    input.onSuiteError(error instanceof Error ? error.message : String(error));
+    const message = error instanceof Error ? error.message : String(error);
+    input.snapshots.push(snapshotFor({
+      stackId,
+      workerIndex: input.workerIndex,
+      status: {
+        status: "failed",
+        summary: message,
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [{ code: "stack.start_failed", message }],
+      },
+      allocations: context.allocations(),
+      startedAt,
+      startedAtMs: startedAtDate.getTime(),
+    }));
+    input.onSuiteError(message);
     input.stopScheduling();
     return handle === undefined ? { ready: false, stackId } : { ready: false, stackId, handle };
   }
 }
 
 function snapshotFor(
-  stackId: string,
-  workerIndex: number,
-  status: StackStatusPacket,
-  allocations: readonly StackAllocationRecord[],
+  input: {
+    stackId: string;
+    workerIndex: number;
+    status: StackStatusPacket;
+    allocations: readonly StackAllocationRecord[];
+    startedAt: string;
+    startedAtMs: number;
+  },
 ): VerifyWorkerStackSnapshot {
+  const endedAtDate = new Date();
   return {
-    stackId,
-    workerIndex,
-    status: status.status,
-    summary: status.summary,
-    allocations,
+    stackId: input.stackId,
+    workerIndex: input.workerIndex,
+    status: input.status.status,
+    summary: input.status.summary,
+    timing: {
+      startedAt: input.startedAt,
+      endedAt: endedAtDate.toISOString(),
+      durationMs: Math.max(0, endedAtDate.getTime() - input.startedAtMs),
+    },
+    services: input.status.services,
+    artifacts: input.status.artifacts,
+    warnings: input.status.warnings,
+    errors: input.status.errors,
+    allocations: input.allocations,
   };
 }

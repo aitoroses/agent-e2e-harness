@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { safePathSegment } from "../artifacts/index.js";
-import type { StackAllocationRecord } from "../stack/index.js";
+import type { StackAllocationRecord, StackStatusPacket } from "../stack/index.js";
 
 export type VerifyReporterMode = "list" | "quiet" | "json" | "github";
 
@@ -17,6 +17,7 @@ export interface VerifyRunReport {
   journeyId: string;
   profileId: string;
   runId: string;
+  stackId?: string;
   status: VerifyRunStatus;
   durationMs: number;
   artifactDir: string;
@@ -25,6 +26,23 @@ export interface VerifyRunReport {
   cleanupStatus?: "passed" | "failed" | "skipped";
   warnings: readonly string[];
   errors: readonly string[];
+}
+
+export interface VerifyStackReport {
+  stackId: string;
+  workerIndex?: number;
+  status: string;
+  summary: string;
+  timing: {
+    startedAt: string;
+    endedAt: string;
+    durationMs: number;
+  };
+  services: StackStatusPacket["services"];
+  artifacts: StackStatusPacket["artifacts"];
+  warnings: StackStatusPacket["warnings"];
+  errors: StackStatusPacket["errors"];
+  allocations: readonly StackAllocationRecord[];
 }
 
 export interface VerifySuiteReport {
@@ -44,6 +62,7 @@ export interface VerifySuiteReport {
     summary: string;
     allocations?: readonly StackAllocationRecord[];
   };
+  stacks: readonly VerifyStackReport[];
   runs: readonly VerifyRunReport[];
   warnings: readonly string[];
   errors: readonly string[];
@@ -65,6 +84,9 @@ export function renderTerminalReport(report: VerifySuiteReport, mode: VerifyRepo
   const lines = report.runs.map((run, index) =>
     `[${index + 1}/${report.runs.length}] ${run.journeyId} ${run.profileId} ${run.status} ${formatDuration(run.durationMs)}`
   );
+  lines.push(...report.stacks
+    .filter((stack) => stack.status !== "ready")
+    .map((stack) => `[stack] ${stack.stackId} ${stack.status} ${stack.summary}`));
   lines.push(renderSummary(report).trimEnd());
   if (mode === "github") lines.push(renderGithubAnnotations(report).trimEnd());
   return `${lines.filter(Boolean).join("\n")}\n`;
@@ -80,6 +102,11 @@ export function renderGithubAnnotations(report: VerifySuiteReport): string {
   for (const warning of report.warnings) {
     lines.push(`::warning title=Agent E2E warning::${escapeAnnotation(warning)}`);
   }
+  for (const stack of report.stacks) {
+    if (stack.status === "ready") continue;
+    const message = `${stack.stackId} ${stack.status}. ${stack.summary}`;
+    lines.push(`::error title=Agent E2E stack ${stack.status}::${escapeAnnotation(message)}`);
+  }
   return lines.length ? `${lines.join("\n")}\n` : "";
 }
 
@@ -89,7 +116,10 @@ export function suiteArtifactDir(artifactRoot: string, suiteId: string): string 
 
 function renderMarkdownReport(report: VerifySuiteReport): string {
   const rows = report.runs.map((run) =>
-    `| ${run.journeyId} | ${run.profileId} | ${run.status} | ${formatDuration(run.durationMs)} | ${run.artifactDir} |`
+    `| ${run.journeyId} | ${run.profileId} | ${run.stackId ?? ""} | ${run.status} | ${formatDuration(run.durationMs)} | ${run.artifactDir} |`
+  );
+  const stackRows = report.stacks.map((stack) =>
+    `| ${stack.stackId} | ${stack.workerIndex ?? ""} | ${stack.status} | ${stack.summary} | ${formatStackServices(stack)} | ${formatStackAllocations(stack)} | ${formatStackDiagnostics(stack)} |`
   );
   return `# Agent E2E Verify Report
 
@@ -100,10 +130,16 @@ function renderMarkdownReport(report: VerifySuiteReport): string {
 - Duration: ${formatDuration(report.durationMs)}
 - Exit: ${report.exitCode} (${report.exitReason})
 
+## Stack Instances
+
+| Stack | Worker | Status | Summary | Services | Allocations | Diagnostics |
+| --- | --- | --- | --- | --- | --- | --- |
+${stackRows.length ? stackRows.join("\n") : "| _None_ |  |  |  |  |  |  |"}
+
 ## Runs
 
-| Journey | Profile | Status | Duration | Artifacts |
-| --- | --- | --- | --- | --- |
+| Journey | Profile | Stack | Status | Duration | Artifacts |
+| --- | --- | --- | --- | --- | --- |
 ${rows.join("\n")}
 
 ## Warnings
@@ -116,10 +152,37 @@ ${report.errors.length ? report.errors.map((error) => `- ${error}`).join("\n") :
 `;
 }
 
+function formatStackServices(stack: VerifyStackReport): string {
+  if (stack.services.length === 0) return "_None_";
+  return stack.services
+    .map((service) => `${service.id} ${service.status}${service.url ? ` (${service.url})` : ""}`)
+    .join("<br>");
+}
+
+function formatStackAllocations(stack: VerifyStackReport): string {
+  if (stack.allocations.length === 0) return "_None_";
+  return stack.allocations
+    .map((allocation) => {
+      if (allocation.kind === "port") return `${allocation.name} port ${allocation.resource.url}`;
+      return `${allocation.name} ${allocation.kind} ${allocation.resource.path}`;
+    })
+    .join("<br>");
+}
+
+function formatStackDiagnostics(stack: VerifyStackReport): string {
+  const diagnostics = [
+    ...stack.warnings.map((warning) => `warning:${warning.code} ${warning.message}`),
+    ...stack.errors.map((error) => `error:${error.code} ${error.message}`),
+  ];
+  return diagnostics.length ? diagnostics.join("<br>") : "_None_";
+}
+
 function renderSummary(report: VerifySuiteReport): string {
   const passed = report.runs.filter((run) => run.status === "passed").length;
   const failed = report.runs.length - passed;
-  return `Agent E2E verify: ${passed} passed, ${failed} failed
+  const failedStacks = report.stacks.filter((stack) => stack.status !== "ready").length;
+  const stackSummary = report.stacks.length > 0 ? `, ${failedStacks} stack failed` : "";
+  return `Agent E2E verify: ${passed} passed, ${failed} failed${stackSummary}
 Report: ${report.artifactDir}
 `;
 }

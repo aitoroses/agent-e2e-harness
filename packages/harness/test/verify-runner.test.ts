@@ -675,6 +675,101 @@ describe("verify runner", () => {
     ]);
   });
 
+  it("reports worker stack start failures as stack failures without synthetic run failures", async () => {
+    const artifactRoot = await tempRoot();
+
+    const report = await runVerifySuite<StackVerifyHarness, { id: string }>({
+      journeys: [makeStackJourney("notes:stack-start-fails")],
+      stackProvider: {
+        id: "start-failure-report-stack",
+        start: async () => {
+          throw new Error("worker stack did not start");
+        },
+        status: () => ({
+          status: "ready",
+          summary: "unexpected",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+        stop: () => ({
+          status: "stopped",
+          summary: "stopped",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+      },
+      options: {
+        configPath: "/repo/agent-e2e.config.ts",
+        artifactRoot,
+        createBrowser: async () => fakeBrowser(),
+        reporter: "quiet",
+      },
+    });
+
+    expect(report.status).toBe("failed");
+    expect(report.exitReason).toBe("stack runtime failed");
+    expect(report.runs).toEqual([]);
+    expect(report.stacks).toEqual([
+      expect.objectContaining({
+        stackId: "worker-0",
+        workerIndex: 0,
+        status: "failed",
+        summary: "worker stack did not start",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [{ code: "stack.start_failed", message: "worker stack did not start" }],
+        allocations: [],
+      }),
+    ]);
+  });
+
+  it("surfaces stack failures in terminal and GitHub reporting", async () => {
+    const artifactRoot = await tempRoot();
+    let stdout = "";
+
+    await runVerifySuite<StackVerifyHarness, { id: string }>({
+      journeys: [makeStackJourney("notes:github-stack-fails")],
+      stackProvider: {
+        id: "github-stack-reporting",
+        start: async () => {
+          throw new Error("stack start failure");
+        },
+        status: () => ({
+          status: "ready",
+          summary: "unexpected",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+        stop: () => ({
+          status: "stopped",
+          summary: "stopped",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+      },
+      options: {
+        configPath: "/repo/agent-e2e.config.ts",
+        artifactRoot,
+        createBrowser: async () => fakeBrowser(),
+        reporter: "github",
+        stdout: { write: (chunk) => { stdout += String(chunk); return true; } },
+      },
+    });
+
+    expect(stdout).toContain("[stack] worker-0 failed stack start failure");
+    expect(stdout).toContain("Agent E2E verify: 0 passed, 0 failed, 1 stack failed");
+    expect(stdout).toContain("::error title=Agent E2E stack failed::worker-0 failed. stack start failure");
+  });
+
   it("keeps browser contexts isolated per run inside a worker stack", async () => {
     const artifactRoot = await tempRoot();
     const contextIds: number[] = [];
@@ -824,6 +919,149 @@ describe("verify runner", () => {
       ],
     });
     expect(report.status).toBe("passed");
+  });
+
+  it("writes first-class stack reports and run stack bindings to JSON reports", async () => {
+    const artifactRoot = await tempRoot();
+
+    const report = await runVerifySuite<StackVerifyHarness, { appUrl: string; logPath: string }>({
+      journeys: [makeStackJourney("notes:stack-report")],
+      stackProvider: {
+        id: "stack-reporting",
+        start: async (ctx) => {
+          const app = await ctx.allocatePort("app");
+          const log = ctx.allocateArtifactPath("app log", { kind: "file", extension: "log" });
+          return { appUrl: app.url, logPath: log.path };
+        },
+        status: (handle) => ({
+          status: "ready",
+          summary: "stack ready",
+          services: [
+            {
+              id: "app",
+              kind: "http",
+              status: "ready",
+              url: handle.appUrl,
+              checks: [{ id: "http.ready", status: "passed", summary: "responded" }],
+            },
+          ],
+          artifacts: [{ id: "app-log", kind: "log", uri: `file://${handle.logPath}` }],
+          warnings: [{ code: "stack.warning", message: "stack warning" }],
+          errors: [],
+        }),
+        stop: () => ({
+          status: "stopped",
+          summary: "stopped",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+      },
+      options: {
+        configPath: "/repo/agent-e2e.config.ts",
+        artifactRoot,
+        env: {},
+        now: () => new Date("2026-05-14T12:00:00.000Z"),
+        randomSuffix: () => "unit",
+        createBrowser: async () => fakeBrowser(),
+        reporter: "quiet",
+      },
+    });
+
+    const written = JSON.parse(await readFile(join(report.artifactDir, "report.json"), "utf8"));
+    expect(written.stacks).toEqual([
+      expect.objectContaining({
+        stackId: "worker-0",
+        workerIndex: 0,
+        status: "ready",
+        summary: "stack ready",
+        timing: expect.objectContaining({
+          startedAt: expect.any(String),
+          endedAt: expect.any(String),
+          durationMs: expect.any(Number),
+        }),
+        services: [
+          expect.objectContaining({
+            id: "app",
+            kind: "http",
+            status: "ready",
+            url: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
+          }),
+        ],
+        artifacts: [
+          expect.objectContaining({
+            id: "app-log",
+            kind: "log",
+            uri: expect.stringContaining("app-log.log"),
+          }),
+        ],
+        warnings: [{ code: "stack.warning", message: "stack warning" }],
+        errors: [],
+        allocations: [
+          expect.objectContaining({
+            kind: "port",
+            name: "app",
+            stackId: "worker-0",
+            workerIndex: 0,
+          }),
+          expect.objectContaining({
+            kind: "artifact-file",
+            name: "app log",
+            stackId: "worker-0",
+            workerIndex: 0,
+          }),
+        ],
+      }),
+    ]);
+    expect(written.runs).toEqual([
+      expect.objectContaining({
+        journeyId: "notes:stack-report",
+        stackId: "worker-0",
+      }),
+    ]);
+  });
+
+  it("writes a Stack Instances section with run-to-stack correlation in Markdown reports", async () => {
+    const artifactRoot = await tempRoot();
+
+    const report = await runVerifySuite<StackVerifyHarness, { appUrl: string }>({
+      journeys: [makeStackJourney("notes:markdown-stack")],
+      stackProvider: {
+        id: "markdown-stack-reporting",
+        start: async (ctx) => {
+          const app = await ctx.allocatePort("app");
+          return { appUrl: app.url };
+        },
+        status: (handle) => ({
+          status: "ready",
+          summary: "stack ready",
+          services: [{ id: "app", status: "ready", url: handle.appUrl }],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+        stop: () => ({
+          status: "stopped",
+          summary: "stopped",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+      },
+      options: {
+        configPath: "/repo/agent-e2e.config.ts",
+        artifactRoot,
+        createBrowser: async () => fakeBrowser(),
+        reporter: "quiet",
+      },
+    });
+
+    const markdown = await readFile(join(report.artifactDir, "report.md"), "utf8");
+    expect(markdown).toContain("## Stack Instances");
+    expect(markdown).toContain("| worker-0 | 0 | ready | stack ready | app ready ");
+    expect(markdown).toContain("| notes:markdown-stack | default | worker-0 | passed |");
   });
 
   it("injects verify-safe stack exploration into journey execution", async () => {
