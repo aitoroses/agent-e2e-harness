@@ -415,8 +415,11 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
         case "run.begin":
           return beginRunWithStackBinding(name, args);
         case "run.reseed":
-          return fromHarnessWithRunStackBinding(name, "reseedRun", args);
+          return reseedRunWithStackBinding(name, args);
         case "run.teardown":
+          // Teardown is intentionally execution-less today: cleanup is driven by
+          // the run Ownership Ledger and Resource Adapters, so it can still run
+          // after the bound Stack Instance has stopped.
           return fromHarness(name, await resolveHarness(options.harness), "teardown", args);
         case "cleanup.plan":
           return fromHarness(name, await resolveHarness(options.harness), "cleanupPlan", args);
@@ -795,6 +798,20 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
         return blocked(name, error.code, error.message);
       throw error;
     }
+  }
+
+  async function reseedRunWithStackBinding(
+    name: DevMcpToolName,
+    args: Record<string, unknown>,
+  ): Promise<DevMcpToolResponse> {
+    const previousBinding = typeof args.runId === "string"
+      ? runStackBindings.get(args.runId)
+      : undefined;
+    const response = await fromHarnessWithRunStackBinding(name, "reseedRun", args);
+    if (response.status === "ok" && previousBinding && typeof response.runId === "string") {
+      runStackBindings.set(response.runId, previousBinding);
+    }
+    return response;
   }
 
   async function dispose(): Promise<DevMcpDisposeResult> {

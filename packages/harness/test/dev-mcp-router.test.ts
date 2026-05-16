@@ -1007,6 +1007,124 @@ describe("Dev MCP Tool Router", () => {
     await rm(artifactRoot, { recursive: true, force: true });
   });
 
+  it("preserves Run Stack Binding when reseed renames the run", async () => {
+    const artifactRoot = await mkdtemp(join(tmpdir(), "agent-e2e-router-reseed-binding-"));
+    const harness = createMcpHarnessServer({ journeys: [makeStackBoundJourney()], artifactRoot });
+    const stackUrls = new Map<string, string>();
+    const provider: StackProvider<{ id: string }> = {
+      id: "reseed-binding-stack",
+      start: async (ctx) => {
+        stackUrls.set(ctx.stackId, `http://127.0.0.1/${ctx.stackId}/initial`);
+        return { id: ctx.stackId };
+      },
+      status: (handle) => ({
+        status: "ready",
+        summary: `ready:${handle.id}`,
+        services: [{ id: "app", status: "ready", url: stackUrls.get(handle.id) ?? "" }],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+      logs: (handle, input) => ({
+        status: "ok",
+        summary: `logs:${handle.id}`,
+        serviceId: input.serviceId,
+        stream: input.stream ?? "combined",
+        tail: input.tail,
+        entries: [{ stream: "stdout", message: `from:${handle.id}` }],
+        truncated: false,
+      }),
+      stop: (handle) => ({
+        status: "stopped",
+        summary: `stopped:${handle.id}`,
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({ harness, stackProvider: provider, artifactRoot });
+
+    await router.callTool("stack.start", { stackId: "alpha" });
+    await router.callTool("stack.start", { stackId: "beta" });
+    await router.callTool("run.begin", {
+      journeyId: "journey:stack-bound",
+      runId: "before-reseed",
+      stackId: "alpha",
+    });
+
+    await expect(
+      router.callTool("run.reseed", {
+        runId: "before-reseed",
+        newRunId: "after-reseed",
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      runId: "after-reseed",
+    });
+
+    stackUrls.set("alpha", "http://127.0.0.1/alpha/after-reseed");
+    stackUrls.set("beta", "http://127.0.0.1/beta/after-reseed");
+    await expect(
+      router.callTool("journey.step", {
+        runId: "after-reseed",
+        phaseId: "phase:one",
+        stepId: "step:one",
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      result: { observed: { message: "http://127.0.0.1/alpha/after-reseed" } },
+    });
+
+    const logs = await router.callTool("stack.logs", {
+      stackId: "alpha",
+      runId: "after-reseed",
+      serviceId: "app",
+      tail: 5,
+    });
+    expect(logs).toMatchObject({
+      status: "ok",
+      logs: { summary: "logs:alpha" },
+      artifact: expect.objectContaining({ name: "stack-logs", kind: "json" }),
+    });
+    await expect(
+      router.callTool("artifact.read", { path: (logs.artifact as { path: string }).path }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      content: {
+        runId: "after-reseed",
+        stackId: "alpha",
+        tool: "stack.logs",
+      },
+    });
+
+    await expect(
+      router.callTool("stack.logs", {
+        stackId: "beta",
+        runId: "after-reseed",
+        serviceId: "app",
+        tail: 5,
+      }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      code: "run-stack-binding-mismatch",
+    });
+
+    await router.callTool("stack.stop", { stackId: "alpha" });
+    await expect(
+      router.callTool("journey.step", {
+        runId: "after-reseed",
+        phaseId: "phase:two",
+        stepId: "step:two",
+      }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      code: "stack-not-running",
+    });
+
+    await rm(artifactRoot, { recursive: true, force: true });
+  });
+
   it("returns unified stack state and live provider logs through stack tools", async () => {
     const provider: StackProvider<{ id: string }> = {
       id: "observable-stack",
