@@ -160,6 +160,7 @@ The proof loop uses these tools:
 
 ```sh
 stack.start
+stack.list
 stack.status
 stack.logs
 stack.explore.list
@@ -185,9 +186,9 @@ run.reseed
 stack.stop
 ```
 
-The fixed stack grammar is intentionally small: `stack.start`, `stack.status`, `stack.stop`, `stack.logs`, `stack.explore.list`, and `stack.explore.run`. `stack.status` is the unified stack-state packet: services, stable service ids, endpoints, checks, warnings, errors, artifacts, and next actions. There are no native `stack.services`, `stack.health`, or `stack.env` tools in v1.
+The fixed stack grammar is intentionally small: `stack.start`, `stack.list`, `stack.status`, `stack.stop`, `stack.logs`, `stack.explore.list`, and `stack.explore.run`. `stack.start` accepts an optional caller-chosen `stackId` and returns the effective id. `stack.list` recovers running Stack Instances. `stack.status`, `stack.logs`, `stack.explore.run`, and `stack.stop` require an explicit `stackId`; there is no public stop-all tool. `stack.status` is the unified stack-state packet: services, stable service ids, endpoints, checks, warnings, errors, artifacts, and next actions. There are no native `stack.services`, `stack.health`, or `stack.env` tools in v1.
 
-`stack.logs` is live exploration. It requires an active stack, one `serviceId`, a required `tail`, and an optional `stream` of `stdout`, `stderr`, or `combined`.
+`stack.logs` is live exploration. It requires a `stackId`, one `serviceId`, a required `tail`, and an optional `stream` of `stdout`, `stderr`, or `combined`.
 
 Stack-specific exploration belongs to the stack provider. Providers declare tools with `id`, `title`, `description`, `availableIn`, `risk`, mandatory Zod `input` and `output` schemas, and a handler. Dev MCP exposes them through `stack.explore.list` and `stack.explore.run`; `agent-e2e verify` receives only Verify Observation Tools: `availableIn: ["dev", "verify"]` and `risk: "none"`.
 

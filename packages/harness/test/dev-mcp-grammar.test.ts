@@ -4,6 +4,7 @@ import { PLAYWRIGHT_MCP_DEFAULT_BROWSER_MODE, type BrowserSnapshotPacket } from 
 
 const requiredTools = [
   'stack.start',
+  'stack.list',
   'stack.status',
   'stack.logs',
   'stack.explore.list',

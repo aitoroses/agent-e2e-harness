@@ -77,6 +77,7 @@ journey.list
 journey.inspect
 stack.explore.list
 stack.start
+stack.list
 stack.status
 stack.logs
 run.begin
@@ -105,10 +106,11 @@ Capture these facts before changing implementation again:
 
 - `journey.inspect` shows the intended journey, tags, profiles, phases, steps, and proofs.
 - `stack.explore.list` shows provider-owned tools with input/output schemas.
-- `stack.start` returns all required services as `ready`.
-- `stack.status` returns the unified stack-state packet. Do not expect native `stack.services`, `stack.health`, or `stack.env`.
-- `stack.logs` returns recent live logs for one active service using `serviceId` and required `tail`.
-- `stack.explore.run` can run at least one concrete provider tool.
+- `stack.start` returns a `stackId` and all required services as `ready`.
+- `stack.list` can recover the running Stack Instance id.
+- `stack.status` with `stackId` returns the unified stack-state packet. Do not expect native `stack.services`, `stack.health`, or `stack.env`.
+- `stack.logs` with `stackId` returns recent live logs for one active service using `serviceId` and required `tail`.
+- `stack.explore.run` with `stackId` can run at least one concrete provider tool.
 - `run.begin` returns seed `status: "passed"` or `"warning"` and `canRunSteps: true`.
 - `browser.open` returns a browser session id.
 - `browser.snapshot` shows expected app state and no visible runtime error.
@@ -121,7 +123,7 @@ Capture these facts before changing implementation again:
 - `artifact.read` can read the primary step feedback or result artifact.
 - `cleanup.plan` contains only resources owned by this run.
 - `run.reseed` cleans owned resources and returns a ready seed.
-- `stack.stop` stops managed services.
+- `stack.stop` with `stackId` stops managed services.
 
 ## Artifact Layout
 

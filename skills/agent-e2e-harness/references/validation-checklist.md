@@ -44,10 +44,11 @@ When the task includes interactive setup, capture:
 - `tools/list`, `mcporter list`, or equivalent tool discovery evidence
 - `journey.inspect` result summary
 - `stack.explore.list` result showing concrete provider tools
-- `stack.start` ready services
-- `stack.status` unified packet summary
-- `stack.logs` result for one service with required `tail`
-- `stack.explore.run` result for one concrete provider tool
+- `stack.start` returned a `stackId` and ready services
+- `stack.list` can recover the running Stack Instance
+- `stack.status` with `stackId` unified packet summary
+- `stack.logs` with `stackId` result for one service with required `tail`
+- `stack.explore.run` with `stackId` result for one concrete provider tool
 - `run.begin` seed status
 - browser session id
 - `browser.snapshot` evidence with visible refs

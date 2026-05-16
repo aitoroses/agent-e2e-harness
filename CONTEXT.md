@@ -121,12 +121,36 @@ _Avoid_: ambient local service, manual database, localStorage fixture
 The app/runtime infrastructure required for a dev-mode harness run, including databases, app processes, containers, queues, and local services, provisioned and torn down through harness-owned lifecycle hooks while concrete infrastructure remains product- or showcase-owned.
 _Avoid_: hidden test setup, seed side effect, external prerequisite, manual stack
 
+**Verify Worker Stack**:
+A **Managed Execution Stack** instance assigned to one verify worker so multiple selected runs can execute serially inside isolated runtime resources while the suite still parallelizes across workers.
+_Avoid_: per-run stack, shared parallel stack, worker fixture
+
+**Isolated Stack Resources**:
+Runtime resources allocated for one **Verify Worker Stack**, such as ports, database paths, log paths, and service URLs, so parallel verify workers cannot collide.
+_Avoid_: hardcoded ports, shared local paths, ambient resources
+
+**StackStartContext**:
+The harness-provided context passed to a **Stack Provider** when starting a dev stack or **Verify Worker Stack**, containing worker identity plus named allocation helpers for ports and artifact paths.
+_Avoid_: stack options blob, provider config, run context
+
+**Stack Instance**:
+One started **Managed Execution Stack** with a stable stack id, handle, status, logs, exploration surface, and named allocations.
+_Avoid_: active stack, global stack, hidden handle
+
+**Run Stack Binding**:
+The explicit relationship between a journey run and the **Stack Instance** it uses for journey execution, stack exploration, logs, and evidence.
+_Avoid_: implicit active stack, ambient stack, run-owned stack
+
+**Named Stack Allocation**:
+A port or artifact path allocated through **StackStartContext** with a stable provider-chosen name so verify reports can show which runtime resources belonged to each worker stack.
+_Avoid_: anonymous free port, hidden temp file, provider metadata
+
 **Stack Provider**:
 An extension point that starts, inspects, and stops a **Managed Execution Stack** for a specific product or showcase, such as containers, app processes, databases, queues, or other local services.
 _Avoid_: hardcoded Docker logic, test helper, deployment adapter
 
 **Stack Runtime Tools**:
-Native MCP tools for stack-level runtime facts that most agents need during validation. The core set should stay small: `stack.status` as the unified services/readiness/health packet, `stack.logs` for live log capture, and `stack.explore.*` for provider-declared exploration tools.
+Native MCP tools for stack-level runtime facts that most agents need during validation. The core set should stay small: `stack.start`, `stack.list`, `stack.status`, `stack.logs`, `stack.stop`, and `stack.explore.*` for provider-declared exploration tools, with `stack.status` as the unified services/readiness/health packet for one stack instance.
 _Avoid_: provider-specific debug endpoint, generic diagnostic API, hidden service metadata
 
 **Exploration Surface**:
@@ -317,6 +341,26 @@ _Avoid_: per-adapter status enum, tool-specific response shape, unchecked respon
 - The **Reference Showcase App** should use **Managed Showcase Infrastructure** so seed, proof, closure, and teardown operate against a real stack lifecycle rather than a pre-existing local service.
 - In dev mode, stack management is part of the **Agent E2E Harness** product experience: the harness coordinates a **Managed Execution Stack** through a **Stack Provider** extension point.
 - A **Stack Provider** owns infrastructure lifecycle mechanics, while **Environment Seed** owns repeatable application state inside the ready stack.
+- Dev MCP may manage multiple explicit **Stack Instances**.
+- `stack.list` is the native recovery tool for agents to discover currently running **Stack Instances** before choosing one for status, logs, exploration, or cleanup.
+- `stack.start` may accept a caller-chosen `stackId` or return a generated one, but every later tool that targets a **Stack Instance** must use an explicit `stackId`.
+- Public `stack.stop` stops exactly one explicit **Stack Instance**; server disposal may stop all remaining stacks internally, but there is no public stop-all shortcut.
+- Duplicate caller-chosen `stackId` values are rejected while a **Stack Instance** with that id is running.
+- `stack.status`, `stack.logs`, `stack.explore.run`, and `stack.stop` reject missing `stackId` instead of selecting an implicit active stack.
+- `stack.explore.list` remains provider-level and does not require a started **Stack Instance**.
+- Planned for the **Run Stack Binding** slice (#52): journey runs that use a stack bind to a specific **Stack Instance** through `stackId`; subsequent journey execution and stack evidence resolve through that binding instead of a temporary ambient fallback.
+- Planned for the **Run Stack Binding** slice (#52): when a **Stack Provider** is configured, `run.begin` requires `stackId`; when no **Stack Provider** is configured, `stackId` is invalid rather than ignored.
+- Planned for stack evidence capture (#52): `stack.logs` and `stack.explore.run` may accept optional `runId` only for artifact capture and must validate that the run's **Run Stack Binding** matches the target `stackId`.
+- Planned for StackStartContext and allocation slices (#53-#56): `verify.workers` controls the maximum number of active **Verify Worker Stacks** as well as the selected-run worker queue; each worker executes its assigned runs serially inside its stack.
+- Planned for StackStartContext and allocation slices (#53-#56): Verify starts **Verify Worker Stacks** lazily only for workers that receive selected runs; the maximum active worker stacks is `min(workers, selectedRuns.length)`.
+- Planned for StackStartContext and allocation slices (#53-#56): a **Verify Worker Stack** start failure stops scheduling new runs, lets already-active workers finish and clean up, and fails the suite without classifying the unstarted journeys as proof failures.
+- Planned for StackStartContext and allocation slices (#53-#56): Verify reports model **Stack Instances** in a first-class `stacks` section; journey run entries reference `stackId` when a **Run Stack Binding** exists instead of representing stack failures as synthetic runs.
+- Planned for StackStartContext and allocation slices (#53-#56): **Stack Providers** should use **Isolated Stack Resources** by default; shared ports, databases, or log paths are an explicit serial-only constraint, not the normal parallel verify contract.
+- Planned for StackStartContext and allocation slices (#53-#56): parallel safety is part of the **Stack Provider** contract exercised by the **Verify Command**, not a separate capability flag that consumers must declare.
+- Planned for StackStartContext and allocation slices (#53-#56): the harness enforces stack parallel safety by creating one **StackStartContext** per worker and surfacing runtime allocation/start failures, while docs, the showcase, and the self-contained skill teach isolated resources as the normal provider pattern.
+- Planned for StackStartContext and allocation slices (#53-#56): **Named Stack Allocations** created through **StackStartContext** should be recorded automatically in verify reports so parallel stack failures are diagnosable without provider-authored duplicate metadata.
+- Planned for StackStartContext and allocation slices (#53-#56): dynamic stack runtime resources such as allocated URLs and paths belong on the **Execution Surface** through `execution.stack`, not by mutating **Journey Profile** data.
+- Planned for StackStartContext and allocation slices (#53-#56): `StackStatusPacket` services remain the journey-facing runtime contract for URLs, readiness, and health; **Named Stack Allocations** are report/debug evidence and resource-allocation support rather than a replacement for stack status.
 - Direct stack runtime concerns should feel native through **Stack Runtime Tools** rather than being hidden behind generic action plumbing, but simple wins: `stack.status` should carry services, endpoints, readiness checks, and next actions instead of splitting separate `stack.services` or `stack.health` tools.
 - The **Dev MCP Server** is an **Exploration Surface** first: agents use it to discover the live system and crystallize the discovered trajectory into an **Executable Journey**.
 - A **Stack Provider** may expose **Stack Exploration Tools** so agents can inspect or manipulate runtime and application state without the harness hardcoding a specific stack technology.

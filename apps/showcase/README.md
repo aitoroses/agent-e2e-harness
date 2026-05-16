@@ -35,7 +35,7 @@ In another terminal, discover the tools:
 mcporter list http://127.0.0.1:3766/mcp --allow-http --schema --json
 ```
 
-Expected checkpoint: `"status": "ok"` and 29 tools, including `stack.start`, `stack.logs`, `stack.explore.list`, `stack.explore.run`, `run.begin`, `browser.open`, `browser.find`, `browser.wait`, `browser.get`, `browser.console`, `browser.network`, `browser.eval`, `browser.playwright`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.teardown`, and `stack.stop`.
+Expected checkpoint: `"status": "ok"` and 30 tools, including `stack.start`, `stack.list`, `stack.logs`, `stack.explore.list`, `stack.explore.run`, `run.begin`, `browser.open`, `browser.find`, `browser.wait`, `browser.get`, `browser.console`, `browser.network`, `browser.eval`, `browser.playwright`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.teardown`, and `stack.stop`.
 
 Discover the provider-owned stack exploration surface:
 
@@ -53,10 +53,16 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.sta
 
 Expected checkpoint: `"status": "ok"`, `"stack": { "status": "ready" }`, and a `showcase-next-dev` service URL. The 120s timeout covers cold Docker/Testcontainers startup; warm local runs should usually complete much faster.
 
+Set the returned stack id:
+
+```sh
+STACK_ID="<returned-stack-id>"
+```
+
 Read recent managed stack logs when the app is not behaving as expected:
 
 ```sh
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.logs --args '{"serviceId":"showcase-next-dev","tail":80,"stream":"combined"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.logs --args "{\"stackId\":\"${STACK_ID}\",\"serviceId\":\"showcase-next-dev\",\"tail\":80,\"stream\":\"combined\"}" --output json
 ```
 
 Expected checkpoint: `"logs": { "status": "ok", "serviceId": "showcase-next-dev" }`.
@@ -109,7 +115,7 @@ Expected checkpoint: `"status": "passed"` with both proofs passed and a `step_fe
 Inspect the created note through the verify-safe stack exploration tool:
 
 ```sh
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.explore.run --args '{"toolId":"notes.list","input":{"limit":10}}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.explore.run --args "{\"stackId\":\"${STACK_ID}\",\"toolId\":\"notes.list\",\"input\":{\"limit\":10}}" --output json
 ```
 
 Expected checkpoint: `"toolId": "notes.list"` and `"output"` includes the browser-created proof note.
@@ -135,7 +141,7 @@ Close the browser and stop the stack:
 
 ```sh
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.close --args '{"browserSessionId":"<browserSessionId>"}' --output json
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.stop --args '{}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.stop --args "{\"stackId\":\"${STACK_ID}\"}" --output json
 ```
 
 Expected checkpoint: `"stack": { "status": "stopped" }` with stopped `showcase-next-dev` and `postgres` services.

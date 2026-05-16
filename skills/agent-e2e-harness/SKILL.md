@@ -42,6 +42,7 @@ The fixed stack MCP grammar is:
 
 ```text
 stack.start
+stack.list
 stack.status
 stack.stop
 stack.logs
@@ -49,9 +50,9 @@ stack.explore.list
 stack.explore.run
 ```
 
-`stack.status` is the unified stack-state packet. It should include services with stable ids, endpoints, checks, warnings, errors, artifacts, and next actions. Do not invent native `stack.services`, `stack.health`, or `stack.env` tools for v1.
+`stack.start` returns a `stackId`; pass that id to `stack.status`, `stack.logs`, `stack.explore.run`, and `stack.stop`. Use `stack.list` to recover running Stack Instances after compaction. `stack.status` is the unified stack-state packet. It should include services with stable ids, endpoints, checks, warnings, errors, artifacts, and next actions. Do not invent native `stack.services`, `stack.health`, or `stack.env` tools for v1.
 
-`stack.logs` is live exploration. It requires an active stack, one `serviceId`, a required `tail`, and optional `stream: "stdout" | "stderr" | "combined"`.
+`stack.logs` is live exploration. It requires a `stackId`, one `serviceId`, a required `tail`, and optional `stream: "stdout" | "stderr" | "combined"`.
 
 Provider-declared `stack.explore.*` tools must have:
 
@@ -60,7 +61,7 @@ Provider-declared `stack.explore.*` tools must have:
 - `availableIn: ["dev"]` or `["dev", "verify"]`
 - `risk: "none" | "local-mutation" | "destructive" | "external-side-effect"`
 - mandatory Zod `input` and `output` schemas
-- a handler that receives `{ input, handle }`, where `handle` is the active stack handle returned by `start`
+- a handler that receives `{ input, handle }`, where `handle` is the selected Stack Instance handle returned by `start`
 
 Only Verify Observation Tools can be used from journey execution during `agent-e2e verify`: `availableIn` includes `verify` and `risk` is exactly `none`. Dev-only tools must not fake product-visible behavior in CI. Mutations must come through the app path, seed, journey steps, reseed, or cleanup.
 
@@ -116,9 +117,10 @@ Use `mcporter` for fresh or remote agents without a registered MCP client:
 mcporter list http://127.0.0.1:3766/mcp --schema --json --allow-http
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.explore.list --args '{}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.start --args '{}' --output json --timeout 120000
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.status --args '{}' --output json
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.logs --args '{"serviceId":"<service-id>","tail":80,"stream":"combined"}' --output json
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.explore.run --args '{"toolId":"notes.list","input":{"limit":10}}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.list --args '{}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.status --args '{"stackId":"<stack-id>"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.logs --args '{"stackId":"<stack-id>","serviceId":"<service-id>","tail":80,"stream":"combined"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.explore.run --args '{"stackId":"<stack-id>","toolId":"notes.list","input":{"limit":10}}' --output json
 ```
 
 Before claiming adoption works, prove:

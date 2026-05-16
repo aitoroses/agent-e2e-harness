@@ -18,12 +18,13 @@ The default Dev MCP grammar defines reusable Agent E2E Harness vocabulary for lo
 
 ### Stack and seed
 
-- `stack.start` — starts the managed dev stack.
-- `stack.status` — returns the unified stack-state packet: services, endpoints, readiness checks, warnings, errors, artifacts, and next actions.
-- `stack.logs` — reads recent live logs for one active service; requires `serviceId` and `tail`, with optional `stream`.
+- `stack.start` — starts a Stack Instance and returns the effective `stackId`.
+- `stack.list` — lists currently running Stack Instances.
+- `stack.status` — returns the unified stack-state packet for one explicit `stackId`: services, endpoints, readiness checks, warnings, errors, artifacts, and next actions.
+- `stack.logs` — reads recent live logs for one active service on one explicit `stackId`; requires `serviceId` and `tail`, with optional `stream`.
 - `stack.explore.list` — lists provider-declared stack exploration tools with JSON Schemas derived from Zod input/output schemas.
-- `stack.explore.run` — runs one provider-declared stack exploration tool against the active stack.
-- `stack.stop` — stops provider-owned infrastructure/processes.
+- `stack.explore.run` — runs one provider-declared stack exploration tool against one explicit `stackId`.
+- `stack.stop` — stops one explicit Stack Instance.
 - `run.reseed` — cleans journey-owned resources, then applies Environment Seed.
 
 There are no native `stack.services`, `stack.health`, or `stack.env` tools in v1. Service and health data live in `stack.status`; provider-specific config or database/queue/cache inspection belongs in `stack.explore.*`.
