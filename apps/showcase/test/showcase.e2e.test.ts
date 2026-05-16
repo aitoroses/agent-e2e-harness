@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chromium, type Browser, type Page } from "playwright";
-import { allocateTcpPort, createStackStartContext } from "@agent-e2e/harness/stack";
+import { createStackStartContext } from "@agent-e2e/harness/stack";
 import {
   beginJourneyRun,
   runClosure,
@@ -17,18 +17,40 @@ let browser: Browser;
 let page: Page;
 
 beforeAll(async () => {
-  port = await allocateTcpPort();
-  baseUrl = `http://127.0.0.1:${port}`;
   stackProvider = createShowcaseDevStackProvider({
     appHost: "127.0.0.1",
-    appPort: port,
-    appUrl: baseUrl,
   });
-  stackHandle = await stackProvider.start(createStackStartContext({
+  const stackContext = createStackStartContext({
     mode: "dev",
     stackId: "showcase-e2e",
     artifactRoot: ".agents-e2e/artifacts",
-  }));
+  });
+  stackHandle = await stackProvider.start(stackContext);
+  const portAllocation = stackContext.allocations().find(
+    (allocation) => allocation.kind === "port" && allocation.name === "showcase next dev",
+  );
+  expect(portAllocation).toMatchObject({
+    kind: "port",
+    stackId: "showcase-e2e",
+    resource: { host: "127.0.0.1" },
+  });
+  if (!portAllocation || portAllocation.kind !== "port") {
+    throw new Error("expected showcase next dev port allocation");
+  }
+  port = portAllocation.resource.port;
+  baseUrl = portAllocation.resource.url;
+  expect(stackContext.allocations()).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      kind: "artifact-directory",
+      name: "showcase stack artifacts",
+      stackId: "showcase-e2e",
+    }),
+    expect.objectContaining({
+      kind: "artifact-file",
+      name: "next dev log",
+      stackId: "showcase-e2e",
+    }),
+  ]));
   await expect(stackProvider.status(stackHandle)).resolves.toMatchObject({
     status: "ready",
     services: expect.arrayContaining([
@@ -46,7 +68,7 @@ beforeAll(async () => {
       actions: [
         expect.objectContaining({
           tool: "stack.logs",
-          input: { serviceId: "showcase-next-dev", tail: 80, stream: "combined" },
+          input: { stackId: "showcase-e2e", serviceId: "showcase-next-dev", tail: 80, stream: "combined" },
         }),
       ],
     },
