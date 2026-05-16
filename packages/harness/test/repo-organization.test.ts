@@ -19,6 +19,10 @@ function entries(path: string): string[] {
   return existsSync(path) ? readdirSync(path).sort() : [];
 }
 
+function text(path: string): string {
+  return readFileSync(resolve(repoRoot, path), 'utf8');
+}
+
 describe('repository organization contract', () => {
   it('keeps public type fixtures colocated with the harness package, not at repo root', () => {
     expect(existsSync(resolve(repoRoot, 'test-d'))).toBe(false);
@@ -52,5 +56,20 @@ describe('repository organization contract', () => {
       expect.arrayContaining(['@testcontainers/postgresql', 'pg']),
     );
     expect(existsSync(resolve(repoRoot, 'packages/harness/dist/testcontainers'))).toBe(false);
+  });
+
+  it('keeps showcase docs on the explicit Stack Instance and worker verify path', () => {
+    const showcaseReadme = text('apps/showcase/README.md');
+    const transcript = text('docs/showcase/mcporter-proof-transcript.md');
+
+    for (const source of [showcaseReadme, transcript]) {
+      expect(source).toContain('--tool stack.start --args \'{"stackId":"showcase-dev-stack"}\'');
+      expect(source).toContain('--tool stack.list');
+      expect(source).toContain('"stackId":"showcase-dev-stack"');
+      expect(source).toContain('--tool run.begin');
+      expect(source).toContain('--tool stack.logs');
+      expect(source).toContain('--tool stack.explore.run');
+      expect(source).toContain('npm run e2e:verify --workspace @agent-e2e/showcase -- --workers 2');
+    }
   });
 });

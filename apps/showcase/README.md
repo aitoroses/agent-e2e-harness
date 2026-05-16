@@ -45,18 +45,26 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.exp
 
 Expected checkpoint: `notes.list` is available in `dev` and `verify` with `risk: "none"`; `postgres.query` is `dev`-only with `risk: "local-mutation"`.
 
-Start the managed stack:
+Start a named Stack Instance:
 
 ```sh
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.start --args '{}' --output json --timeout 120000
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.start --args '{"stackId":"showcase-dev-stack"}' --output json --timeout 120000
 ```
 
 Expected checkpoint: `"status": "ok"`, `"stack": { "status": "ready" }`, and a `showcase-next-dev` service URL. The 120s timeout covers cold Docker/Testcontainers startup; warm local runs should usually complete much faster.
 
-Set the returned stack id:
+Recover or inspect running Stack Instances:
 
 ```sh
-STACK_ID="<returned-stack-id>"
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.list --args '{}' --output json
+```
+
+Expected checkpoint: the response includes `"stackId": "showcase-dev-stack"` with `showcase-next-dev` and `postgres` services.
+
+Set the explicit stack id:
+
+```sh
+STACK_ID="showcase-dev-stack"
 ```
 
 Read recent managed stack logs when the app is not behaving as expected:
@@ -204,17 +212,17 @@ Verify suite reports are generated under `.agents-e2e/artifacts/_suites/<suite-i
 The showcase verifies through the same config-backed CLI path consumers should use:
 
 ```sh
-npm run e2e:verify --workspace @agent-e2e/showcase
+npm run e2e:verify --workspace @agent-e2e/showcase -- --workers 2
 ```
 
-Expected checkpoint: `Agent E2E verify: 1 passed, 0 failed` and a suite report under `.agents-e2e/artifacts/_suites/`.
+Expected checkpoint: `Agent E2E verify: 1 passed, 0 failed, 0 stack failed` and a suite report under `.agents-e2e/artifacts/_suites/`. With the current single selected showcase journey, verify starts one lazy worker Stack Instance such as `worker-0` even when `--workers 2` is configured; the report still records `workers: 2`, the run `stackId`, named allocations, and dynamic service URLs.
 
 ## Validation
 
 ```sh
 npm run build --workspace @agent-e2e/harness
 npm run typecheck --workspace @agent-e2e/showcase
-npm run e2e:verify --workspace @agent-e2e/showcase
+npm run e2e:verify --workspace @agent-e2e/showcase -- --workers 2
 npm run test --workspace @agent-e2e/showcase -- --reporter=verbose
 npm audit --json
 ```

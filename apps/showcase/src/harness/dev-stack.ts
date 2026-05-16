@@ -30,6 +30,8 @@ export interface ShowcaseDevStackProviderConfig {
 }
 
 export interface ShowcaseDevStackHandle {
+  stackId: string;
+  stackArtifactUri: string;
   appUrl: string;
   postgresHandle: PostgresStackHandle;
   appHandle: ProcessStackHandle;
@@ -124,6 +126,7 @@ export function createShowcaseDevStackProvider(
     id: "showcase-devmode-stack",
     explore: showcaseExploreTools,
     async start(ctx: StackStartContext) {
+      const stackArtifacts = ctx.allocateArtifactPath("showcase stack artifacts", { kind: "directory" });
       let appPort: number;
       let appUrl: string;
       if (configuredAppPort !== undefined) {
@@ -161,7 +164,14 @@ export function createShowcaseDevStackProvider(
       });
       try {
         const appHandle = await app.start(ctx);
-        return { appUrl, postgresHandle, appHandle, app };
+        return {
+          stackId: ctx.stackId,
+          stackArtifactUri: stackArtifacts.uri,
+          appUrl,
+          postgresHandle,
+          appHandle,
+          app,
+        };
       } catch (error) {
         await postgres.stop(postgresHandle);
         throw error;
@@ -175,6 +185,10 @@ export function createShowcaseDevStackProvider(
       return combineStatus(
         appStatus.status === "ready" && postgresStatus.status === "ready" ? "ready" : "degraded",
         `Showcase dev stack ${appStatus.status === "ready" ? "ready" : "not ready"} at ${handle.appUrl}`,
+        {
+          stackId: handle.stackId,
+          stackArtifact: { id: "artifact:showcase-stack", kind: "directory", uri: handle.stackArtifactUri },
+        },
         appStatus,
         postgresStatus,
       );
@@ -189,7 +203,7 @@ export function createShowcaseDevStackProvider(
         handle.app.stop(handle.appHandle),
         postgres.stop(handle.postgresHandle),
       ]);
-      return combineStatus("stopped", "Showcase dev stack stopped.", appStopped, postgresStopped);
+      return combineStatus("stopped", "Showcase dev stack stopped.", {}, appStopped, postgresStopped);
     },
   };
 }
@@ -197,13 +211,20 @@ export function createShowcaseDevStackProvider(
 function combineStatus(
   status: StackStatusPacket["status"],
   summary: string,
+  options: {
+    stackId?: string;
+    stackArtifact?: StackStatusPacket["artifacts"][number];
+  },
   ...packets: StackStatusPacket[]
 ): StackStatusPacket {
   return {
     status,
     summary,
     services: packets.flatMap((packet) => packet.services),
-    artifacts: packets.flatMap((packet) => packet.artifacts),
+    artifacts: [
+      ...(options.stackArtifact ? [options.stackArtifact] : []),
+      ...packets.flatMap((packet) => packet.artifacts),
+    ],
     warnings: packets.flatMap((packet) => packet.warnings),
     errors: packets.flatMap((packet) => packet.errors),
     next: {
@@ -211,7 +232,12 @@ function combineStatus(
         {
           id: "read-next-dev-logs",
           tool: "stack.logs",
-          input: { serviceId: "showcase-next-dev", tail: 80, stream: "combined" },
+          input: {
+            ...(options.stackId ? { stackId: options.stackId } : {}),
+            serviceId: "showcase-next-dev",
+            tail: 80,
+            stream: "combined",
+          },
           why: "Inspect recent Next.js process logs.",
         },
       ],
