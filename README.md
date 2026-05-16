@@ -112,7 +112,7 @@ stack.explore.list
 stack.explore.run
 ```
 
-`stack.start` returns a `stackId`; pass that id to `stack.status`, `stack.logs`, `stack.explore.run`, and `stack.stop`. `stack.list` recovers currently running Stack Instances. `stack.status` is the unified stack-state packet: services, stable service ids, endpoints, checks, warnings, errors, artifacts, and next actions. There are no native `stack.services`, `stack.health`, or `stack.env` tools in v1. Runtime-specific inspection is provider-owned through `stack.explore.*`.
+`stack.start` returns a `stackId`; pass that id to `stack.status`, `run.begin`, `stack.logs`, `stack.explore.run`, and `stack.stop`. `stack.list` recovers currently running Stack Instances. `run.begin` requires a valid `stackId` when a stack provider exists, and rejects `stackId` when no provider exists. `stack.status` is the unified stack-state packet: services, stable service ids, endpoints, checks, warnings, errors, artifacts, and next actions. There are no native `stack.services`, `stack.health`, or `stack.env` tools in v1. Runtime-specific inspection is provider-owned through `stack.explore.*`.
 
 ## Build the proof loop
 
@@ -314,7 +314,7 @@ cleanup.plan
 run.reseed
 ```
 
-Use `stack.logs` for live service logs after the stack is active. It requires a `stackId`, one `serviceId`, a required `tail`, and optional `stream`. Use `stack.explore.list` to discover provider-declared tools and `stack.explore.run` with `stackId` to run one of them with Zod-validated input/output.
+Use `stack.logs` for live service logs after the stack is active. It requires a `stackId`, one `serviceId`, a required `tail`, and optional `stream`. Use `stack.explore.list` to discover provider-declared tools and `stack.explore.run` with `stackId` to run one of them with Zod-validated input/output. `stack.logs` and `stack.explore.run` accept optional `runId` only to capture artifacts, and reject capture when the run is bound to a different `stackId`.
 
 The Browser Workbench is the browser-side exploration surface. Use `browser.snapshot` for visible refs, `browser.find` for semantic lookup, `browser.act` for one UI mutation, `browser.wait` for explicit conditions, `browser.get` for targeted reads, `browser.console` / `browser.network` for signal buffers, `browser.screenshot` for explicit visual artifacts, and `browser.eval` / `browser.playwright` when exploration needs custom page or Playwright code.
 

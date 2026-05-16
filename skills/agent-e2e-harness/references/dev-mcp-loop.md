@@ -111,7 +111,7 @@ Capture these facts before changing implementation again:
 - `stack.status` with `stackId` returns the unified stack-state packet. Do not expect native `stack.services`, `stack.health`, or `stack.env`.
 - `stack.logs` with `stackId` returns recent live logs for one active service using `serviceId` and required `tail`.
 - `stack.explore.run` with `stackId` can run at least one concrete provider tool.
-- `run.begin` returns seed `status: "passed"` or `"warning"` and `canRunSteps: true`.
+- `run.begin` with `stackId` returns seed `status: "passed"` or `"warning"`, `canRunSteps: true`, and the run's Stack Binding.
 - `browser.open` returns a browser session id.
 - `browser.snapshot` shows expected app state and no visible runtime error.
 - `browser.find` resolves semantic targets when a role, label, text, placeholder, test id, or selector is clearer than a snapshot ref.

@@ -49,7 +49,7 @@ When the task includes interactive setup, capture:
 - `stack.status` with `stackId` unified packet summary
 - `stack.logs` with `stackId` result for one service with required `tail`
 - `stack.explore.run` with `stackId` result for one concrete provider tool
-- `run.begin` seed status
+- `run.begin` seed status and Stack Binding for the selected `stackId`
 - browser session id
 - `browser.snapshot` evidence with visible refs
 - `browser.find` evidence when semantic lookup is used

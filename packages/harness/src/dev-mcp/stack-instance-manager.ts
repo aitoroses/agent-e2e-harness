@@ -187,9 +187,8 @@ export class StackInstanceManager<TStackHandle> {
     }
   }
 
-  async execution(stackId?: string): Promise<StackExecutionSurface | undefined> {
-    const handle = this.resolveHandle(stackId);
-    if (handle === undefined) return undefined;
+  async execution(stackId: string, tool = "run.begin"): Promise<StackExecutionSurface> {
+    const handle = this.requireHandle(tool, stackId);
     const status = await this.provider.status(handle);
     return createStackExecutionSurface(status, this.provider, handle);
   }

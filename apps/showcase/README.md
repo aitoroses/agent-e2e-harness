@@ -77,7 +77,7 @@ RUN_ID="showcase-dev"
 Begin the run and seed the baseline:
 
 ```sh
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool run.begin --args '{"journeyId":"showcase:proof-notes","runId":"showcase-dev"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool run.begin --args "{\"journeyId\":\"showcase:proof-notes\",\"runId\":\"showcase-dev\",\"stackId\":\"${STACK_ID}\"}" --output json
 ```
 
 Expected checkpoint: `"seedGate": { "status": "ready", "canRunSteps": true }`.
