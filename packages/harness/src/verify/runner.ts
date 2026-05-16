@@ -156,6 +156,7 @@ export async function runVerifySuite<
           cleanup: resolved.cleanup,
           warningsAsErrors: resolved.warningsAsErrors,
           ...(worker.stack ? { stack: worker.stack } : {}),
+          ...(worker.stackId ? { stackId: worker.stackId } : {}),
         });
         runs.push(result.report);
         if (resolved.cleanup === "suite-end" && result.ledger) {
@@ -185,6 +186,7 @@ export async function runVerifySuite<
   const endedAtDate = input.options.now?.() ?? new Date();
   const failedRuns = runs.filter((run) => run.status !== "passed");
   const status = failedRuns.length === 0 && suiteErrors.length === 0 ? "passed" : "failed";
+  const hasStackFailure = stackSnapshots.some((stack) => stack.status !== "ready");
   const legacyStack = stackSnapshots.length === 1 ? stackSnapshots[0] : undefined;
   const report: VerifySuiteReport = {
     suiteId,
@@ -207,11 +209,16 @@ export async function runVerifySuite<
           },
         }
       : {}),
+    stacks: stackSnapshots,
     runs: runs.sort((left, right) => runIndex(left.runId) - runIndex(right.runId)),
     warnings: suiteWarnings,
     errors: suiteErrors,
     exitCode: status === "passed" ? 0 : 1,
-    exitReason: status === "passed" ? "all selected runs passed" : "one or more selected runs failed",
+    exitReason: status === "passed"
+      ? "all selected runs passed"
+      : hasStackFailure
+        ? "stack runtime failed"
+        : "one or more selected runs failed",
   };
   await writeVerifyReports(report);
   input.options.stdout?.write(renderTerminalReport(report, resolved.reporter));
@@ -229,6 +236,7 @@ async function runSingleVerifyRun<TTypes extends AnyHarnessTypes>(input: {
   resourceAdapters: readonly ResourceAdapter<TTypes>[];
   cleanup: VerifyCleanupMode;
   warningsAsErrors: boolean;
+  stackId?: string;
 }): Promise<{ report: VerifyRunReport; ledger?: OwnershipLedger<TTypes> }> {
   const started = Date.now();
   const runId = runIdFor(input.journey.id, input.profileId, input.index);
@@ -314,6 +322,7 @@ async function runSingleVerifyRun<TTypes extends AnyHarnessTypes>(input: {
     journeyId: input.journey.id,
     profileId: input.profileId,
     runId,
+    ...(input.stackId ? { stackId: input.stackId } : {}),
     status,
     durationMs: Math.max(0, Date.now() - started),
     artifactDir: artifacts.run.relDir,
