@@ -20,7 +20,7 @@ APP_URL="http://127.0.0.1:58589"
 RUN_ID="showcase-dev"
 
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool journey.list --args '{}' --output json
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool run.begin --args '{"journeyId":"showcase:proof-notes","runId":"showcase-dev"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool run.begin --args '{"journeyId":"showcase:proof-notes","runId":"showcase-dev","stackId":"stack-1"}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.open --args '{"targetUrl":"http://127.0.0.1:58589?agentE2ERunId=showcase-dev","journeyId":"showcase:proof-notes","runId":"showcase-dev"}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.snapshot --args '{"browserSessionId":"browser-1778691174645-4ba879"}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.find --args '{"browserSessionId":"browser-1778691174645-4ba879","by":"role","value":"button","name":"Create proof note"}' --output json
@@ -47,7 +47,7 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.sto
 - `stack.start`: status `ok`; returned `stackId: "stack-1"`; stack status `ready`; `showcase-next-dev` ready at `http://127.0.0.1:58589`; PostgreSQL ready through the showcase Testcontainers provider.
 - `stack.logs`: status `ok`; returned recent combined logs for `showcase-next-dev`.
 - `journey.list`: listed `showcase:proof-notes`.
-- `run.begin`: seed gate `ready`; `canRunSteps: true`; baseline workspace/user checked.
+- `run.begin`: seed gate `ready`; `canRunSteps: true`; baseline workspace/user checked; run bound to `stackId: "stack-1"`.
 - `browser.open`: returned headed MCP browser session `browser-1778691174645-4ba879`.
 - `browser.snapshot`: title `Proof Notes Showcase`; refs included visible app controls.
 - `browser.find`: returned `@f1` for the `Create proof note` button via role/name lookup.

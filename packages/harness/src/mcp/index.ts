@@ -50,6 +50,10 @@ export interface McpHarnessServer {
   callTool: (name: string, args: Record<string, unknown>) => Promise<McpToolResponse>;
 }
 
+interface RunMetadata {
+  stackBinding?: { stackId: string };
+}
+
 export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarnessTypes>(
   options: McpHarnessServerOptions<TTypes>
 ): McpHarnessServer {
@@ -59,6 +63,7 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
   const runArtifacts = new Map<string, RunArtifactRecorder<TTypes>>();
   const runTimelines = new Map<string, Array<Record<string, unknown>>>();
   const runSignals = new Map<string, RunSignalRecorder>();
+  const runMetadata = new Map<string, RunMetadata>();
   const resourceAdapters = options.resourceAdapters ?? [];
   const artifactContents = options.artifactContents ?? {};
 
@@ -108,6 +113,9 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           )) as BeginJourneyRunResult<TTypes>;
           if (result.status === 'blocked') return { status: 'blocked', seedGate: result.seedGate, guidance: result.seedGate.guidance };
           runs.set(result.run.id, result.run);
+          const stackId = optionalStringArg(args, 'stackId');
+          const metadata: RunMetadata = stackId ? { stackBinding: { stackId } } : {};
+          runMetadata.set(result.run.id, metadata);
           const artifacts = createRunArtifactRecorder(
             {
               artifactRoot: optionalStringArg(args, 'artifactRoot') ?? options.artifactRoot,
@@ -120,13 +128,14 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           runTimelines.set(result.run.id, []);
           runSignals.set(result.run.id, attachRunSignals(result.run.execution));
           const seedArtifact = await artifacts.writeSeed(result.seedGate);
-          const resultArtifact = await artifacts.writeResult(runProgress(result.run, [], 'running', artifacts.run.relDir, [seedArtifact]));
+          const resultArtifact = await artifacts.writeResult(runProgress(result.run, [], 'running', artifacts.run.relDir, [seedArtifact], metadata));
           for (const artifact of result.seedGate.manifest.artifacts) emittedArtifacts.set(artifact.id, artifact);
           emittedArtifacts.set(seedArtifact.id, seedArtifact);
           emittedArtifacts.set(resultArtifact.id, resultArtifact);
           return {
             status: 'ok',
             runId: result.run.id,
+            ...runMetadataResponse(metadata),
             artifactDir: artifacts.run.relDir,
             seedGate: result.seedGate,
             artifacts: [seedArtifact, resultArtifact],
@@ -188,13 +197,13 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
             });
             runTimelines.set(run.id, timeline);
             const timelineArtifact = await writeJsonArtifact(artifacts.run, 'timeline.json', timeline, { name: 'timeline' });
-            const metricsArtifact = await writeJsonArtifact(artifacts.run, 'metrics.json', runMetrics(executableRun, timeline), { name: 'metrics' });
+            const metricsArtifact = await writeJsonArtifact(artifacts.run, 'metrics.json', runMetrics(executableRun, timeline, runMetadata.get(run.id)), { name: 'metrics' });
             const resultArtifact = await artifacts.writeResult(
               runProgress(executableRun, timeline, executableRun.progress.status, artifacts.run.relDir, [
                 ...generatedArtifacts,
                 timelineArtifact,
                 metricsArtifact
-              ])
+              ], runMetadata.get(run.id))
             );
             for (const artifact of [timelineArtifact, metricsArtifact, resultArtifact]) emittedArtifacts.set(artifact.id, artifact);
           }
@@ -204,11 +213,12 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
         case 'reseedRun': {
           const currentRun = runs.get(stringArg(args, 'runId'));
           if (!currentRun) return notFound('run');
+          const injectedExecution = args.execution as TTypes['executionSurface'] | undefined;
           const result = await reseedJourneyRun(
             currentRun.journey,
             optionalArgs({
               profileId: currentRun.profile.id,
-              execution: currentRun.execution,
+              execution: injectedExecution ?? currentRun.execution,
               runId: optionalStringArg(args, 'newRunId') ?? currentRun.id,
               previousLedger: currentRun.ownershipLedger,
               resourceAdapters,
@@ -224,6 +234,8 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           );
           if (result.status === 'blocked') return { status: 'blocked', reason: result.reason, cleanup: result.cleanup, seedGate: result.seedGate, guidance: result.guidance };
           runs.set(result.run.id, result.run);
+          const metadata = runMetadata.get(currentRun.id);
+          if (metadata) runMetadata.set(result.run.id, metadata);
           const artifacts = runArtifacts.get(currentRun.id) ?? createRunArtifactRecorder(
             {
               artifactRoot: options.artifactRoot,
@@ -252,11 +264,14 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
         case 'runPhase': {
           const run = runs.get(stringArg(args, 'runId'));
           if (!run) return notFound('run');
-          const phase = run.journey.phases.find((candidate) => candidate.id === stringArg(args, 'phaseId'));
+          const injectedExecution = args.execution as TTypes['executionSurface'] | undefined;
+          const executableRun = injectedExecution ? { ...run, execution: injectedExecution } : run;
+          if (injectedExecution) runs.set(run.id, executableRun);
+          const phase = executableRun.journey.phases.find((candidate) => candidate.id === stringArg(args, 'phaseId'));
           if (!phase) return notFound('phase');
           const results: StepRunResult<TTypes>[] = [];
           for (const step of phase.steps) {
-            const result = await runJourneyStep(run, { phaseId: phase.id, stepId: step.id });
+            const result = await runJourneyStep(executableRun, { phaseId: phase.id, stepId: step.id });
             rememberStepArtifacts(emittedArtifacts, result);
             results.push(result);
             if (result.status === 'failed' || result.status === 'error') break;
@@ -319,11 +334,13 @@ function runProgress<TTypes extends AnyHarnessTypes>(
   timeline: readonly Record<string, unknown>[],
   status: string,
   artifactDir: string | undefined,
-  artifacts: readonly ArtifactRef[]
+  artifacts: readonly ArtifactRef[],
+  metadata: RunMetadata | undefined = undefined
 ): Record<string, unknown> {
   return {
     status,
     runId: run.id,
+    ...runMetadataResponse(metadata),
     journeyId: run.journey.id,
     profileId: run.profile.id,
     artifactDir,
@@ -351,10 +368,12 @@ function runProgress<TTypes extends AnyHarnessTypes>(
 
 function runMetrics<TTypes extends AnyHarnessTypes>(
   run: JourneyRun<TTypes>,
-  timeline: readonly Record<string, unknown>[]
+  timeline: readonly Record<string, unknown>[],
+  metadata: RunMetadata | undefined = undefined
 ): Record<string, unknown> {
   return {
     runId: run.id,
+    ...runMetadataResponse(metadata),
     journeyId: run.journey.id,
     stepCount: timeline.length,
     totalDurationMs: timeline.reduce((total, event) => total + (typeof event.durationMs === 'number' ? event.durationMs : 0), 0),
@@ -364,6 +383,14 @@ function runMetrics<TTypes extends AnyHarnessTypes>(
       status: event.status,
       durationMs: event.durationMs
     }))
+  };
+}
+
+function runMetadataResponse(metadata: RunMetadata | undefined): Record<string, unknown> {
+  if (!metadata?.stackBinding) return {};
+  return {
+    stackId: metadata.stackBinding.stackId,
+    stackBinding: metadata.stackBinding
   };
 }
 

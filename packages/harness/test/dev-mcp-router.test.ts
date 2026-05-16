@@ -9,6 +9,7 @@ import { createDevMcpToolRouter } from "@agent-e2e/harness/dev-mcp";
 import { createMcpHarnessServer } from "../src/mcp/index.js";
 import {
   defineStackExploreTools,
+  type StackExecutionSurface,
   type StackStartContext,
   type StackProvider,
 } from "@agent-e2e/harness/stack";
@@ -74,6 +75,55 @@ function makeFailingJourney() {
               status: "failed",
               observed: { message: "failure observed" },
               errors: ["Intentional validation failure"],
+            }),
+          },
+        ],
+      },
+    ],
+  });
+}
+
+type StackBoundHarness = HarnessTypes<
+  { runId: string; stack?: StackExecutionSurface },
+  Record<string, never>,
+  { message: string },
+  { kind: "record"; id: string }
+>;
+
+function makeStackBoundJourney() {
+  const stackMessage = (execution: StackBoundHarness["executionSurface"]) =>
+    execution.stack?.services[0]?.url ?? "missing-stack";
+
+  return defineJourney<StackBoundHarness>({
+    id: "journey:stack-bound",
+    title: "Stack-bound journey",
+    seed: () => ({ environment: { checked: [{ kind: "record", id: "record:ready" }] } }),
+    profiles: [{ id: "profile:stack-bound", data: {}, isDefault: true }],
+    phases: [
+      {
+        id: "phase:one",
+        title: "Phase one",
+        steps: [
+          {
+            id: "step:one",
+            title: "Step one",
+            execute: async ({ execution }) => ({
+              status: "passed",
+              observed: { message: stackMessage(execution) },
+            }),
+          },
+        ],
+      },
+      {
+        id: "phase:two",
+        title: "Phase two",
+        steps: [
+          {
+            id: "step:two",
+            title: "Step two",
+            execute: async ({ execution }) => ({
+              status: "passed",
+              observed: { message: stackMessage(execution) },
             }),
           },
         ],
@@ -648,6 +698,313 @@ describe("Dev MCP Tool Router", () => {
       status: "blocked",
       code: "stack-not-running",
     });
+  });
+
+  it("requires run.begin to bind a valid Stack Instance when a stack provider exists", async () => {
+    const artifactRoot = await mkdtemp(join(tmpdir(), "agent-e2e-router-binding-"));
+    const harness = createMcpHarnessServer({ journeys: [makeRouterJourney()], artifactRoot });
+    const provider: StackProvider<{ id: string }> = {
+      id: "binding-stack",
+      start: async () => ({ id: "handle-alpha" }),
+      status: () => ({
+        status: "ready",
+        summary: "ready",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+      stop: () => ({
+        status: "stopped",
+        summary: "stopped",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+
+    const router = createDevMcpToolRouter({ harness, stackProvider: provider });
+    await expect(
+      router.callTool("run.begin", {
+        journeyId: "journey:router",
+        runId: "missing-binding",
+      }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      code: "run-stack-id-required",
+      message: expect.stringContaining("stackId"),
+    });
+    await expect(
+      router.callTool("run.begin", {
+        journeyId: "journey:router",
+        runId: "unknown-binding",
+        stackId: "missing",
+      }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      code: "stack-not-running",
+    });
+
+    const noProviderRouter = createDevMcpToolRouter({ harness });
+    await expect(
+      noProviderRouter.callTool("run.begin", {
+        journeyId: "journey:router",
+        runId: "no-provider",
+        stackId: "alpha",
+      }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      code: "run-stack-provider-missing",
+      message: expect.stringContaining("no stack provider"),
+    });
+
+    await router.callTool("stack.start", { stackId: "alpha" });
+    const begin = await router.callTool("run.begin", {
+      journeyId: "journey:router",
+      runId: "bound-run",
+      stackId: "alpha",
+    });
+    expect(begin).toMatchObject({
+      status: "ok",
+      runId: "bound-run",
+      stackId: "alpha",
+      stackBinding: { stackId: "alpha" },
+    });
+    const resultArtifact = (begin.artifacts as Array<{ name?: string; path: string }>).find(
+      (artifact) => artifact.name === "result",
+    );
+    await expect(
+      router.callTool("artifact.read", { path: resultArtifact?.path }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      content: {
+        runId: "bound-run",
+        stackId: "alpha",
+        stackBinding: { stackId: "alpha" },
+      },
+    });
+
+    await rm(artifactRoot, { recursive: true, force: true });
+  });
+
+  it("executes journey steps and phases through the run's bound Stack Instance", async () => {
+    const artifactRoot = await mkdtemp(join(tmpdir(), "agent-e2e-router-bound-execution-"));
+    const harness = createMcpHarnessServer({ journeys: [makeStackBoundJourney()], artifactRoot });
+    const stackUrls = new Map<string, string>();
+    const provider: StackProvider<{ id: string; url: string }> = {
+      id: "execution-binding-stack",
+      start: async (ctx) => {
+        const url = `http://127.0.0.1/${ctx.stackId}/initial`;
+        stackUrls.set(ctx.stackId, url);
+        return { id: ctx.stackId, url };
+      },
+      status: (handle) => ({
+        status: "ready",
+        summary: `ready:${handle.id}`,
+        services: [{ id: "app", status: "ready", url: stackUrls.get(handle.id) ?? handle.url }],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+      stop: (handle) => ({
+        status: "stopped",
+        summary: `stopped:${handle.id}`,
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({ harness, stackProvider: provider });
+
+    await router.callTool("stack.start", { stackId: "alpha" });
+    await router.callTool("run.begin", {
+      journeyId: "journey:stack-bound",
+      runId: "bound-step-run",
+      stackId: "alpha",
+    });
+    await router.callTool("stack.start", { stackId: "beta" });
+    stackUrls.set("alpha", "http://127.0.0.1/alpha/step-current");
+    stackUrls.set("beta", "http://127.0.0.1/beta/current");
+
+    await expect(
+      router.callTool("journey.step", {
+        runId: "bound-step-run",
+        phaseId: "phase:one",
+        stepId: "step:one",
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      result: { observed: { message: "http://127.0.0.1/alpha/step-current" } },
+    });
+    await expect(router.callTool("stack.stop", { stackId: "beta" })).resolves.toMatchObject({
+      status: "ok",
+    });
+    await router.callTool("run.begin", {
+      journeyId: "journey:stack-bound",
+      runId: "bound-phase-run",
+      stackId: "alpha",
+    });
+    stackUrls.set("alpha", "http://127.0.0.1/alpha/phase-current");
+    await expect(
+      router.callTool("journey.phase", {
+        runId: "bound-phase-run",
+        phaseId: "phase:two",
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      results: [
+        expect.objectContaining({ observed: { message: "http://127.0.0.1/alpha/phase-current" } }),
+      ],
+    });
+
+    await router.callTool("run.begin", {
+      journeyId: "journey:stack-bound",
+      runId: "bound-until-run",
+      stackId: "alpha",
+    });
+    stackUrls.set("alpha", "http://127.0.0.1/alpha/until-current");
+    await expect(
+      router.callTool("journey.untilPhase", {
+        runId: "bound-until-run",
+        phaseId: "phase:one",
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      results: [
+        expect.objectContaining({ observed: { message: "http://127.0.0.1/alpha/until-current" } }),
+      ],
+    });
+
+    await rm(artifactRoot, { recursive: true, force: true });
+  });
+
+  it("uses runId on stack tools only to capture artifacts for matching Run Stack Bindings", async () => {
+    const artifactRoot = await mkdtemp(join(tmpdir(), "agent-e2e-router-stack-evidence-"));
+    const harness = createMcpHarnessServer({ journeys: [makeRouterJourney()], artifactRoot });
+    const provider: StackProvider<{ id: string }> = {
+      id: "stack-evidence",
+      explore: defineStackExploreTools<{ id: string }>()([
+        {
+          id: "notes.count",
+          title: "Count notes",
+          description: "Count notes visible to a limit.",
+          availableIn: ["dev", "verify"],
+          risk: "none",
+          input: z.object({ limit: z.number().int().positive() }),
+          output: z.object({ stackId: z.string(), count: z.number().int() }),
+          run: ({ input, handle }) => ({ stackId: handle.id, count: input.limit }),
+        },
+      ]),
+      start: async (ctx) => ({ id: ctx.stackId }),
+      status: (handle) => ({
+        status: "ready",
+        summary: `ready:${handle.id}`,
+        services: [{ id: "app", status: "ready", url: `http://127.0.0.1/${handle.id}` }],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+      logs: (handle, input) => ({
+        status: "ok",
+        summary: `logs:${handle.id}`,
+        serviceId: input.serviceId,
+        stream: input.stream ?? "combined",
+        tail: input.tail,
+        entries: [{ stream: "stdout", message: `from:${handle.id}` }],
+        truncated: false,
+      }),
+      stop: () => ({
+        status: "stopped",
+        summary: "stopped",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({ harness, stackProvider: provider, artifactRoot });
+
+    await router.callTool("stack.start", { stackId: "alpha" });
+    await router.callTool("stack.start", { stackId: "beta" });
+    await router.callTool("run.begin", {
+      journeyId: "journey:router",
+      runId: "evidence-run",
+      stackId: "alpha",
+    });
+
+    const betaLogs = await router.callTool("stack.logs", {
+      stackId: "beta",
+      serviceId: "app",
+      tail: 5,
+    });
+    expect(betaLogs).toMatchObject({
+      status: "ok",
+      logs: { summary: "logs:beta" },
+    });
+    expect(betaLogs.artifact).toBeUndefined();
+
+    await expect(
+      router.callTool("stack.logs", {
+        stackId: "beta",
+        runId: "evidence-run",
+        serviceId: "app",
+        tail: 5,
+      }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      code: "run-stack-binding-mismatch",
+    });
+    await expect(
+      router.callTool("stack.explore.run", {
+        stackId: "beta",
+        runId: "evidence-run",
+        toolId: "notes.count",
+        input: { limit: 2 },
+      }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      code: "run-stack-binding-mismatch",
+    });
+
+    const logs = await router.callTool("stack.logs", {
+      stackId: "alpha",
+      runId: "evidence-run",
+      serviceId: "app",
+      tail: 5,
+    });
+    expect(logs).toMatchObject({
+      status: "ok",
+      logs: { summary: "logs:alpha" },
+      artifact: expect.objectContaining({ name: "stack-logs", kind: "json" }),
+    });
+    await expect(
+      router.callTool("artifact.read", { path: (logs.artifact as { path: string }).path }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      content: {
+        runId: "evidence-run",
+        stackId: "alpha",
+        tool: "stack.logs",
+        logs: { summary: "logs:alpha" },
+      },
+    });
+
+    const explore = await router.callTool("stack.explore.run", {
+      stackId: "alpha",
+      runId: "evidence-run",
+      toolId: "notes.count",
+      input: { limit: 3 },
+    });
+    expect(explore).toMatchObject({
+      status: "ok",
+      toolId: "notes.count",
+      output: { stackId: "alpha", count: 3 },
+      artifact: expect.objectContaining({ name: "stack-explore-notes.count", kind: "json" }),
+    });
+
+    await rm(artifactRoot, { recursive: true, force: true });
   });
 
   it("returns unified stack state and live provider logs through stack tools", async () => {

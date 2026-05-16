@@ -4,6 +4,7 @@ import {
   type ServerResponse,
 } from "node:http";
 import type { AddressInfo } from "node:net";
+import { createRunArtifacts, safePathSegment, writeJsonArtifact } from "../artifacts/index.js";
 import type { AnyHarnessTypes, ExecutableJourney, OwnedResource, ResourceAdapter, ResourceRegistry } from "../core/index.js";
 import type { AgentE2EVerifyConfig } from "../verify/index.js";
 import { createMcpHarnessServer, type McpHarnessServer } from "../mcp/index.js";
@@ -395,6 +396,11 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
         artifactRoot: options.artifactRoot ?? DEFAULT_AGENT_E2E_ARTIFACT_ROOT,
       })
     : undefined;
+  const runStackBindings = new Map<string, {
+    stackId: string;
+    journeyId: string;
+    artifactRoot?: string | undefined;
+  }>();
 
   async function callTool(
     name: DevMcpToolName | string,
@@ -407,14 +413,9 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
         case "journey.inspect":
           return fromHarness(name, await resolveHarness(options.harness), "inspectJourney", args);
         case "run.begin":
-          return fromHarness(
-            name,
-            await resolveHarness(options.harness),
-            "beginRun",
-            withDevExecution(args, options.browserSessions, await currentStackExecution()),
-          );
+          return beginRunWithStackBinding(name, args);
         case "run.reseed":
-          return fromHarness(name, await resolveHarness(options.harness), "reseedRun", args);
+          return fromHarnessWithRunStackBinding(name, "reseedRun", args);
         case "run.teardown":
           return fromHarness(name, await resolveHarness(options.harness), "teardown", args);
         case "cleanup.plan":
@@ -422,15 +423,10 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
         case "artifact.read":
           return fromHarness(name, await resolveHarness(options.harness), "readArtifact", args);
         case "journey.step":
-          return fromHarness(
-            name,
-            await resolveHarness(options.harness),
-            "runStep",
-            withDevExecution(args, options.browserSessions, await currentStackExecution()),
-          );
+          return fromHarnessWithRunStackBinding(name, "runStep", args);
         case "journey.phase":
         case "journey.untilPhase":
-          return fromHarness(name, await resolveHarness(options.harness), "runPhase", args);
+          return fromHarnessWithRunStackBinding(name, "runPhase", args);
         case "stack.start": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
@@ -474,7 +470,16 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           };
           if (stream) input.stream = stream;
           try {
-            return ok(name, { logs: await stackInstances!.logs(optionalStackId(args), input) });
+            const stackId = optionalStackId(args);
+            if (stackId) {
+              const incompatible = validateStackEvidenceBinding(name, args, stackId);
+              if (incompatible) return incompatible;
+            }
+            const logs = await stackInstances!.logs(stackId, input);
+            const artifact = stackId
+              ? await captureStackEvidence(name, args, stackId, { logs })
+              : undefined;
+            return ok(name, { logs, ...(artifact ? { artifact } : {}) });
           } catch (error) {
             if (error instanceof StackInstanceManagerError)
               return blocked(name, error.code, error.message);
@@ -491,18 +496,29 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
         case "stack.explore.run": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
-          const unexpectedKey = firstUnexpectedKey(args, ["stackId", "toolId", "input"]);
+          const unexpectedKey = firstUnexpectedKey(args, ["stackId", "toolId", "input", "runId"]);
           if (unexpectedKey)
             return failed(name, "stack-explore-invalid-arguments", `stack.explore.run does not accept argument: ${unexpectedKey}`);
           const toolId = stringArg(args, "toolId");
           try {
             const stackId = optionalStackId(args);
+            if (stackId) {
+              const incompatible = validateStackEvidenceBinding(name, args, stackId);
+              if (incompatible) return incompatible;
+            }
             const result = await stackInstances!.exploreRun({
               toolId,
               input: args.input,
               ...(stackId ? { stackId } : {}),
             });
-            return ok(name, { toolId: result.toolId, output: result.output });
+            const artifact = stackId
+              ? await captureStackEvidence(name, args, stackId, {
+                  toolId: result.toolId,
+                  input: args.input,
+                  output: result.output,
+                })
+              : undefined;
+            return ok(name, { toolId: result.toolId, output: result.output, ...(artifact ? { artifact } : {}) });
           } catch (error) {
             if (error instanceof StackInstanceManagerError && error.code === "stack-id-required")
               return blocked(name, error.code, error.message);
@@ -635,9 +651,150 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
     }
   }
 
-  async function currentStackExecution(): Promise<StackExecutionSurface | undefined> {
-    if (!stackInstances) return undefined;
-    return await stackInstances.execution();
+  async function beginRunWithStackBinding(
+    name: DevMcpToolName,
+    args: Record<string, unknown>,
+  ): Promise<DevMcpToolResponse> {
+    if (!stackInstances) {
+      if (args.stackId !== undefined)
+        return blocked(
+          name,
+          "run-stack-provider-missing",
+          "run.begin received stackId, but this project has no stack provider.",
+        );
+      return fromHarness(
+        name,
+        await resolveHarness(options.harness),
+        "beginRun",
+        withDevExecution(args, options.browserSessions, undefined),
+      );
+    }
+
+    const stackId = optionalStackId(args);
+    if (!stackId)
+      return blocked(
+        name,
+        "run-stack-id-required",
+        "run.begin requires stackId when the project has a stack provider.",
+      );
+
+    let stack: StackExecutionSurface;
+    try {
+      stack = await stackInstances.execution(stackId, name);
+    } catch (error) {
+      if (error instanceof StackInstanceManagerError)
+        return blocked(name, error.code, error.message);
+      throw error;
+    }
+
+    const response = await fromHarness(
+      name,
+      await resolveHarness(options.harness),
+      "beginRun",
+      withDevExecution(args, options.browserSessions, stack),
+    );
+    if (response.status === "ok" && typeof response.runId === "string") {
+      runStackBindings.set(response.runId, {
+        stackId,
+        journeyId: stringArg(args, "journeyId"),
+        artifactRoot: optionalStringArg(args, "artifactRoot") ?? options.artifactRoot,
+      });
+      return { ...response, stackId, stackBinding: { stackId } };
+    }
+    return response;
+  }
+
+  async function withRunStackBinding(
+    name: DevMcpToolName,
+    args: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    if (!stackInstances) return withDevExecution(args, options.browserSessions, undefined);
+    const runId = stringArg(args, "runId");
+    const binding = runStackBindings.get(runId);
+    if (!binding) {
+      throw new StackInstanceManagerError(
+        "run-stack-binding-missing",
+        `${name} requires a Run Stack Binding for runId: ${runId}`,
+      );
+    }
+    const stack = await stackInstances.execution(binding.stackId, name);
+    return withDevExecution(args, options.browserSessions, stack);
+  }
+
+  function validateStackEvidenceBinding(
+    name: DevMcpToolName,
+    args: Record<string, unknown>,
+    stackId: string,
+  ): DevMcpToolResponse | undefined {
+    const runId = optionalStringArg(args, "runId");
+    if (!runId) return undefined;
+    const binding = runStackBindings.get(runId);
+    if (!binding)
+      return blocked(
+        name,
+        "run-stack-binding-missing",
+        `${name} cannot capture artifacts for unknown or unbound runId: ${runId}`,
+      );
+    if (binding.stackId !== stackId)
+      return blocked(
+        name,
+        "run-stack-binding-mismatch",
+        `${name} targets stackId ${stackId}, but runId ${runId} is bound to stackId ${binding.stackId}.`,
+      );
+    return undefined;
+  }
+
+  async function captureStackEvidence(
+    name: DevMcpToolName,
+    args: Record<string, unknown>,
+    stackId: string,
+    evidence: Record<string, unknown>,
+  ) {
+    const runId = optionalStringArg(args, "runId");
+    if (!runId) return undefined;
+    const binding = runStackBindings.get(runId);
+    if (!binding) return undefined;
+    const run = createRunArtifacts({
+      artifactRoot: binding.artifactRoot,
+      journeyId: binding.journeyId,
+      runId,
+    });
+    const artifactName = name === "stack.logs"
+      ? "stack-logs"
+      : `stack-explore-${safePathSegment(optionalStringArg(args, "toolId") ?? "run")}`;
+    return await writeJsonArtifact(
+      run,
+      `stack-evidence/${artifactName}.json`,
+      {
+        runId,
+        stackId,
+        tool: name,
+        ...evidence,
+      },
+      {
+        name: artifactName,
+        description: `Stack evidence captured by ${name} for run ${runId}.`,
+      },
+    );
+  }
+
+  async function fromHarnessWithRunStackBinding(
+    name: DevMcpToolName,
+    legacyName: string,
+    args: Record<string, unknown>,
+  ): Promise<DevMcpToolResponse> {
+    try {
+      return fromHarness(
+        name,
+        await resolveHarness(options.harness),
+        legacyName,
+        await withRunStackBinding(name, args),
+      );
+    } catch (error) {
+      if (error instanceof StackInstanceManagerError)
+        return blocked(name, error.code, error.message);
+      throw error;
+    }
   }
 
   async function dispose(): Promise<DevMcpDisposeResult> {
@@ -805,12 +962,14 @@ function inputSchemaForTool(
     case "stack.explore.run":
       return {
         stackId: stringId().describe("Stack Instance id returned by stack.start or stack.list."),
+        runId: stringId().optional().describe("Optional run id used only to attach compatible stack evidence artifacts."),
         toolId: stringId().describe("Provider-declared tool id returned by stack.explore.list."),
         input: z.unknown().describe("Input parsed by the selected provider-declared tool schema."),
       };
     case "stack.logs":
       return {
         stackId: stringId().describe("Stack Instance id returned by stack.start or stack.list."),
+        runId: stringId().optional().describe("Optional run id used only to attach compatible stack log artifacts."),
         serviceId: stringId().describe("Service id returned by stack.status or stack.start."),
         tail: z.number().int().positive().describe("Number of recent log lines to return."),
         stream: z.enum(["stdout", "stderr", "combined"]).optional(),
@@ -824,6 +983,7 @@ function inputSchemaForTool(
         journeyId: stringId().describe("Journey id returned by journey.list."),
         profileId: stringId().optional(),
         runId: stringId().optional(),
+        stackId: stringId().optional().describe("Required Stack Instance id when this project has a stack provider."),
         browserSessionId: stringId().optional(),
         artifactRoot: stringId().optional(),
       };
@@ -1003,6 +1163,11 @@ function stringArg(args: Record<string, unknown>, name: string): string {
   if (typeof value !== "string" || value.length === 0)
     throw new Error(`Missing required string argument: ${name}`);
   return value;
+}
+
+function optionalStringArg(args: Record<string, unknown>, name: string): string | undefined {
+  const value = args[name];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function firstUnexpectedKey(

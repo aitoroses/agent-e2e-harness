@@ -21,9 +21,9 @@ The default Dev MCP grammar defines reusable Agent E2E Harness vocabulary for lo
 - `stack.start` — starts a Stack Instance and returns the effective `stackId`.
 - `stack.list` — lists currently running Stack Instances.
 - `stack.status` — returns the unified stack-state packet for one explicit `stackId`: services, endpoints, readiness checks, warnings, errors, artifacts, and next actions.
-- `stack.logs` — reads recent live logs for one active service on one explicit `stackId`; requires `serviceId` and `tail`, with optional `stream`.
+- `stack.logs` — reads recent live logs for one active service on one explicit `stackId`; requires `serviceId` and `tail`, with optional `stream`; optional `runId` captures artifacts only when the run is bound to the same `stackId`.
 - `stack.explore.list` — lists provider-declared stack exploration tools with JSON Schemas derived from Zod input/output schemas.
-- `stack.explore.run` — runs one provider-declared stack exploration tool against one explicit `stackId`.
+- `stack.explore.run` — runs one provider-declared stack exploration tool against one explicit `stackId`; optional `runId` captures artifacts only when the run is bound to the same `stackId`.
 - `stack.stop` — stops one explicit Stack Instance.
 - `run.reseed` — cleans journey-owned resources, then applies Environment Seed.
 
@@ -33,7 +33,7 @@ Provider-declared stack exploration tools must declare `id`, `title`, `descripti
 
 ### Run lifecycle
 
-- `run.begin` — creates or resumes a proof workspace and returns the first recommended action.
+- `run.begin` — creates or resumes a proof workspace, requires `stackId` when a stack provider exists, rejects `stackId` when no provider exists, and returns the run's Stack Binding.
 - `run.teardown` — deletes journey-owned resources and may close an MCP-owned browser session.
 
 ### Browser session and forensics

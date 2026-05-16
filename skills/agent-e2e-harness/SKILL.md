@@ -50,9 +50,9 @@ stack.explore.list
 stack.explore.run
 ```
 
-`stack.start` returns a `stackId`; pass that id to `stack.status`, `stack.logs`, `stack.explore.run`, and `stack.stop`. Use `stack.list` to recover running Stack Instances after compaction. `stack.status` is the unified stack-state packet. It should include services with stable ids, endpoints, checks, warnings, errors, artifacts, and next actions. Do not invent native `stack.services`, `stack.health`, or `stack.env` tools for v1.
+`stack.start` returns a `stackId`; pass that id to `stack.status`, `run.begin`, `stack.logs`, `stack.explore.run`, and `stack.stop`. Use `stack.list` to recover running Stack Instances after compaction. `run.begin` requires a valid `stackId` when a stack provider exists and rejects `stackId` when no provider exists. `stack.status` is the unified stack-state packet. It should include services with stable ids, endpoints, checks, warnings, errors, artifacts, and next actions. Do not invent native `stack.services`, `stack.health`, or `stack.env` tools for v1.
 
-`stack.logs` is live exploration. It requires a `stackId`, one `serviceId`, a required `tail`, and optional `stream: "stdout" | "stderr" | "combined"`.
+`stack.logs` is live exploration. It requires a `stackId`, one `serviceId`, a required `tail`, and optional `stream: "stdout" | "stderr" | "combined"`. `stack.logs` and `stack.explore.run` accept optional `runId` only to capture artifacts, and reject capture when the run is bound to a different `stackId`.
 
 Provider-declared `stack.explore.*` tools must have:
 
@@ -120,6 +120,7 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.sta
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.list --args '{}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.status --args '{"stackId":"<stack-id>"}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.logs --args '{"stackId":"<stack-id>","serviceId":"<service-id>","tail":80,"stream":"combined"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool run.begin --args '{"journeyId":"<journey-id>","runId":"<run-id>","stackId":"<stack-id>"}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.explore.run --args '{"stackId":"<stack-id>","toolId":"notes.list","input":{"limit":10}}' --output json
 ```
 
