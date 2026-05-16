@@ -18,12 +18,8 @@ import {
   type RunArtifactRecorder,
 } from "../artifacts/index.js";
 import {
-  createStackExecutionSurface,
-  createStackStartContext,
-  type StackAllocationRecord,
   type StackExecutionSurface,
   type StackProvider,
-  type StackStatusPacket,
 } from "../stack/index.js";
 import {
   attachRunSignals,
@@ -42,6 +38,7 @@ import {
   type VerifyRunStatus,
   type VerifySuiteReport,
 } from "./reporting.js";
+import { runWorkerStackQueue, type VerifyWorkerStackSnapshot } from "./worker-stack-scheduler.js";
 
 export type VerifyCleanupMode = "per-run" | "suite-end" | "none";
 
@@ -106,10 +103,7 @@ export async function runVerifySuite<
   };
   const selected = selectVerifyRuns<TTypes>(selectionInput).selected;
 
-  let stackHandle: TStackHandle | undefined;
-  let stackStatus: StackStatusPacket | undefined;
-  let stackExecution: StackExecutionSurface | undefined;
-  let stackAllocations: readonly StackAllocationRecord[] = [];
+  let stackSnapshots: VerifyWorkerStackSnapshot[] = [];
   const runs: VerifyRunReport[] = [];
   const suiteEndCleanups: Array<{
     journey: ExecutableJourney<TTypes>;
@@ -119,69 +113,58 @@ export async function runVerifySuite<
   }> = [];
   const suiteWarnings: string[] = [];
   const suiteErrors: string[] = [];
-  let stopScheduling = false;
   let browser: VerifyBrowser | undefined;
+  let browserPromise: Promise<VerifyBrowser> | undefined;
+  const getBrowser = async () => {
+    browserPromise ??= (resolved.createBrowser ?? createPlaywrightBrowser)({ headed: resolved.headed });
+    browser = await browserPromise;
+    return browser;
+  };
 
   try {
-    if (input.stackProvider) {
-      const stackContext = createStackStartContext({
-        mode: "verify",
-        suiteId,
-        stackId: "verify-suite",
-        workerIndex: 0,
-        workerCount: 1,
-        artifactRoot: resolved.artifactRoot,
-      });
-      stackHandle = await input.stackProvider.start(stackContext);
-      stackAllocations = stackContext.allocations();
-      stackStatus = await input.stackProvider.status(stackHandle);
-      stackExecution = createStackExecutionSurface(stackStatus, input.stackProvider, stackHandle);
-      if (stackStatus.status !== "ready") {
-        suiteErrors.push(stackStatus.summary);
-        stopScheduling = true;
-      }
-    }
-
-    if (!stopScheduling) {
-      browser = await (resolved.createBrowser ?? createPlaywrightBrowser)({ headed: resolved.headed });
-      await runQueue({
-        selected,
-        workers: resolved.workers,
-        shouldSchedule: () => !stopScheduling,
-        run: async (selectedRun) => {
-          const result = await runSingleVerifyRun({
-            suiteId,
-            artifactRoot: resolved.artifactRoot,
-            journey: selectedRun.journey,
-            profileId: selectedRun.profile.id,
-            index: selectedRun.index,
-            browser: browser as VerifyBrowser,
-            resourceAdapters: input.resourceAdapters ?? [],
-            cleanup: resolved.cleanup,
-            warningsAsErrors: resolved.warningsAsErrors,
-            ...(stackExecution ? { stack: stackExecution } : {}),
-          });
-          runs.push(result.report);
-          if (resolved.cleanup === "suite-end" && result.ledger) {
-            suiteEndCleanups.push({
-              journey: selectedRun.journey,
-              profileId: selectedRun.profile.id,
-              report: result.report,
-              ledger: result.ledger,
-            });
-          }
-          if (result.report.status === "cleanup_failed") stopScheduling = true;
-          if (resolved.failFast && result.report.status !== "passed") stopScheduling = true;
-        },
-      });
-      if (resolved.cleanup === "suite-end") {
-        await cleanupSuiteEnd({
+    let stopScheduling = false;
+    stackSnapshots = await runWorkerStackQueue({
+      selected,
+      workers: resolved.workers,
+      suiteId,
+      artifactRoot: resolved.artifactRoot,
+      ...(input.stackProvider ? { stackProvider: input.stackProvider } : {}),
+      shouldSchedule: () => !stopScheduling,
+      onSuiteWarning: (warning) => suiteWarnings.push(warning),
+      onSuiteError: (error) => suiteErrors.push(error),
+      run: async (selectedRun, worker) => {
+        const result = await runSingleVerifyRun({
           suiteId,
           artifactRoot: resolved.artifactRoot,
-          cleanups: suiteEndCleanups,
+          journey: selectedRun.journey,
+          profileId: selectedRun.profile.id,
+          index: selectedRun.index,
+          browser: await getBrowser(),
           resourceAdapters: input.resourceAdapters ?? [],
+          cleanup: resolved.cleanup,
+          warningsAsErrors: resolved.warningsAsErrors,
+          ...(worker.stack ? { stack: worker.stack } : {}),
         });
-      }
+        runs.push(result.report);
+        if (resolved.cleanup === "suite-end" && result.ledger) {
+          suiteEndCleanups.push({
+            journey: selectedRun.journey,
+            profileId: selectedRun.profile.id,
+            report: result.report,
+            ledger: result.ledger,
+          });
+        }
+        if (result.report.status === "cleanup_failed") stopScheduling = true;
+        if (resolved.failFast && result.report.status !== "passed") stopScheduling = true;
+      },
+    });
+    if (resolved.cleanup === "suite-end") {
+      await cleanupSuiteEnd({
+        suiteId,
+        artifactRoot: resolved.artifactRoot,
+        cleanups: suiteEndCleanups,
+        resourceAdapters: input.resourceAdapters ?? [],
+      });
     }
   } catch (error) {
     suiteErrors.push(error instanceof Error ? error.message : String(error));
@@ -193,20 +176,12 @@ export async function runVerifySuite<
         suiteErrors.push(error instanceof Error ? error.message : String(error));
       }
     }
-    if (input.stackProvider && stackHandle !== undefined) {
-      try {
-        const stopped = await input.stackProvider.stop(stackHandle);
-        if (stopped.warnings.length) suiteWarnings.push(...stopped.warnings.map((warning) => warning.message));
-        if (stopped.errors.length) suiteErrors.push(...stopped.errors.map((error) => error.message));
-      } catch (error) {
-        suiteErrors.push(error instanceof Error ? error.message : String(error));
-      }
-    }
   }
 
   const endedAtDate = input.options.now?.() ?? new Date();
   const failedRuns = runs.filter((run) => run.status !== "passed");
   const status = failedRuns.length === 0 && suiteErrors.length === 0 ? "passed" : "failed";
+  const legacyStack = stackSnapshots.length === 1 ? stackSnapshots[0] : undefined;
   const report: VerifySuiteReport = {
     suiteId,
     status,
@@ -219,8 +194,14 @@ export async function runVerifySuite<
     reporter: resolved.reporter,
     warningsAsErrors: resolved.warningsAsErrors,
     failFast: resolved.failFast,
-    ...(stackStatus
-      ? { stack: { status: stackStatus.status, summary: stackStatus.summary, allocations: stackAllocations } }
+    ...(legacyStack
+      ? {
+          stack: {
+            status: legacyStack.status,
+            summary: legacyStack.summary,
+            allocations: legacyStack.allocations,
+          },
+        }
       : {}),
     runs: runs.sort((left, right) => runIndex(left.runId) - runIndex(right.runId)),
     warnings: suiteWarnings,
@@ -240,7 +221,6 @@ async function runSingleVerifyRun<TTypes extends AnyHarnessTypes>(input: {
   profileId: string;
   index: number;
   browser: VerifyBrowser;
-  stackStatus?: StackStatusPacket;
   stack?: StackExecutionSurface;
   resourceAdapters: readonly ResourceAdapter<TTypes>[];
   cleanup: VerifyCleanupMode;
@@ -437,24 +417,6 @@ async function runJourneyWithArtifacts<TTypes extends AnyHarnessTypes>(
     }
   }
   return { failed, stepStatuses, warnings, errors };
-}
-
-async function runQueue<T>(input: {
-  selected: readonly T[];
-  workers: number;
-  shouldSchedule: () => boolean;
-  run: (selected: T) => Promise<void>;
-}): Promise<void> {
-  let next = 0;
-  async function worker(): Promise<void> {
-    while (input.shouldSchedule()) {
-      const index = next++;
-      const item = input.selected[index];
-      if (!item) return;
-      await input.run(item);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.max(1, input.workers) }, () => worker()));
 }
 
 function resolveVerifyOptions(config: AgentE2EVerifyConfig | undefined, options: VerifyRunOptions) {
