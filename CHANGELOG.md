@@ -18,6 +18,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
+## [1.3.0] - 2026-05-16
+
+### Added
+
+- Explicit Dev MCP Stack Instances identified by `stackId`, including `stack.list` recovery and multi-stack start/status/log/explore/stop routing.
+- Run Stack Binding for stack-backed Dev MCP journeys, so `run.begin` binds a run to a selected Stack Instance and stack evidence can be attached only to compatible runs.
+- `StackStartContext` provider contract with named port and artifact path allocation helpers for isolated stack resources.
+- Worker-scoped verify stacks, lazy `worker-*` stack startup, first-class `stacks[]` verify report evidence, and run-to-stack correlation.
+- Showcase public-path proof for explicit Stack Instances, named allocations, and `npm run e2e:verify --workspace @agent-e2e/showcase -- --workers 2`.
+
+### Changed
+
+- Dev MCP stack-targeting tools now require explicit `stackId` instead of selecting a hidden Stack Instance.
+- `agent-e2e verify` now treats `workers` as both the selected-run concurrency limit and the maximum active Verify Worker Stack count.
+- README, package README, showcase docs, proof transcript, and the `agent-e2e-harness` skill now teach `stackId`, `stack.list`, Run Stack Binding, `StackStatusPacket.services`, `StackStartContext`, Named Stack Allocations, and worker-scoped verify.
+
 ## [1.2.0] - 2026-05-15
 
 ### Added

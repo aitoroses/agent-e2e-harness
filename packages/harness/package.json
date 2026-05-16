@@ -1,6 +1,6 @@
 {
   "name": "@agent-e2e/harness",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "type": "module",
   "description": "Library-first Agent E2E Harness for seeded journeys, MCP proof loops, artifacts, and cleanup.",
   "keywords": [
