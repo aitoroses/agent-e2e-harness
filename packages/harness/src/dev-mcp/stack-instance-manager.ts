@@ -155,8 +155,7 @@ export class StackInstanceManager<TStackHandle> {
       };
     }
 
-    const handle = this.handles.get(resolvedStackId);
-    if (handle === undefined) return stoppedStackStatus();
+    const handle = this.requireHandle("stack.stop", resolvedStackId);
 
     this.stoppingStackIds.add(resolvedStackId);
     this.handles.delete(resolvedStackId);

@@ -299,6 +299,55 @@ describe("Dev MCP Streamable HTTP server", () => {
     }
   });
 
+  it("advertises stack.list in the Dev MCP manifest when a stack provider is configured", async () => {
+    const tmpRoot = await mkdtemp(join(tmpdir(), "agent-e2e-dev-mcp-stack-manifest-"));
+    const artifactRoot = join(tmpRoot, ".agents-e2e", "artifacts");
+    const stackProvider: StackProvider<{ id: string }> = {
+      id: "manifest-stack",
+      start: async () => ({ id: "stack-1" }),
+      status: () => ({
+        status: "ready",
+        summary: "ready",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+      stop: () => ({
+        status: "stopped",
+        summary: "stopped",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const config = defineAgentE2EConfig<HttpHarness, { id: string }>({
+      journeys: [makeHttpJourney()],
+      artifactRoot,
+      stackProvider,
+      port: 0,
+      browserSessions: false,
+      installSignalHandlers: false,
+      logger: false,
+    });
+
+    const server = await startAgentE2EDevMcp(config);
+    handles.push(server);
+
+    expect(server.manifest.stack).toMatchObject({
+      startTool: "stack.start",
+      listTool: "stack.list",
+      statusTool: "stack.status",
+      logsTool: "stack.logs",
+      stopTool: "stack.stop",
+    });
+
+    await server.close();
+    handles = handles.filter((handle) => handle !== server);
+    await rm(tmpRoot, { recursive: true, force: true });
+  });
+
   it("loads conventional Agent E2E config modules", async () => {
     const tmpRoot = await mkdtemp(join(tmpdir(), "agent-e2e-config-"));
     const configPath = join(tmpRoot, "agent-e2e.config.mjs");

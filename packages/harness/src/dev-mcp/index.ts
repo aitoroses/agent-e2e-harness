@@ -173,6 +173,7 @@ export interface AgentE2EDevMcpManifest {
   path: string;
   stack?: {
     startTool: "stack.start";
+    listTool: "stack.list";
     statusTool: "stack.status";
     logsTool: "stack.logs";
     stopTool: "stack.stop";
@@ -277,7 +278,15 @@ export async function startAgentE2EDevMcp<
     port: server.port,
     path: server.path,
     ...(resolvedConfig.stackProvider
-      ? { stack: { startTool: "stack.start", statusTool: "stack.status", logsTool: "stack.logs", stopTool: "stack.stop" } }
+      ? {
+          stack: {
+            startTool: "stack.start",
+            listTool: "stack.list",
+            statusTool: "stack.status",
+            logsTool: "stack.logs",
+            stopTool: "stack.stop",
+          },
+        }
       : {}),
   };
 
@@ -491,6 +500,8 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             return ok(name, { toolId: result.toolId, output: result.output });
           } catch (error) {
             if (error instanceof StackInstanceManagerError && error.code === "stack-id-required")
+              return blocked(name, error.code, error.message);
+            if (error instanceof StackInstanceManagerError && error.code === "stack-not-running")
               return blocked(name, error.code, error.message);
             if (error instanceof StackInstanceManagerError)
               return failed(name, error.code, error.message, { toolId });

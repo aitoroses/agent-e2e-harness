@@ -514,6 +514,63 @@ describe("Dev MCP Tool Router", () => {
     expect(calls).toEqual(["start"]);
   });
 
+  it("rejects unknown explicit Stack Instance ids as stack-not-running preconditions", async () => {
+    const provider: StackProvider<{ id: string }> = {
+      id: "unknown-stack-id",
+      explore: defineStackExploreTools<{ id: string }>()([
+        {
+          id: "notes.count",
+          title: "Count notes",
+          description: "Count notes visible to a limit.",
+          availableIn: ["dev", "verify"],
+          risk: "none",
+          input: z.object({ limit: z.number().int().positive() }),
+          output: z.object({ count: z.number().int() }),
+          run: ({ input }) => ({ count: input.limit }),
+        },
+      ]),
+      start: async () => ({ id: "handle-alpha" }),
+      status: () => ({
+        status: "ready",
+        summary: "ready",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+      logs: () => ({
+        status: "ok",
+        summary: "logs",
+        serviceId: "next-dev",
+        stream: "combined",
+        tail: 10,
+        entries: [],
+        truncated: false,
+      }),
+      stop: () => ({
+        status: "stopped",
+        summary: "stopped",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({ stackProvider: provider });
+
+    await router.callTool("stack.start", { stackId: "alpha" });
+    await expect(router.callTool("stack.stop", { stackId: "missing" })).resolves.toMatchObject({
+      status: "blocked",
+      code: "stack-not-running",
+    });
+    await expect(
+      router.callTool("stack.explore.run", { stackId: "missing", toolId: "notes.count", input: { limit: 1 } }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      code: "stack-not-running",
+    });
+  });
+
   it("returns unified stack state and live provider logs through stack tools", async () => {
     const provider: StackProvider<{ id: string }> = {
       id: "observable-stack",
