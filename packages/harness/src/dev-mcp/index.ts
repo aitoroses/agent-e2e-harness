@@ -17,7 +17,6 @@ import type {
   StackProvider,
   StackStatusPacket,
 } from "../stack/index.js";
-import { createStackExecutionSurface } from "../stack/index.js";
 import {
   DEFAULT_DEV_MCP_CONFIG_FILES,
   loadAgentE2EConfig,
@@ -32,6 +31,7 @@ import {
   type DevMcpBrowserWorkbenchController,
 } from "./browser-workbench-tools.js";
 import { createReloadingHarnessSource, type ReloadingHarnessSourceOptions } from "./reloading-harness.js";
+import { StackInstanceManager, StackInstanceManagerError, stoppedStackStatus } from "./stack-instance-manager.js";
 
 type RuntimeZod = typeof import("zod/v4").z;
 
@@ -62,6 +62,7 @@ export interface DevMcpToolContract {
 
 export const DEV_MCP_TOOL_GRAMMAR = [
   "stack.start",
+  "stack.list",
   "stack.status",
   "stack.logs",
   "stack.explore.list",
@@ -172,6 +173,7 @@ export interface AgentE2EDevMcpManifest {
   path: string;
   stack?: {
     startTool: "stack.start";
+    listTool: "stack.list";
     statusTool: "stack.status";
     logsTool: "stack.logs";
     stopTool: "stack.stop";
@@ -276,7 +278,15 @@ export async function startAgentE2EDevMcp<
     port: server.port,
     path: server.path,
     ...(resolvedConfig.stackProvider
-      ? { stack: { startTool: "stack.start", statusTool: "stack.status", logsTool: "stack.logs", stopTool: "stack.stop" } }
+      ? {
+          stack: {
+            startTool: "stack.start",
+            listTool: "stack.list",
+            statusTool: "stack.status",
+            logsTool: "stack.logs",
+            stopTool: "stack.stop",
+          },
+        }
       : {}),
   };
 
@@ -378,8 +388,9 @@ function resourceAdaptersFromConfig<
 export function createDevMcpToolRouter<TStackHandle = unknown>(
   options: DevMcpToolRouterOptions<TStackHandle> = {},
 ): DevMcpToolRouter {
-  let stackHandle: TStackHandle | undefined;
-  let stoppingStack = false;
+  const stackInstances = options.stackProvider
+    ? new StackInstanceManager(options.stackProvider)
+    : undefined;
 
   async function callTool(
     name: DevMcpToolName | string,
@@ -419,59 +430,51 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
         case "stack.start": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
-          if (stackHandle !== undefined)
-            return blocked(
-              name,
-              "stack-already-running",
-              "A managed stack is already active. Call stack.stop before starting another stack.",
-            );
-          const handle = await options.stackProvider.start();
-          let ready = false;
           try {
-            const status = await options.stackProvider.status(handle);
-            ready = true;
-            stackHandle = handle;
+            const started = await stackInstances!.start(optionalStackIdInput(args));
             return ok(name, {
-              handle: serializableHandle(handle),
-              stack: status,
+              stackId: started.stackId,
+              handle: serializableHandle(started.handle),
+              stack: started.stack,
             });
-          } finally {
-            if (!ready) await options.stackProvider.stop(handle);
+          } catch (error) {
+            if (error instanceof StackInstanceManagerError)
+              return blocked(name, error.code, error.message);
+            throw error;
           }
+        }
+        case "stack.list": {
+          if (!options.stackProvider)
+            return missingDependency(name, "stackProvider");
+          return ok(name, { stacks: await stackInstances!.list() });
         }
         case "stack.status": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
-          if (stackHandle === undefined)
-            return ok(name, { stack: stoppedStackStatus() });
-          return ok(name, {
-            stack: await options.stackProvider.status(stackHandle),
-          });
+          try {
+            return ok(name, { stack: await stackInstances!.status(optionalStackId(args)) });
+          } catch (error) {
+            if (error instanceof StackInstanceManagerError)
+              return blocked(name, error.code, error.message);
+            throw error;
+          }
         }
         case "stack.logs": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
-          if (stackHandle === undefined)
-            return blocked(
-              name,
-              "stack-not-running",
-              "stack.logs requires an active managed stack.",
-            );
           const stream = optionalStackLogStream(args);
           const input: StackLogsInput = {
             serviceId: stringArg(args, "serviceId"),
             tail: positiveIntegerArg(args, "tail"),
           };
           if (stream) input.stream = stream;
-          if (!options.stackProvider.logs)
-            return blocked(
-              name,
-              "stack-logs-not-supported",
-              "This stack provider does not expose logs.",
-            );
-          return ok(name, {
-            logs: await options.stackProvider.logs(stackHandle, input),
-          });
+          try {
+            return ok(name, { logs: await stackInstances!.logs(optionalStackId(args), input) });
+          } catch (error) {
+            if (error instanceof StackInstanceManagerError)
+              return blocked(name, error.code, error.message);
+            throw error;
+          }
         }
         case "stack.explore.list": {
           if (!options.stackProvider)
@@ -483,39 +486,38 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
         case "stack.explore.run": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
-          const unexpectedKey = firstUnexpectedKey(args, ["toolId", "input"]);
+          const unexpectedKey = firstUnexpectedKey(args, ["stackId", "toolId", "input"]);
           if (unexpectedKey)
             return failed(name, "stack-explore-invalid-arguments", `stack.explore.run does not accept argument: ${unexpectedKey}`);
           const toolId = stringArg(args, "toolId");
-          const exploreTool = (options.stackProvider.explore ?? []).find((tool) => tool.id === toolId);
-          if (!exploreTool)
-            return failed(name, "stack-explore-tool-not-found", `Stack exploration tool not found: ${toolId}`);
-          if (stackHandle === undefined)
-            return failed(name, "stack-not-running", "stack.explore.run requires an active managed stack.");
-          const inputResult = exploreTool.input.safeParse(args.input ?? {});
-          if (!inputResult.success)
-            return failed(name, "stack-explore-invalid-input", inputResult.error.message, { toolId });
-          let output: unknown;
           try {
-            output = await exploreTool.run({ input: inputResult.data, handle: stackHandle });
+            const stackId = optionalStackId(args);
+            const result = await stackInstances!.exploreRun({
+              toolId,
+              input: args.input,
+              ...(stackId ? { stackId } : {}),
+            });
+            return ok(name, { toolId: result.toolId, output: result.output });
           } catch (error) {
-            return failed(name, "stack-explore-handler-failed", error instanceof Error ? error.message : String(error), { toolId });
+            if (error instanceof StackInstanceManagerError && error.code === "stack-id-required")
+              return blocked(name, error.code, error.message);
+            if (error instanceof StackInstanceManagerError && error.code === "stack-not-running")
+              return blocked(name, error.code, error.message);
+            if (error instanceof StackInstanceManagerError)
+              return failed(name, error.code, error.message, { toolId });
+            throw error;
           }
-          const outputResult = exploreTool.output.safeParse(output);
-          if (!outputResult.success)
-            return failed(name, "stack-explore-invalid-output", outputResult.error.message, { toolId });
-          return ok(name, {
-            toolId,
-            output: outputResult.data,
-          });
         }
         case "stack.stop": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
-          if (stackHandle === undefined)
-            return ok(name, { stack: stoppedStackStatus() });
-          const stopped = await stopActiveStack();
-          return ok(name, { stack: stopped });
+          try {
+            return ok(name, { stack: await stackInstances!.stop(optionalStackId(args)) });
+          } catch (error) {
+            if (error instanceof StackInstanceManagerError)
+              return blocked(name, error.code, error.message);
+            throw error;
+          }
         }
         case "browser.open":
           if (!options.browserSessions)
@@ -628,33 +630,9 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
     }
   }
 
-  async function stopActiveStack(): Promise<StackStatusPacket> {
-    if (!options.stackProvider || stackHandle === undefined)
-      return stoppedStackStatus();
-    if (stoppingStack)
-      return {
-        status: "degraded",
-        summary: "Managed stack stop is already in progress.",
-        services: [],
-        artifacts: [],
-        warnings: [{ code: "stack-stop-in-progress", message: "Managed stack stop is already in progress." }],
-        errors: [],
-      };
-
-    stoppingStack = true;
-    const handle = stackHandle;
-    stackHandle = undefined;
-    try {
-      return await options.stackProvider.stop(handle);
-    } finally {
-      stoppingStack = false;
-    }
-  }
-
   async function currentStackExecution(): Promise<StackExecutionSurface | undefined> {
-    if (!options.stackProvider || stackHandle === undefined) return undefined;
-    const status = await options.stackProvider.status(stackHandle);
-    return createStackExecutionSurface(status, options.stackProvider, stackHandle);
+    if (!stackInstances) return undefined;
+    return await stackInstances.execution();
   }
 
   async function dispose(): Promise<DevMcpDisposeResult> {
@@ -663,7 +641,9 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
     let browsers: unknown;
 
     try {
-      stack = await stopActiveStack();
+      const disposed = await stackInstances?.dispose();
+      stack = disposed?.stack ?? stoppedStackStatus();
+      if (disposed?.errors.length) errors.push(...disposed.errors);
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
     }
@@ -678,6 +658,18 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
   }
 
   return { listTools: () => listTools(options), callTool, dispose };
+}
+
+function optionalStackIdInput(args: Record<string, unknown>): { stackId?: string } {
+  const stackId = optionalStackId(args);
+  return stackId ? { stackId } : {};
+}
+
+function optionalStackId(args: Record<string, unknown>): string | undefined {
+  if (args.stackId === undefined) return undefined;
+  if (typeof args.stackId !== "string" || args.stackId.length === 0)
+    throw new Error("Invalid stackId: expected non-empty string");
+  return args.stackId;
 }
 
 async function closeBrowserSessions(
@@ -714,7 +706,7 @@ function implementedToolNames(
   const tools: DevMcpToolName[] = [];
 
   if (options.stackProvider)
-    tools.push("stack.start", "stack.status", "stack.logs", "stack.explore.list", "stack.explore.run", "stack.stop");
+    tools.push("stack.start", "stack.list", "stack.status", "stack.logs", "stack.explore.list", "stack.explore.run", "stack.stop");
 
   if (options.harness)
     tools.push(
@@ -749,6 +741,7 @@ function summaryFor(name: DevMcpToolName): string {
     "journey.list": "List available journeys and profiles.",
     "journey.inspect": "Read the full Inspectable Journey Contract for a journey.",
     "stack.start": "Start the managed development stack.",
+    "stack.list": "List running managed stack instances.",
     "stack.status": "Read managed stack readiness.",
     "stack.logs": "Read live managed stack service logs.",
     "stack.explore.list": "List provider-declared stack exploration tools.",
@@ -792,18 +785,27 @@ function inputSchemaForTool(
 
   switch (name) {
     case "stack.start":
-    case "stack.status":
-    case "stack.stop":
+      return {
+        stackId: stringId().optional(),
+      };
+    case "stack.list":
     case "stack.explore.list":
     case "journey.list":
       return {};
+    case "stack.status":
+    case "stack.stop":
+      return {
+        stackId: stringId().describe("Stack Instance id returned by stack.start or stack.list."),
+      };
     case "stack.explore.run":
       return {
+        stackId: stringId().describe("Stack Instance id returned by stack.start or stack.list."),
         toolId: stringId().describe("Provider-declared tool id returned by stack.explore.list."),
         input: z.unknown().describe("Input parsed by the selected provider-declared tool schema."),
       };
     case "stack.logs":
       return {
+        stackId: stringId().describe("Stack Instance id returned by stack.start or stack.list."),
         serviceId: stringId().describe("Service id returned by stack.status or stack.start."),
         tail: z.number().int().positive().describe("Number of recent log lines to return."),
         stream: z.enum(["stdout", "stderr", "combined"]).optional(),
@@ -964,17 +966,6 @@ function missingDependency(
   );
 }
 
-function stoppedStackStatus(): StackStatusPacket {
-  return {
-    status: "stopped",
-    summary: "No managed stack handle is active.",
-    services: [],
-    artifacts: [],
-    warnings: [],
-    errors: [],
-  };
-}
-
 function serializableHandle(handle: unknown): unknown {
   if (!isRecord(handle)) return handle;
   return Object.fromEntries(
@@ -1100,7 +1091,8 @@ export async function startDevMcpStreamableHttpServer<TStackHandle = unknown>(
               isRecord(args) ? args : {},
             );
             if (tool.name === "stack.start" && result.status === "ok" && responseClosed) {
-              await router.callTool("stack.stop", {});
+              const stackId = typeof result.stackId === "string" ? result.stackId : undefined;
+              if (stackId) await router.callTool("stack.stop", { stackId });
             }
             return {
               content: [{ type: "text", text: JSON.stringify(result) }],

@@ -1,0 +1,9 @@
+# Stack instances and worker-scoped verify stacks
+
+Agent E2E no longer treats the stack as one implicit ambient runtime. Dev MCP should manage explicit **Stack Instances** identified by `stackId`, and every journey run that uses a stack must create a **Run Stack Binding** to the selected stack. This lets agents start more than one stack during exploration, compare hypotheses against different runtimes, and attach logs or stack exploration evidence to the correct run without relying on hidden "current stack" state.
+
+`agent-e2e verify` should use the same model with worker-scoped stack instances. `verify.workers` is both the selected-run concurrency limit and the maximum number of active **Verify Worker Stacks**; stacks start lazily only for workers that receive runs. Runs execute serially inside their worker stack, while the suite parallelizes across workers. Stack providers should allocate isolated ports, paths, logs, and service URLs through a `StackStartContext` by default, and those named allocations should be reported as stack evidence.
+
+We reject a suite-only stack as the parallel verify contract because it makes `workers > 1` safe only for providers that independently solve all resource isolation. We reject run-scoped stacks as the default because it pays stack start/stop cost for every selected run. We also reject a separate `parallel.isolatedResources` flag: parallel safety is part of the stack provider contract exercised by the verify command, not an extra declaration consumers should remember to duplicate.
+
+Consequences: the public stack MCP grammar gains `stack.list`; stack-targeting tools use explicit `stackId`; `run.begin` requires `stackId` when a stack provider exists and rejects it when none exists; stack logs and stack exploration may optionally attach evidence to a compatible `runId`; verify reports model stack instances in a first-class `stacks` section while run entries reference `stackId`.

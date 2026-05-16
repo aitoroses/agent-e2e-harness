@@ -303,13 +303,14 @@ describe("Dev MCP Tool Router", () => {
     await rm(artifactRoot, { recursive: true, force: true });
   });
 
-  it("controls stack lifecycle through an injected provider without importing Testcontainers", async () => {
+  it("starts multiple named Stack Instances and lists them through the Dev MCP router", async () => {
     const events: string[] = [];
     const provider: StackProvider<{ id: string }> = {
       id: "fake-stack",
       start: async () => {
-        events.push("start");
-        return { id: "stack-1" };
+        const id = `handle-${events.length + 1}`;
+        events.push(`start:${id}`);
+        return { id };
       },
       status: (handle) => ({
         status: "ready",
@@ -336,27 +337,238 @@ describe("Dev MCP Tool Router", () => {
     const router = createDevMcpToolRouter({ stackProvider: provider });
 
     expect(router.listTools().map((tool) => tool.name)).toEqual(
-      expect.arrayContaining(["stack.start", "stack.status", "stack.stop"]),
+      expect.arrayContaining(["stack.start", "stack.list", "stack.status", "stack.stop"]),
     );
-    await expect(router.callTool("stack.status")).resolves.toMatchObject({
+    await expect(router.callTool("stack.list")).resolves.toMatchObject({
       status: "ok",
-      stack: { status: "stopped" },
+      stacks: [],
     });
-    await expect(router.callTool("stack.start")).resolves.toMatchObject({
+    await expect(router.callTool("stack.start", { stackId: "alpha" })).resolves.toMatchObject({
       status: "ok",
-      handle: { id: "stack-1" },
+      stackId: "alpha",
+      handle: { id: "handle-1" },
       stack: { status: "ready" },
     });
-    await expect(router.callTool("stack.start")).resolves.toMatchObject({
-      status: "blocked",
-      code: "stack-already-running",
-    });
-    await expect(router.callTool("stack.start")).resolves.not.toHaveProperty("next");
-    await expect(router.callTool("stack.stop")).resolves.toMatchObject({
+    await expect(router.callTool("stack.start", { stackId: "beta" })).resolves.toMatchObject({
       status: "ok",
-      stack: { status: "stopped", summary: "stopped:stack-1" },
+      stackId: "beta",
+      handle: { id: "handle-2" },
+      stack: { status: "ready" },
     });
-    expect(events).toEqual(["start", "stop:stack-1"]);
+    await expect(router.callTool("stack.list")).resolves.toMatchObject({
+      status: "ok",
+      stacks: [
+        { stackId: "alpha", stack: { status: "ready", summary: "ready:handle-1" } },
+        { stackId: "beta", stack: { status: "ready", summary: "ready:handle-2" } },
+      ],
+    });
+    await expect(router.callTool("stack.status", { stackId: "beta" })).resolves.toMatchObject({
+      status: "ok",
+      stack: { status: "ready", summary: "ready:handle-2" },
+    });
+    await expect(router.callTool("stack.stop", { stackId: "alpha" })).resolves.toMatchObject({
+      status: "ok",
+      stack: { status: "stopped", summary: "stopped:handle-1" },
+    });
+    await expect(router.callTool("stack.list")).resolves.toMatchObject({
+      status: "ok",
+      stacks: [
+        { stackId: "beta", stack: { status: "ready", summary: "ready:handle-2" } },
+      ],
+    });
+    expect(events).toEqual(["start:handle-1", "start:handle-2", "stop:handle-1"]);
+  });
+
+  it("rejects stack-targeting tools without stackId instead of falling back to the first Stack Instance", async () => {
+    const calls: string[] = [];
+    const provider: StackProvider<{ id: string }> = {
+      id: "explicit-stack-id-required",
+      explore: defineStackExploreTools<{ id: string }>()([
+        {
+          id: "notes.count",
+          title: "Count notes",
+          description: "Count notes visible to a limit.",
+          availableIn: ["dev", "verify"],
+          risk: "none",
+          input: z.object({ limit: z.number().int().positive() }),
+          output: z.object({ count: z.number().int() }),
+          run: ({ input, handle }) => {
+            calls.push(`explore:${handle.id}`);
+            return { count: input.limit };
+          },
+        },
+      ]),
+      start: async () => {
+        calls.push("start");
+        return { id: "generated-handle" };
+      },
+      status: (handle) => {
+        calls.push(`status:${handle.id}`);
+        return {
+          status: "ready",
+          summary: `ready:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        };
+      },
+      logs: (handle, input) => {
+        calls.push(`logs:${handle.id}`);
+        return {
+          status: "ok",
+          summary: `logs:${handle.id}`,
+          serviceId: input.serviceId,
+          stream: input.stream ?? "combined",
+          tail: input.tail,
+          entries: [],
+          truncated: false,
+        };
+      },
+      stop: (handle) => {
+        calls.push(`stop:${handle.id}`);
+        return {
+          status: "stopped",
+          summary: `stopped:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        };
+      },
+    };
+    const router = createDevMcpToolRouter({ stackProvider: provider });
+
+    await expect(router.callTool("stack.start")).resolves.toMatchObject({
+      status: "ok",
+      stackId: "stack-1",
+    });
+    calls.length = 0;
+
+    await expect(router.callTool("stack.status")).resolves.toMatchObject({
+      status: "blocked",
+      code: "stack-id-required",
+    });
+    await expect(
+      router.callTool("stack.logs", { serviceId: "next-dev", tail: 10 }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      code: "stack-id-required",
+    });
+    await expect(
+      router.callTool("stack.explore.run", { toolId: "notes.count", input: { limit: 1 } }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      code: "stack-id-required",
+    });
+    await expect(router.callTool("stack.stop")).resolves.toMatchObject({
+      status: "blocked",
+      code: "stack-id-required",
+    });
+    await expect(router.callTool("stack.explore.list")).resolves.toMatchObject({
+      status: "ok",
+      tools: [expect.objectContaining({ id: "notes.count" })],
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it("rejects duplicate caller-provided Stack Instance ids before starting another handle", async () => {
+    const calls: string[] = [];
+    const provider: StackProvider<{ id: string }> = {
+      id: "duplicate-stack-id",
+      start: async () => {
+        calls.push("start");
+        return { id: `handle-${calls.length}` };
+      },
+      status: (handle) => ({
+        status: "ready",
+        summary: `ready:${handle.id}`,
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+      stop: (handle) => {
+        calls.push(`stop:${handle.id}`);
+        return {
+          status: "stopped",
+          summary: `stopped:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        };
+      },
+    };
+    const router = createDevMcpToolRouter({ stackProvider: provider });
+
+    await expect(router.callTool("stack.start", { stackId: "alpha" })).resolves.toMatchObject({
+      status: "ok",
+      stackId: "alpha",
+    });
+    await expect(router.callTool("stack.start", { stackId: "alpha" })).resolves.toMatchObject({
+      status: "blocked",
+      code: "stack-id-already-running",
+      message: expect.stringContaining("alpha"),
+    });
+    expect(calls).toEqual(["start"]);
+  });
+
+  it("rejects unknown explicit Stack Instance ids as stack-not-running preconditions", async () => {
+    const provider: StackProvider<{ id: string }> = {
+      id: "unknown-stack-id",
+      explore: defineStackExploreTools<{ id: string }>()([
+        {
+          id: "notes.count",
+          title: "Count notes",
+          description: "Count notes visible to a limit.",
+          availableIn: ["dev", "verify"],
+          risk: "none",
+          input: z.object({ limit: z.number().int().positive() }),
+          output: z.object({ count: z.number().int() }),
+          run: ({ input }) => ({ count: input.limit }),
+        },
+      ]),
+      start: async () => ({ id: "handle-alpha" }),
+      status: () => ({
+        status: "ready",
+        summary: "ready",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+      logs: () => ({
+        status: "ok",
+        summary: "logs",
+        serviceId: "next-dev",
+        stream: "combined",
+        tail: 10,
+        entries: [],
+        truncated: false,
+      }),
+      stop: () => ({
+        status: "stopped",
+        summary: "stopped",
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({ stackProvider: provider });
+
+    await router.callTool("stack.start", { stackId: "alpha" });
+    await expect(router.callTool("stack.stop", { stackId: "missing" })).resolves.toMatchObject({
+      status: "blocked",
+      code: "stack-not-running",
+    });
+    await expect(
+      router.callTool("stack.explore.run", { stackId: "missing", toolId: "notes.count", input: { limit: 1 } }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      code: "stack-not-running",
+    });
   });
 
   it("returns unified stack state and live provider logs through stack tools", async () => {
@@ -427,8 +639,9 @@ describe("Dev MCP Tool Router", () => {
     expect(router.listTools().map((tool) => tool.name)).toEqual(
       expect.arrayContaining(["stack.start", "stack.status", "stack.stop", "stack.logs"]),
     );
-    await expect(router.callTool("stack.start")).resolves.toMatchObject({
+    await expect(router.callTool("stack.start", { stackId: "observable" })).resolves.toMatchObject({
       status: "ok",
+      stackId: "observable",
       stack: {
         status: "ready",
         services: [
@@ -449,7 +662,7 @@ describe("Dev MCP Tool Router", () => {
       },
     });
     await expect(
-      router.callTool("stack.logs", { serviceId: "next-dev", tail: 80, stream: "combined" }),
+      router.callTool("stack.logs", { stackId: "observable", serviceId: "next-dev", tail: 80, stream: "combined" }),
     ).resolves.toMatchObject({
       status: "ok",
       logs: {
@@ -493,19 +706,19 @@ describe("Dev MCP Tool Router", () => {
       router.callTool("stack.logs", { serviceId: "next-dev", tail: 10 }),
     ).resolves.toMatchObject({
       status: "blocked",
-      code: "stack-not-running",
+      code: "stack-id-required",
     });
 
-    await router.callTool("stack.start");
+    await router.callTool("stack.start", { stackId: "no-logs" });
     await expect(
-      router.callTool("stack.logs", { serviceId: "next-dev" }),
+      router.callTool("stack.logs", { stackId: "no-logs", serviceId: "next-dev" }),
     ).resolves.toMatchObject({
       status: "error",
       tool: "stack.logs",
       error: "Missing required positive integer argument: tail",
     });
     await expect(
-      router.callTool("stack.logs", { serviceId: "next-dev", tail: 10 }),
+      router.callTool("stack.logs", { stackId: "no-logs", serviceId: "next-dev", tail: 10 }),
     ).resolves.toMatchObject({
       status: "blocked",
       code: "stack-logs-not-supported",
@@ -647,14 +860,14 @@ describe("Dev MCP Tool Router", () => {
     await expect(
       router.callTool("stack.explore.run", { toolId: "notes.count", input: { limit: 2 } }),
     ).resolves.toMatchObject({
-      status: "failed",
+      status: "blocked",
       tool: "stack.explore.run",
-      code: "stack-not-running",
+      code: "stack-id-required",
     });
 
-    await router.callTool("stack.start");
+    await router.callTool("stack.start", { stackId: "explore" });
     await expect(
-      router.callTool("stack.explore.run", { toolId: "notes.count", input: { limit: 3 } }),
+      router.callTool("stack.explore.run", { stackId: "explore", toolId: "notes.count", input: { limit: 3 } }),
     ).resolves.toMatchObject({
       status: "ok",
       tool: "stack.explore.run",
@@ -720,28 +933,28 @@ describe("Dev MCP Tool Router", () => {
     };
     const router = createDevMcpToolRouter({ stackProvider: provider });
 
-    await router.callTool("stack.start");
+    await router.callTool("stack.start", { stackId: "explore-failures" });
     await expect(
-      router.callTool("stack.explore.run", { toolId: "missing.tool", input: {} }),
+      router.callTool("stack.explore.run", { stackId: "explore-failures", toolId: "missing.tool", input: {} }),
     ).resolves.toMatchObject({
       status: "failed",
       code: "stack-explore-tool-not-found",
     });
     await expect(
-      router.callTool("stack.explore.run", { toolId: "notes.count", input: { limit: 0 } }),
+      router.callTool("stack.explore.run", { stackId: "explore-failures", toolId: "notes.count", input: { limit: 0 } }),
     ).resolves.toMatchObject({
       status: "failed",
       code: "stack-explore-invalid-input",
     });
     await expect(
-      router.callTool("stack.explore.run", { toolId: "provider.throws", input: {} }),
+      router.callTool("stack.explore.run", { stackId: "explore-failures", toolId: "provider.throws", input: {} }),
     ).resolves.toMatchObject({
       status: "failed",
       code: "stack-explore-handler-failed",
       message: "provider exploded",
     });
     await expect(
-      router.callTool("stack.explore.run", { toolId: "provider.bad-output", input: {} }),
+      router.callTool("stack.explore.run", { stackId: "explore-failures", toolId: "provider.bad-output", input: {} }),
     ).resolves.toMatchObject({
       status: "failed",
       code: "stack-explore-invalid-output",
@@ -779,18 +992,49 @@ describe("Dev MCP Tool Router", () => {
       tool: "stack.start",
       error: "readiness timeout",
     });
-    await expect(router.callTool("stack.status")).resolves.toMatchObject({
+    await expect(router.callTool("stack.list")).resolves.toMatchObject({
       status: "ok",
-      stack: { status: "stopped" },
+      stacks: [],
     });
     expect(events).toEqual(["start", "status", "stop:stack-1"]);
   });
 
-  it("disposes active stack and browser sessions", async () => {
+  it("preserves the readiness failure when start cleanup stop also fails", async () => {
     const events: string[] = [];
     const provider: StackProvider<{ id: string }> = {
+      id: "failing-status-and-stop-stack",
+      start: async () => {
+        events.push("start");
+        return { id: "stack-1" };
+      },
+      status: () => {
+        events.push("status");
+        throw new Error("readiness timeout");
+      },
+      stop: async (handle) => {
+        events.push(`stop:${handle.id}`);
+        throw new Error("cleanup stop failed");
+      },
+    };
+    const router = createDevMcpToolRouter({ stackProvider: provider });
+
+    await expect(router.callTool("stack.start")).resolves.toMatchObject({
+      status: "error",
+      tool: "stack.start",
+      error: expect.stringContaining("readiness timeout"),
+    });
+    expect(events).toEqual(["start", "status", "stop:stack-1"]);
+  });
+
+  it("disposes all remaining Stack Instances and browser sessions", async () => {
+    const events: string[] = [];
+    let started = 0;
+    const provider: StackProvider<{ id: string }> = {
       id: "fake-stack",
-      start: async () => ({ id: "stack-1" }),
+      start: async () => {
+        started += 1;
+        return { id: `stack-${started}` };
+      },
       status: () => ({
         status: "ready",
         summary: "ready",
@@ -824,15 +1068,16 @@ describe("Dev MCP Tool Router", () => {
       },
     });
 
-    await router.callTool("stack.start");
+    await router.callTool("stack.start", { stackId: "disposable-a" });
+    await router.callTool("stack.start", { stackId: "disposable-b" });
     await expect(router.dispose()).resolves.toMatchObject({
       stack: { status: "stopped" },
       errors: [],
     });
-    expect(events).toEqual(["stack:stack-1", "browser:browser-1"]);
-    await expect(router.callTool("stack.status")).resolves.toMatchObject({
+    expect(events).toEqual(["stack:stack-1", "stack:stack-2", "browser:browser-1"]);
+    await expect(router.callTool("stack.list")).resolves.toMatchObject({
       status: "ok",
-      stack: { status: "stopped" },
+      stacks: [],
     });
   });
 

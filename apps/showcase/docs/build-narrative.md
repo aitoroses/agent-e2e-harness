@@ -20,12 +20,12 @@ The current launch proof loop is:
 
 1. `npm run dev:mcp --workspace @agent-e2e/showcase`
 2. `mcporter list http://127.0.0.1:3766/mcp --allow-http --schema --json`
-3. `stack.start` returns ready `showcase-next-dev` and `postgres` services.
+3. `stack.start` returns a `stackId` plus ready `showcase-next-dev` and `postgres` services.
 4. `run.begin` applies the baseline workspace/user seed.
 5. `browser.open`, `browser.snapshot`, `browser.find`, `browser.act`, `browser.wait`, and `browser.get` create and inspect the proof note through the UI.
 6. `journey.step` captures the browser-created proof note as run-owned and verifies persistence.
 7. `artifact.read` opens `step-feedback.json` so the agent can debug from artifacts instead of terminal scrollback.
 8. `cleanup.plan` and `run.teardown` delete the owned proof note.
-9. `stack.stop` tears down Next.js and PostgreSQL.
+9. `stack.stop` with the explicit `stackId` tears down Next.js and PostgreSQL.
 
 The same configured journey is promoted through `npm run e2e:verify --workspace @agent-e2e/showcase`, which runs `agent-e2e verify`, writes suite reports under `.agents-e2e/artifacts/_suites/<suite-id>/`, and exits non-zero on failure.
