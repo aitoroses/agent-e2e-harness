@@ -112,14 +112,14 @@ Prefer `resourceRegistry` for typed cleanup. Use `resourceAdapters` only for one
 ## Stack Provider Template
 
 ```ts
-import { createProcessStackProvider, defineStackExploreTools } from "@agent-e2e/harness/stack";
+import { createProcessStackProvider, defineStackExploreTools, type StackProvider } from "@agent-e2e/harness/stack";
 import { z } from "zod/v4";
 
 const explore = defineStackExploreTools<{ serviceId: string }>()([
   {
     id: "app.health",
     title: "Read app health",
-    description: "Read a verify-safe health observation from the active app stack.",
+    description: "Read a verify-safe health observation from the selected Stack Instance.",
     availableIn: ["dev", "verify"],
     risk: "none",
     input: z.object({}),
@@ -145,7 +145,33 @@ export const stackProvider = {
 };
 ```
 
-Use a custom `StackProvider` when the app must start containers, databases, workers, or multiple processes. `stack.start` should return service URLs that journeys and agents use as browser/API targets. `status` should return the unified stack-state packet; optional `logs` should read live logs for stable service ids; `explore` should expose provider-owned tools with Zod schemas, `availableIn`, and `risk`.
+Use a custom `StackProvider` when the app must start containers, databases, workers, or multiple processes. The default pattern is `start(ctx)`: use `StackStartContext` for stack id, mode, worker identity, suite id, and artifact scope, then create **Named Stack Allocations** for dynamic ports and stack-scoped files.
+
+```ts
+export const stackProvider: StackProvider<{ appUrl: string; logPath: string }> = {
+  id: "app-stack",
+  async start(ctx) {
+    const app = await ctx.allocatePort("app server");
+    const log = ctx.allocateArtifactPath("app server log", { kind: "file", extension: "log" });
+    return { appUrl: app.url, logPath: log.path };
+  },
+  async status(handle) {
+    return {
+      status: "ready",
+      summary: "app ready",
+      services: [{ id: "web", status: "ready", kind: "http", url: handle.appUrl }],
+      artifacts: [],
+      warnings: [],
+      errors: [],
+    };
+  },
+  async stop() {
+    return { status: "stopped", summary: "stopped", services: [], artifacts: [], warnings: [], errors: [] };
+  },
+};
+```
+
+`stack.start` should return service URLs through `status`: `StackStatusPacket.services` is the journey-facing runtime contract for browser/API targets. Named Stack Allocations make Dev MCP and worker-scoped verify reports explain which ports, logs, and paths belonged to each Stack Instance; they do not replace services. Optional `logs` should read live logs for stable service ids. `explore` should expose provider-owned tools with Zod schemas, `availableIn`, and `risk`.
 
 ## Config Template
 

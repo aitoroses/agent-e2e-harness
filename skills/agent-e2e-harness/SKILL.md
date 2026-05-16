@@ -12,8 +12,8 @@ The target outcome is not a hand-written Playwright test. The target outcome is 
 Mental model:
 
 - `agent-e2e dev` starts the agent's Exploration Surface: a local Streamable HTTP MCP server at `http://127.0.0.1:3766/mcp` by default.
-- The agent explores the live system through MCP tools, learns the stable path, and crystallizes that trajectory into an Executable Journey.
-- `agent-e2e verify` runs the crystallized journey suite. It is not a general exploration shell; it can use only verify-safe observation tools.
+- The agent explores one or more explicit Stack Instances through MCP tools, binds a run to the selected `stackId` with a Run Stack Binding, learns the stable path, and crystallizes that trajectory into an Executable Journey.
+- `agent-e2e verify` runs the crystallized journey suite through worker-scoped verify Stack Instances. It is not a general exploration shell; it can use only verify-safe observation tools.
 
 ## Load References
 
@@ -50,9 +50,11 @@ stack.explore.list
 stack.explore.run
 ```
 
-`stack.start` returns a `stackId`; pass that id to `stack.status`, `run.begin`, `stack.logs`, `stack.explore.run`, and `stack.stop`. Use `stack.list` to recover running Stack Instances after compaction. `run.begin` requires a valid `stackId` when a stack provider exists and rejects `stackId` when no provider exists. `stack.status` is the unified stack-state packet. It should include services with stable ids, endpoints, checks, warnings, errors, artifacts, and next actions. Do not invent native `stack.services`, `stack.health`, or `stack.env` tools for v1.
+`stack.start` returns a `stackId`; pass that id to `stack.status`, `run.begin`, `stack.logs`, `stack.explore.run`, and `stack.stop`. Use `stack.list` to recover running Stack Instances after compaction or to compare two live stacks during a multi-stack investigation. `run.begin` requires a valid `stackId` when a stack provider exists, creates the run's Run Stack Binding, and rejects `stackId` when no provider exists. `stack.status` is the unified stack-state packet. `StackStatusPacket.services` is the journey-facing runtime contract for dynamic URLs, service ids, endpoints, checks, warnings, errors, artifacts, and next actions. Do not invent native `stack.services`, `stack.health`, or `stack.env` tools for v1.
 
 `stack.logs` is live exploration. It requires a `stackId`, one `serviceId`, a required `tail`, and optional `stream: "stdout" | "stderr" | "combined"`. `stack.logs` and `stack.explore.run` accept optional `runId` only to capture artifacts, and reject capture when the run is bound to a different `stackId`.
+
+Stack providers should use **StackStartContext** and **Named Stack Allocations** as the default stack-provider pattern. In `start(ctx)`, use `ctx.stackId`, `ctx.mode`, `ctx.workerIndex`, `ctx.workerCount`, `ctx.suiteId`, and `ctx.artifactScope` to name resources. Allocate dynamic ports with `await ctx.allocatePort(name)` and stack-scoped files or directories with `ctx.allocateArtifactPath(name, { kind: "file" | "directory" })`. These allocations make parallel Dev MCP checks and worker-scoped verify reports explainable without replacing `StackStatusPacket.services` as the data journeys use.
 
 Provider-declared `stack.explore.*` tools must have:
 
@@ -116,7 +118,8 @@ Use `mcporter` for fresh or remote agents without a registered MCP client:
 ```sh
 mcporter list http://127.0.0.1:3766/mcp --schema --json --allow-http
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.explore.list --args '{}' --output json
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.start --args '{}' --output json --timeout 120000
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.start --args '{"stackId":"dev-a"}' --output json --timeout 120000
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.start --args '{"stackId":"dev-b"}' --output json --timeout 120000
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.list --args '{}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.status --args '{"stackId":"<stack-id>"}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.logs --args '{"stackId":"<stack-id>","serviceId":"<service-id>","tail":80,"stream":"combined"}' --output json
@@ -127,9 +130,11 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.exp
 Before claiming adoption works, prove:
 
 - provider tools are discoverable through `stack.explore.list`
+- multi-stack Dev MCP behavior works: two Stack Instances can start, `stack.list` shows both ids, and `stack.status` targets the intended id
 - Dev MCP can run a provider tool through `stack.explore.run`
 - the journey uses `execution.stack.explore.run(...)` for at least one verify-safe observation when useful
 - dev-only tools are absent or rejected in verify
+- worker-scoped verify evidence exists: `agent-e2e verify --workers 2` passes when the app supports it, reports `worker-0`/`worker-1` or the lazy subset of selected runs, records run `stackId`, and includes Named Stack Allocations
 - `agent-e2e verify` passes and writes a suite report
 
 ## Done Means
