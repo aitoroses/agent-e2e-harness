@@ -23,6 +23,18 @@ type VerifyHarness = HarnessTypes<
   { kind: "record"; id: string }
 >;
 
+type StackVerifyHarness = HarnessTypes<
+  {
+    browser: VerifyBrowser;
+    context: unknown;
+    page: { screenshot: (options: { path: string }) => Promise<void> };
+    stack: StackExecutionSurface;
+  },
+  Record<string, never>,
+  { ok: true; stackSummary: string },
+  { kind: "record"; id: string }
+>;
+
 const tempDirs: string[] = [];
 
 afterEach(async () => {
@@ -47,6 +59,33 @@ function fakeBrowser(): VerifyBrowser {
     }),
     close: async () => undefined,
   };
+}
+
+function makeStackJourney(id: string, onRun?: (summary: string) => Promise<void> | void) {
+  return defineJourney<StackVerifyHarness>({
+    id,
+    title: id,
+    profiles: [{ id: "default", data: {}, isDefault: true }],
+    phases: [
+      {
+        id: "phase:main",
+        title: "Main",
+        steps: [
+          {
+            id: "step:main",
+            title: "Main",
+            execute: async ({ execution }) => {
+              await onRun?.(execution.stack.summary);
+              return {
+                status: "passed",
+                observed: { ok: true, stackSummary: execution.stack.summary },
+              };
+            },
+          },
+        ],
+      },
+    ],
+  });
 }
 
 describe("verify runner", () => {
@@ -273,6 +312,431 @@ describe("verify runner", () => {
     expect(stopped).toBe(true);
   });
 
+  it("does not start worker stacks before verify selection succeeds", async () => {
+    const artifactRoot = await tempRoot();
+    let started = false;
+
+    await expect(runVerifySuite<StackVerifyHarness, { id: string }>({
+      journeys: [makeStackJourney("notes:selected")],
+      stackProvider: {
+        id: "selection-stack",
+        start: async (ctx) => {
+          started = true;
+          return { id: ctx.stackId };
+        },
+        status: (handle) => ({
+          status: "ready",
+          summary: `ready:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+        stop: () => ({
+          status: "stopped",
+          summary: "stopped",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+      },
+      options: {
+        configPath: "/repo/agent-e2e.config.ts",
+        artifactRoot,
+        createBrowser: async () => fakeBrowser(),
+        reporter: "quiet",
+        journey: ["notes:missing"],
+      },
+    })).rejects.toThrow("Verify selection matched no journeys.");
+    expect(started).toBe(false);
+  });
+
+  it("runs serial verify through one lazy worker stack", async () => {
+    const artifactRoot = await tempRoot();
+    const events: string[] = [];
+    const makeJourney = (id: string) => defineJourney<StackVerifyHarness>({
+      id,
+      title: id,
+      profiles: [{ id: "default", data: {}, isDefault: true }],
+      phases: [
+        {
+          id: "phase:main",
+          title: "Main",
+          steps: [
+            {
+              id: "step:main",
+              title: "Main",
+              execute: async ({ execution }) => {
+                events.push(`run:${id}:${execution.stack.summary}`);
+                return {
+                  status: "passed",
+                  observed: { ok: true, stackSummary: execution.stack.summary },
+                };
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const contexts: StackStartContext[] = [];
+    const report = await runVerifySuite<StackVerifyHarness, { id: string }>({
+      journeys: [makeJourney("notes:first"), makeJourney("notes:second")],
+      stackProvider: {
+        id: "serial-worker-stack",
+        start: async (ctx) => {
+          events.push(`start:${ctx.stackId}`);
+          contexts.push(ctx);
+          return { id: ctx.stackId };
+        },
+        status: (handle) => ({
+          status: "ready",
+          summary: `ready:${handle.id}`,
+          services: [{ id: "app", status: "ready", url: `http://127.0.0.1/${handle.id}` }],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+        stop: (handle) => {
+          events.push(`stop:${handle.id}`);
+          return {
+            status: "stopped",
+            summary: `stopped:${handle.id}`,
+            services: [],
+            artifacts: [],
+            warnings: [],
+            errors: [],
+          };
+        },
+      },
+      options: {
+        configPath: "/repo/agent-e2e.config.ts",
+        artifactRoot,
+        createBrowser: async () => fakeBrowser(),
+        reporter: "quiet",
+        workers: 1,
+      },
+    });
+
+    expect(report.status).toBe("passed");
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0]).toMatchObject({
+      mode: "verify",
+      stackId: "worker-0",
+      workerIndex: 0,
+      workerCount: 1,
+    });
+    expect(events).toEqual([
+      "start:worker-0",
+      "run:notes:first:ready:worker-0",
+      "run:notes:second:ready:worker-0",
+      "stop:worker-0",
+    ]);
+  });
+
+  it("starts worker stacks lazily only for workers that receive selected runs", async () => {
+    const artifactRoot = await tempRoot();
+    const contexts: StackStartContext[] = [];
+
+    const report = await runVerifySuite<StackVerifyHarness, { id: string }>({
+      journeys: [
+        makeStackJourney("notes:first"),
+        makeStackJourney("notes:second"),
+      ],
+      stackProvider: {
+        id: "lazy-worker-stack",
+        start: async (ctx) => {
+          contexts.push(ctx);
+          return { id: ctx.stackId };
+        },
+        status: (handle) => ({
+          status: "ready",
+          summary: `ready:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+        stop: () => ({
+          status: "stopped",
+          summary: "stopped",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+      },
+      options: {
+        configPath: "/repo/agent-e2e.config.ts",
+        artifactRoot,
+        createBrowser: async () => fakeBrowser(),
+        reporter: "quiet",
+        workers: 4,
+      },
+    });
+
+    expect(report.status).toBe("passed");
+    expect(contexts.map((ctx) => ctx.stackId)).toEqual(["worker-0", "worker-1"]);
+    expect(contexts.map((ctx) => ctx.workerIndex)).toEqual([0, 1]);
+    expect(contexts.map((ctx) => ctx.workerCount)).toEqual([4, 4]);
+  });
+
+  it("runs each worker's assigned runs serially inside that worker stack", async () => {
+    const artifactRoot = await tempRoot();
+    const activeStacks = new Set<string>();
+    const runStacks: string[] = [];
+
+    const report = await runVerifySuite<StackVerifyHarness, { id: string }>({
+      journeys: Array.from({ length: 6 }, (_, index) =>
+        makeStackJourney(`notes:${index + 1}`, async (summary) => {
+          const stackId = summary.replace("ready:", "");
+          if (activeStacks.has(stackId)) throw new Error(`overlapped run in ${stackId}`);
+          activeStacks.add(stackId);
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          activeStacks.delete(stackId);
+          runStacks.push(stackId);
+        })
+      ),
+      stackProvider: {
+        id: "serial-per-worker-stack",
+        start: async (ctx) => ({ id: ctx.stackId }),
+        status: (handle) => ({
+          status: "ready",
+          summary: `ready:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+        stop: () => ({
+          status: "stopped",
+          summary: "stopped",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+      },
+      options: {
+        configPath: "/repo/agent-e2e.config.ts",
+        artifactRoot,
+        createBrowser: async () => fakeBrowser(),
+        reporter: "quiet",
+        workers: 2,
+      },
+    });
+
+    expect(report.status).toBe("passed");
+    expect(new Set(runStacks)).toEqual(new Set(["worker-0", "worker-1"]));
+    expect(report.runs).toHaveLength(6);
+  });
+
+  it("runs suite-end cleanup before stopping the assigned worker stacks", async () => {
+    const artifactRoot = await tempRoot();
+    const events: string[] = [];
+    const stoppedStacks = new Set<string>();
+
+    const report = await runVerifySuite<StackVerifyHarness, { id: string }>({
+      journeys: [
+        makeStackJourney("notes:first", () => undefined),
+        makeStackJourney("notes:second", () => undefined),
+      ].map((journey) => ({
+        ...journey,
+        phases: journey.phases.map((phase) => ({
+          ...phase,
+          steps: phase.steps.map((step) => ({
+            ...step,
+            execute: async (input) => {
+              const result = await step.execute(input);
+              const stackId = input.execution.stack.summary.replace("ready:", "");
+              return {
+                ...result,
+                ownedResources: [{ kind: "record", id: stackId }],
+              };
+            },
+          })),
+        })),
+      })),
+      resourceAdapters: [
+        {
+          id: "stack-backed-cleanup",
+          supports: (resource) => resource.kind === "record",
+          delete: async (resource) => {
+            events.push(`cleanup:${resource.id}:stopped=${stoppedStacks.has(resource.id)}`);
+          },
+        },
+      ],
+      stackProvider: {
+        id: "suite-end-cleanup-stack",
+        start: async (ctx) => {
+          events.push(`start:${ctx.stackId}`);
+          return { id: ctx.stackId };
+        },
+        status: (handle) => ({
+          status: "ready",
+          summary: `ready:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+        stop: (handle) => {
+          stoppedStacks.add(handle.id);
+          events.push(`stop:${handle.id}`);
+          return {
+            status: "stopped",
+            summary: `stopped:${handle.id}`,
+            services: [],
+            artifacts: [],
+            warnings: [],
+            errors: [],
+          };
+        },
+      },
+      options: {
+        configPath: "/repo/agent-e2e.config.ts",
+        artifactRoot,
+        cleanup: "suite-end",
+        createBrowser: async () => fakeBrowser(),
+        reporter: "quiet",
+        workers: 2,
+      },
+    });
+
+    expect(report.status).toBe("passed");
+    expect(events.filter((event) => event.startsWith("cleanup:")).sort()).toEqual([
+      "cleanup:worker-0:stopped=false",
+      "cleanup:worker-1:stopped=false",
+    ]);
+    expect(events.at(-2)).toMatch(/^stop:worker-/);
+    expect(events.at(-1)).toMatch(/^stop:worker-/);
+  });
+
+  it("stops scheduling new runs after a worker stack start failure while active workers clean up", async () => {
+    const artifactRoot = await tempRoot();
+    const events: string[] = [];
+
+    const report = await runVerifySuite<StackVerifyHarness, { id: string }>({
+      journeys: [
+        makeStackJourney("notes:first", (summary) => {
+          events.push(`run:first:${summary}`);
+        }),
+        makeStackJourney("notes:failed-start"),
+        makeStackJourney("notes:unstarted"),
+      ],
+      stackProvider: {
+        id: "start-failure-stack",
+        start: async (ctx) => {
+          events.push(`start:${ctx.stackId}`);
+          if (ctx.workerIndex === 1) throw new Error("worker-1 stack did not start");
+          return { id: ctx.stackId };
+        },
+        status: (handle) => ({
+          status: "ready",
+          summary: `ready:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+        stop: (handle) => {
+          events.push(`stop:${handle.id}`);
+          return {
+            status: "stopped",
+            summary: `stopped:${handle.id}`,
+            services: [],
+            artifacts: [],
+            warnings: [],
+            errors: [],
+          };
+        },
+      },
+      options: {
+        configPath: "/repo/agent-e2e.config.ts",
+        artifactRoot,
+        createBrowser: async () => fakeBrowser(),
+        reporter: "quiet",
+        workers: 2,
+      },
+    });
+
+    expect(report.status).toBe("failed");
+    expect(report.exitCode).toBe(1);
+    expect(report.errors).toContain("worker-1 stack did not start");
+    expect(report.runs.map((run) => `${run.journeyId}:${run.status}`)).toEqual([
+      "notes:first:passed",
+    ]);
+    expect(events).toEqual([
+      "start:worker-0",
+      "start:worker-1",
+      "run:first:ready:worker-0",
+      "stop:worker-0",
+    ]);
+  });
+
+  it("keeps browser contexts isolated per run inside a worker stack", async () => {
+    const artifactRoot = await tempRoot();
+    const contextIds: number[] = [];
+    let nextContextId = 0;
+    const browser: VerifyBrowser = {
+      newContext: async () => {
+        const id = ++nextContextId;
+        return {
+          newPage: async () => ({
+            screenshot: async ({ path }: { path: string }) => {
+              await writeFile(path, "png");
+            },
+          }),
+          close: async () => undefined,
+          id,
+        } as unknown as Awaited<ReturnType<VerifyBrowser["newContext"]>>;
+      },
+      close: async () => undefined,
+    };
+
+    const report = await runVerifySuite<StackVerifyHarness, { id: string }>({
+      journeys: [
+        makeStackJourney("notes:first", () => {
+          contextIds.push(nextContextId);
+        }),
+        makeStackJourney("notes:second", () => {
+          contextIds.push(nextContextId);
+        }),
+      ],
+      stackProvider: {
+        id: "context-isolation-stack",
+        start: async (ctx) => ({ id: ctx.stackId }),
+        status: (handle) => ({
+          status: "ready",
+          summary: `ready:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+        stop: () => ({
+          status: "stopped",
+          summary: "stopped",
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        }),
+      },
+      options: {
+        configPath: "/repo/agent-e2e.config.ts",
+        artifactRoot,
+        createBrowser: async () => browser,
+        reporter: "quiet",
+        workers: 1,
+      },
+    });
+
+    expect(report.status).toBe("passed");
+    expect(contextIds).toEqual([1, 2]);
+  });
+
   it("passes a verify-mode StackStartContext to the suite stack and records allocations", async () => {
     const artifactRoot = await tempRoot();
     const contexts: StackStartContext[] = [];
@@ -330,12 +794,12 @@ describe("verify runner", () => {
     expect(contexts).toHaveLength(1);
     expect(contexts[0]).toMatchObject({
       mode: "verify",
-      stackId: "verify-suite",
+      stackId: "worker-0",
       workerIndex: 0,
       workerCount: 1,
       suiteId: "verify-2026-05-14t12-00-00-000z-unit",
       artifactScope: {
-        stackDir: join(artifactRoot, "_suites", "verify-2026-05-14t12-00-00-000z-unit", "stacks", "verify-suite"),
+        stackDir: join(artifactRoot, "_suites", "verify-2026-05-14t12-00-00-000z-unit", "stacks", "worker-0"),
       },
     });
     expect(report.stack).toMatchObject({
@@ -344,17 +808,17 @@ describe("verify runner", () => {
         {
           kind: "port",
           name: "app",
-          stackId: "verify-suite",
+          stackId: "worker-0",
           workerIndex: 0,
           resource: { url: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/) },
         },
         {
           kind: "artifact-file",
           name: "app log",
-          stackId: "verify-suite",
+          stackId: "worker-0",
           workerIndex: 0,
           resource: {
-            path: expect.stringContaining("/_suites/verify-2026-05-14t12-00-00-000z-unit/stacks/verify-suite/app-log.log"),
+            path: expect.stringContaining("/_suites/verify-2026-05-14t12-00-00-000z-unit/stacks/worker-0/app-log.log"),
           },
         },
       ],
