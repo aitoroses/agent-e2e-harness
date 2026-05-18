@@ -92,8 +92,8 @@ async function composeLogs(input: RuntimeLogsInput): Promise<RuntimeLogsOutput> 
       .filter(Boolean)
       .map((line) => ({
         serviceId: service,
-        level: input.level,
         message: line.replace(/^[^|]+\|\s?/, ""),
+        ...(input.level ? { level: input.level } : {}),
       }));
     return {
       status: "ok",
