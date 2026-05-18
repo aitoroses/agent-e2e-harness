@@ -22,7 +22,12 @@ function makeJourney() {
     title: "Runtime tools journey",
     profiles: [
       { id: "managed", data: {}, isDefault: true, runtimeTargetId: "local-dev" },
-      { id: "attached", data: {}, runtimeTargetId: "compose" },
+      {
+        id: "attached",
+        data: {},
+        runtimeTargetId: "compose",
+        runtime: { allowRunMutationTools: ["notes.create-owned"] },
+      },
     ],
     phases: [
       {
@@ -130,6 +135,99 @@ describe("Runtime Tool Surface", () => {
     await expect(router.callTool("runtime.explore.list", { targetId: "compose" })).resolves.toMatchObject({
       status: "ok",
       tools: [expect.objectContaining({ id: "compose.ps", risk: "observation" })],
+    });
+  });
+
+  it("executes observation tools and gates runMutation/runtimeMutation tools", async () => {
+    const router = createDevMcpToolRouter({
+      journeys: [makeJourney()],
+      runtimeTargets: [
+        attachedRuntime({
+          id: "compose",
+          explore: [
+            defineRuntimeExploreTool({
+              id: "compose.ps",
+              title: "List Compose services",
+              description: "Observe externally started Compose services.",
+              risk: "observation",
+              input: z.object({ includeStopped: z.boolean().optional() }),
+              output: z.object({ services: z.array(z.string()) }),
+              run: async ({ input }) => ({ services: input.includeStopped ? ["web", "db"] : ["web"] }),
+            }),
+            defineRuntimeExploreTool({
+              id: "notes.create-owned",
+              title: "Create run-owned note",
+              description: "Create a run-owned product resource for the selected journey profile.",
+              risk: "runMutation",
+              input: z.object({ body: z.string().min(1) }),
+              output: z.object({ id: z.string() }),
+              run: async () => ({ id: "note:owned" }),
+            }),
+            defineRuntimeExploreTool({
+              id: "compose.restart",
+              title: "Restart Compose service",
+              description: "Mutate shared runtime infrastructure.",
+              risk: "runtimeMutation",
+              input: z.object({ serviceId: z.string() }),
+              output: z.object({ restarted: z.boolean() }),
+              run: async () => ({ restarted: true }),
+            }),
+          ],
+        }),
+      ],
+    });
+
+    await expect(
+      router.callTool("runtime.explore.run", {
+        targetId: "compose",
+        toolId: "compose.ps",
+        input: { includeStopped: true },
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      output: { services: ["web", "db"] },
+    });
+    await expect(
+      router.callTool("runtime.explore.run", {
+        targetId: "compose",
+        toolId: "compose.ps",
+        input: { includeStopped: "yes" },
+      }),
+    ).resolves.toMatchObject({
+      status: "error",
+      error: expect.stringContaining("Invalid runtime exploration input"),
+    });
+    await expect(
+      router.callTool("runtime.explore.run", {
+        targetId: "compose",
+        toolId: "notes.create-owned",
+        input: { body: "hello" },
+      }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      code: "run-mutation-requires-profile-opt-in",
+    });
+    await expect(
+      router.callTool("runtime.explore.run", {
+        targetId: "compose",
+        journeyId: "journey:runtime-tools",
+        profileId: "attached",
+        toolId: "notes.create-owned",
+        input: { body: "hello" },
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      output: { id: "note:owned" },
+    });
+    await expect(
+      router.callTool("runtime.explore.run", {
+        targetId: "compose",
+        toolId: "compose.restart",
+        input: { serviceId: "web" },
+      }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      code: "runtime-mutation-blocked",
     });
   });
 });
