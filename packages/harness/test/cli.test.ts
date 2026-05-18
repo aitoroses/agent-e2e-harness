@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { isLongLivedCliCommand } from "../src/cli/index.js";
 
 const execFileAsync = promisify(execFile);
 const cliPath = resolve(process.cwd(), "dist/cli/index.js");
@@ -30,6 +31,12 @@ describe("Agent E2E CLI", () => {
     expect(stdout).toContain("--target <id>");
     expect(stdout).toContain("Attached Runtime Mode");
     expect(stdout).not.toContain("Dev MCP");
+  });
+
+  it("keeps dev and attached commands long-lived after startup", () => {
+    expect(isLongLivedCliCommand("dev")).toBe(true);
+    expect(isLongLivedCliCommand("attached")).toBe(true);
+    expect(isLongLivedCliCommand("verify")).toBe(false);
   });
 
   it("documents the Dev MCP command", async () => {

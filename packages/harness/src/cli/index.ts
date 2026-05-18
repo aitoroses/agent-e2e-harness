@@ -35,6 +35,10 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
   }
 }
 
+export function isLongLivedCliCommand(command: string | undefined): boolean {
+  return command === "dev" || command === "attached";
+}
+
 async function runAttachedCommand(flags: string[]): Promise<number> {
   if (flags.includes("--help") || flags.includes("-h")) {
     printAttachedHelp();
@@ -333,11 +337,11 @@ Options:
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   runCli().then((code) => {
-    if (process.argv[2] === "dev") process.exitCode = code;
+    if (isLongLivedCliCommand(process.argv[2])) process.exitCode = code;
     else process.exit(code);
   }).catch((error: unknown) => {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    if (process.argv[2] === "dev") process.exitCode = 1;
+    if (isLongLivedCliCommand(process.argv[2])) process.exitCode = 1;
     else process.exit(1);
   });
 }
