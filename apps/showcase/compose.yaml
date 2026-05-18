@@ -14,11 +14,10 @@ services:
       retries: 20
 
   showcase:
-    image: node:22-bookworm
-    working_dir: /workspace
-    command: sh -lc "npm install && npm run dev --workspace @agent-e2e/showcase -- --hostname 0.0.0.0 --port 3100"
-    volumes:
-      - ../..:/workspace
+    build:
+      context: ../..
+      dockerfile: apps/showcase/Dockerfile
+    image: agent-e2e-showcase-compose:local
     environment:
       DATABASE_URL: postgres://agent:agent@postgres:5432/proof_notes
       NEXT_TELEMETRY_DISABLED: "1"

@@ -109,4 +109,18 @@ describe("profile-selected Runtime Target runs", () => {
       },
     });
   });
+
+  it("ignores caller-supplied runtimeTargetId on the low-level MCP run API", async () => {
+    const journey = makeAttachedRunJourney();
+    const harness = createMcpHarnessServer({ journeys: [journey] });
+
+    await expect(
+      harness.callTool("beginRun", {
+        journeyId: "journey:attached-run",
+        profileId: "attached",
+        runId: "direct-run",
+        runtimeTargetId: "compose",
+      }),
+    ).resolves.not.toHaveProperty("runtimeTargetId");
+  });
 });

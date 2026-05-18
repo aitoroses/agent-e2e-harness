@@ -296,6 +296,7 @@ function printAttachedHelp(): void {
 Starts Attached Runtime Mode for an externally owned Runtime Target declared
 in agent-e2e.config.ts. The harness connects to an already-running runtime;
 it does not start or stop production, staging, preview, or Compose infrastructure.
+Use --port when dev is already running on the default MCP port 3766.
 
 Options:
       --target <id>         Required attached Runtime Target id

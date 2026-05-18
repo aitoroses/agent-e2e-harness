@@ -4,7 +4,10 @@ import { beginJourneyRun, runJourneyStep } from "@agent-e2e/harness";
 import { createShowcaseJourney } from "../src/journey.js";
 import { createShowcaseMcpJourney } from "../src/harness/dev-mcp-journey.js";
 import { createShowcaseDevStackProvider } from "../src/harness/dev-stack.js";
-import { createShowcaseComposeAttachedRuntimeTarget } from "../src/harness/compose-attached-runtime.js";
+import {
+  createShowcaseComposeAttachedRuntimeTarget,
+  parseComposeLogs,
+} from "../src/harness/compose-attached-runtime.js";
 import type { ShowcaseStackExecution } from "../src/harness/dev-stack.js";
 import {
   BASELINE_USER,
@@ -70,6 +73,12 @@ describe("showcase journey contracts", () => {
       label: "Showcase Docker Compose",
     });
     expect(target.logs).toBeTypeOf("function");
+    expect(target.access).toEqual([
+      expect.objectContaining({
+        id: "compose-runtime-logs",
+        kind: "runtimeLogs",
+      }),
+    ]);
     expect(target.explore).toEqual([
       expect.objectContaining({
         id: "compose.services",
@@ -85,6 +94,20 @@ describe("showcase journey contracts", () => {
         expect.objectContaining({ id: "showcase-web", url: "http://127.0.0.1:3100" }),
         expect.objectContaining({ id: "postgres" }),
       ],
+    });
+  });
+
+  it("reports Compose logs as bounded without claiming source truncation", () => {
+    expect(parseComposeLogs("showcase | one\nshowcase | two\n", {
+      serviceId: "showcase",
+      tail: 2,
+    })).toMatchObject({
+      tail: 2,
+      entries: [
+        { serviceId: "showcase", message: "one" },
+        { serviceId: "showcase", message: "two" },
+      ],
+      truncated: false,
     });
   });
 

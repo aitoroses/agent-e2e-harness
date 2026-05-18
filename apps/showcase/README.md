@@ -175,7 +175,11 @@ npm run compose:up --workspace @agent-e2e/showcase
 npm run attached:mcp --workspace @agent-e2e/showcase
 ```
 
-`attached:mcp` runs `agent-e2e attached --target showcase-compose`. The attached target is declared with `attachedRuntime(...)` in `agent-e2e.config.ts`, and the attached Journey Profile selects it through `runtimeTargetId: "showcase-compose"`. Use `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.explore.list`, and `runtime.explore.run` to inspect the already-running Compose app. The product-owned diagnostic `compose.services` is an `observation` Runtime Exploration Tool; Docker-specific behavior stays in `apps/showcase`, not harness core.
+`compose:up` builds the showcase service from `apps/showcase/Dockerfile` instead of mounting host `node_modules` into a Linux container. The image installs workspaces with `npm ci --ignore-scripts` and skips Playwright browser downloads because Compose only serves the app; browser sessions still run from the MCP host.
+
+`attached:mcp` runs `agent-e2e attached --target showcase-compose`. The attached target is declared with `attachedRuntime(...)` in `agent-e2e.config.ts`, and the attached Journey Profile selects it through `runtimeTargetId: "showcase-compose"`. Use `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.explore.list`, and `runtime.explore.run` to inspect the already-running Compose app. Access Context status is reported without exposing secret material; browser.open authentication wiring is not automatic in this v1 path and must be supplied by product code when a runtime needs authenticated browser state. The product-owned diagnostic `compose.services` is an `observation` Runtime Exploration Tool; Docker-specific behavior stays in `apps/showcase`, not harness core.
+
+`agent-e2e attached` shares the default MCP port with `agent-e2e dev` (`127.0.0.1:3766/mcp`); in short, attached shares the default MCP port. Pass `--port` when Dev MCP is already running, for example `agent-e2e attached --target showcase-compose --port 3777`. The attached target resolves `compose.yaml` relative to the showcase package; set `AGENT_E2E_SHOWCASE_ROOT=/absolute/path/to/apps/showcase` only when running from a nonstandard copied or compiled location.
 
 The attached smoke path uses the same proof-notes journey and ownership ledger. Seed and cleanup operate only on run-owned proof-note resources after the selected profile opts into run lifecycle; Compose containers remain externally owned. Stop Compose separately:
 

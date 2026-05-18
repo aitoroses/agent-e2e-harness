@@ -120,7 +120,7 @@ For staging, production, preview, or Docker Compose systems that are already run
 agent-e2e attached --target <id>
 ```
 
-Attached Runtime Mode does not own infrastructure lifecycle. It exposes target diagnostics through `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.explore.list`, and `runtime.explore.run`. Runtime exploration risk is declared as `observation`, `runMutation`, or `runtimeMutation`; observation runs by default, runMutation requires Journey Profile opt-in, and runtimeMutation is blocked by default. `run.begin` resolves the Runtime Target from the selected profile and does not accept a free `targetId` override.
+Attached Runtime Mode does not own infrastructure lifecycle. It exposes target diagnostics through `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.explore.list`, and `runtime.explore.run`. Runtime exploration risk is declared as `observation`, `runMutation`, or `runtimeMutation`; observation runs by default, runMutation requires Journey Profile opt-in, and runtimeMutation is blocked by default. `run.begin` resolves the Runtime Target from the selected profile and does not accept a free `targetId` override. Access Context status is secret-safe; automatic `browser.open` authentication wiring is product-owned in this v1 path.
 
 ## Build the proof loop
 

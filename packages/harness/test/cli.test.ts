@@ -30,6 +30,7 @@ describe("Agent E2E CLI", () => {
     expect(stdout).toContain("agent-e2e attached");
     expect(stdout).toContain("--target <id>");
     expect(stdout).toContain("Attached Runtime Mode");
+    expect(stdout).toContain("Use --port when dev is already running on the default MCP port");
     expect(stdout).not.toContain("Dev MCP");
   });
 

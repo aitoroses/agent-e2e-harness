@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod/v4";
 import {
   attachedRuntime,
@@ -15,7 +16,9 @@ import {
 } from "../proof-notes-contract.js";
 
 const execFileAsync = promisify(execFile);
-const showcaseRoot = resolve(process.env.AGENT_E2E_SHOWCASE_ROOT ?? process.cwd());
+const showcaseRoot = resolve(
+  process.env.AGENT_E2E_SHOWCASE_ROOT ?? fileURLToPath(new URL("../..", import.meta.url)),
+);
 const composeFile = resolve(showcaseRoot, "compose.yaml");
 
 export function createShowcaseComposeAttachedRuntimeTarget(): RuntimeTarget {
@@ -26,6 +29,14 @@ export function createShowcaseComposeAttachedRuntimeTarget(): RuntimeTarget {
     description: "Externally started Docker Compose runtime for Attached Runtime Mode dogfood.",
     status: async () => composeStatus(baseUrl),
     logs: async (input) => composeLogs(input),
+    access: [
+      {
+        id: "compose-runtime-logs",
+        kind: "runtimeLogs",
+        label: "Compose runtime logs",
+        description: "Read-only Docker Compose logs for the externally owned showcase runtime.",
+      },
+    ],
     explore: [
       defineRuntimeExploreTool({
         id: "compose.services",
@@ -87,23 +98,20 @@ async function composeLogs(input: RuntimeLogsInput): Promise<RuntimeLogsOutput> 
   const tail = input.tail;
   try {
     const { stdout } = await dockerCompose(["logs", "--no-color", "--tail", String(tail), service]);
-    const entries = stdout
-      .split(/\r?\n/)
-      .filter(Boolean)
-      .map((line) => ({
-        serviceId: service,
-        message: line.replace(/^[^|]+\|\s?/, ""),
-        ...(input.level ? { level: input.level } : {}),
-      }));
+    const parsed = parseComposeLogs(stdout, {
+      serviceId: service,
+      tail,
+      ...(input.level ? { level: input.level } : {}),
+    });
     return {
       status: "ok",
-      summary: `Returned ${entries.length} Compose log line(s) for ${service}.`,
+      summary: `Returned ${parsed.entries.length} Compose log line(s) for ${service}.`,
       targetId: SHOWCASE_COMPOSE_TARGET_ID,
       serviceId: service,
       ...(input.level ? { level: input.level } : {}),
       tail,
-      entries,
-      truncated: entries.length >= tail,
+      entries: parsed.entries,
+      truncated: parsed.truncated,
     };
   } catch (error) {
     return {
@@ -121,6 +129,24 @@ async function composeLogs(input: RuntimeLogsInput): Promise<RuntimeLogsOutput> 
       },
     };
   }
+}
+
+export function parseComposeLogs(
+  stdout: string,
+  input: { serviceId: string; tail: number; level?: string },
+): Pick<RuntimeLogsOutput, "tail" | "entries" | "truncated"> {
+  return {
+    tail: input.tail,
+    entries: stdout
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => ({
+        serviceId: input.serviceId,
+        message: line.replace(/^[^|]+\|\s?/, ""),
+        ...(input.level ? { level: input.level } : {}),
+      })),
+    truncated: false,
+  };
 }
 
 async function composeServices(): Promise<Array<{ name: string; status: string }>> {

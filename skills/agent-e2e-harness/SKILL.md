@@ -59,7 +59,7 @@ runtime.explore.list
 runtime.explore.run
 ```
 
-Attached Runtime Mode does not own infrastructure lifecycle. Start and stop the external runtime through product commands. `runtime.logs` requires `tail` and may accept `serviceId` plus best-effort `level`. Access Resolvers may materialize browser storage state, cookies, API credentials, tunnels, or service accounts internally, but agent-visible responses must not expose secret material.
+Attached Runtime Mode does not own infrastructure lifecycle. Start and stop the external runtime through product commands. `runtime.logs` requires `tail` and may accept `serviceId` plus best-effort `level`. Access Context status and Access Resolvers must not expose secret material in agent-visible responses; automatic `browser.open` authentication wiring is not part of this v1 attached runtime path unless product code supplies it.
 
 Runtime Exploration Tools are product-owned and schema-declared. Risk must be one of `observation`, `runMutation`, or `runtimeMutation`. Observation runs by default. runMutation requires Journey Profile opt-in through `runtime.allowRunMutationTools`. runtimeMutation is blocked by default. `run.begin` resolves the Runtime Target from the selected Journey Profile and must not use a free `targetId` override.
 

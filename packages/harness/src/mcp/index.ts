@@ -403,8 +403,7 @@ function runtimeBindingArg(args: Record<string, unknown>): { targetId: string; k
   if (isRecord(args.runtimeBinding) && typeof args.runtimeBinding.targetId === 'string' && typeof args.runtimeBinding.kind === 'string') {
     return { targetId: args.runtimeBinding.targetId, kind: args.runtimeBinding.kind };
   }
-  const targetId = optionalStringArg(args, 'runtimeTargetId');
-  return targetId ? { targetId, kind: 'unknown' } : undefined;
+  return undefined;
 }
 
 function getJourney<TTypes extends AnyHarnessTypes>(
