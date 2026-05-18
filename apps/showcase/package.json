@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
+    "compose:up": "docker compose -f compose.yaml up -d --build",
+    "compose:down": "docker compose -f compose.yaml down --remove-orphans",
+    "attached:mcp": "agent-e2e attached --target showcase-compose",
     "build": "next build",
     "start": "next start",
     "postinstall": "playwright install chromium",

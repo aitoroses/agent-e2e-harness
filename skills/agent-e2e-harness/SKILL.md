@@ -30,11 +30,38 @@ Read only the references needed for the current task:
 - Treat the user's application as the source of truth. Inspect its framework, package manager, dev command, service dependencies, existing E2E setup, and one real user-visible flow before editing.
 - Use public `@agent-e2e/harness` entrypoints only. Do not copy private showcase details unless the target app has the same domain.
 - Use `agent-e2e dev` for development MCP. Do not expose old `agent-e2e-harness dev-mcp` instructions.
+- Use `agent-e2e attached --target <id>` for Attached Runtime Mode when the target runtime is already running and externally owned.
 - Use `agent-e2e verify` as the default CI path. Do not ask users to write a Playwright, Vitest, or custom wrapper unless the harness cannot express the required orchestration.
 - Put app-specific domain logic in the consumer app: routes, selectors, schemas, stack commands, seed data, resource ids, and assertions.
 - Keep cleanup ownership-ledger bounded. Never delete by broad prefix, tenant, timestamp, or unscoped query alone.
 - Use artifacts as the debugging surface before changing code again.
 - Treat stack exploration as provider-owned. The harness owns routing, discovery, schemas, validation, and the small grammar; the app stack provider owns concrete runtime knowledge.
+- Treat Runtime Targets as target selection, not lifecycle ownership. Attached Runtime Mode does not own infrastructure lifecycle.
+
+## Runtime Targets and Attached Runtime Mode
+
+Use Runtime Targets when a journey can run or collect evidence from more than one place. Use `managedRuntime(...)` for local harness-owned stacks and `attachedRuntime(...)` for staging, production, preview, Docker Compose, Kubernetes, or another already-running runtime.
+
+The attached command is:
+
+```sh
+agent-e2e attached --target <id>
+```
+
+The attached MCP grammar is:
+
+```text
+runtime.list
+runtime.status
+runtime.logs
+runtime.access.status
+runtime.explore.list
+runtime.explore.run
+```
+
+Attached Runtime Mode does not own infrastructure lifecycle. Start and stop the external runtime through product commands. `runtime.logs` requires `tail` and may accept `serviceId` plus best-effort `level`. Access Context status and Access Resolvers must not expose secret material in agent-visible responses; automatic `browser.open` authentication wiring is not part of this v1 attached runtime path unless product code supplies it.
+
+Runtime Exploration Tools are product-owned and schema-declared. Risk must be one of `observation`, `runMutation`, or `runtimeMutation`. Observation runs by default. runMutation requires Journey Profile opt-in through `runtime.allowRunMutationTools`. runtimeMutation is blocked by default. `run.begin` resolves the Runtime Target from the selected Journey Profile and must not use a free `targetId` override.
 
 ## Stack Exploration Surface
 

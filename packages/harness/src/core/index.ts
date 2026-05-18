@@ -42,6 +42,12 @@ export interface JourneyProfile<TTypes extends AnyHarnessTypes = HarnessTypes> {
   data: ProfileData<TTypes>;
   isDefault?: boolean;
   seed?: EnvironmentSeed<TTypes>;
+  runtimeTargetId?: string;
+  runtime?: {
+    targetId?: string;
+    allowRunLifecycle?: boolean;
+    allowRunMutationTools?: boolean | readonly string[];
+  };
 }
 
 export interface ArtifactRef {

@@ -24,6 +24,7 @@ npm pkg get scripts.e2e:verify
 bun --version
 agent-e2e --help
 agent-e2e dev --help
+agent-e2e attached --help
 agent-e2e verify --help
 ```
 
@@ -32,6 +33,7 @@ Expected:
 - dev script calls `agent-e2e dev`
 - verify script calls `agent-e2e verify`
 - help text shows `dev` and `verify`
+- attached help shows `agent-e2e attached --target <id>` and Attached Runtime Mode language
 - no adoption doc points users to `agent-e2e-harness dev-mcp`
 
 ## Dev MCP Evidence
@@ -74,6 +76,23 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool journey.l
 ```
 
 Do not leave required dev servers running unless the user asked for a runnable handoff.
+
+## Attached Runtime Evidence
+
+When validating an Attached Runtime Target, capture:
+
+- external startup command used, such as a product deploy, preview URL, or Docker Compose command
+- exact `agent-e2e attached --target <id>` command
+- `runtime.list` target summary
+- `runtime.status` readiness and services
+- `runtime.logs` with required `tail` and artifact path
+- `runtime.access.status` without secret material
+- `runtime.explore.list` schemas and risk values
+- one `runtime.explore.run` observation result
+- selected journey/profile where `runtimeTargetId` resolves the target
+- proof that `run.begin` did not use a free `targetId` override
+- seed/cleanup evidence if the profile opts into run lifecycle
+- confirmation that attached mode does not own infrastructure lifecycle
 
 ## Verify Evidence
 

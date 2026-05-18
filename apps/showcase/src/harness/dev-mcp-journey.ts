@@ -7,6 +7,8 @@ import {
   PROOF_BASELINE_RESOURCE_KIND,
   PROOF_NOTE_BODY,
   PROOF_NOTE_RESOURCE_KIND,
+  SHOWCASE_ATTACHED_PROFILE_ID,
+  SHOWCASE_COMPOSE_TARGET_ID,
   SHOWCASE_JOURNEY_ID,
   SHOWCASE_PHASE_ID,
   SHOWCASE_PROFILE_ID,
@@ -16,6 +18,10 @@ import {
   seedApiUrl,
   type ShowcaseResource,
 } from "../proof-notes-contract.js";
+
+interface ShowcaseProfileData {
+  baseUrl?: string;
+}
 
 interface ShowcaseMcpObserved {
   noteBody: string;
@@ -29,7 +35,7 @@ interface ShowcaseMcpObserved {
 
 export type ShowcaseMcpHarness = HarnessTypes<
   { stack?: ShowcaseStackExecution; page?: Page },
-  Record<string, never>,
+  ShowcaseProfileData,
   ShowcaseMcpObserved,
   ShowcaseResource
 >;
@@ -44,9 +50,17 @@ export function createShowcaseMcpJourney() {
   return defineJourney<ShowcaseMcpHarness>({
     id: SHOWCASE_JOURNEY_ID,
     title: "Proof Notes persisted journey",
-    profiles: [{ id: SHOWCASE_PROFILE_ID, data: {}, isDefault: true }],
-    seed: async ({ execution }) => {
-      const baseUrl = showcaseAppUrl(execution);
+    profiles: [
+      { id: SHOWCASE_PROFILE_ID, data: {}, isDefault: true },
+      {
+        id: SHOWCASE_ATTACHED_PROFILE_ID,
+        data: { baseUrl: composeAttachedBaseUrl() },
+        runtimeTargetId: SHOWCASE_COMPOSE_TARGET_ID,
+        runtime: { allowRunLifecycle: true },
+      },
+    ],
+    seed: async ({ execution, profile }) => {
+      const baseUrl = showcaseAppUrl(execution, profile.data);
       if (!baseUrl) return missingStackUrlSeed();
       const response = await fetch(seedApiUrl(baseUrl), { method: "POST" });
       if (!response.ok) {
@@ -78,8 +92,8 @@ export function createShowcaseMcpJourney() {
           {
             id: SHOWCASE_STEP_ID,
             title: "Capture browser-created proof note as owned resource",
-            execute: async ({ execution, runId }) => {
-              const baseUrl = showcaseAppUrl(execution);
+            execute: async ({ execution, profile, runId }) => {
+              const baseUrl = showcaseAppUrl(execution, profile.data);
               if (!baseUrl) {
                 return {
                   status: "failed",
@@ -181,10 +195,18 @@ export function createShowcaseMcpJourney() {
 
 export { createShowcaseResourceRegistry };
 
-function showcaseAppUrl(execution: ShowcaseMcpHarness["executionSurface"] | undefined): string | undefined {
+function showcaseAppUrl(
+  execution: ShowcaseMcpHarness["executionSurface"] | undefined,
+  profileData: ShowcaseProfileData = {},
+): string | undefined {
   const services = execution?.stack?.services ?? [];
   return services.find((service) => service.id === "showcase-next-dev" && service.url)?.url
-    ?? services.find((service) => service.url)?.url;
+    ?? services.find((service) => service.url)?.url
+    ?? profileData.baseUrl;
+}
+
+function composeAttachedBaseUrl(): string {
+  return process.env.AGENT_E2E_SHOWCASE_COMPOSE_URL ?? "http://127.0.0.1:3100";
 }
 
 function missingStackUrlSeed() {

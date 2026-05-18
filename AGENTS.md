@@ -50,6 +50,8 @@ npm run dev:mcp --workspace @agent-e2e/showcase
 
 `dev:mcp` is the canonical Dev MCP entrypoint and should delegate to `agent-e2e dev`. It uses a stable MCP URL by default, `http://127.0.0.1:3766/mcp`, and keeps app URLs as stack-owned data returned by `stack.start` / `stack.status`. Fixed MCP ports are configured with `AGENT_E2E_MCP_PORT`. Consumer usage should connect a standard MCP client to the stable Dev MCP URL. Dev MCP/server/browser sessions must be managed by documented commands with clear start/status/stop behavior. A browser session must not depend on a temporary shell or hidden `.scratch` process staying alive.
 
+Runtime Targets and Attached Runtime Mode use the same public-command proof standard. `agent-e2e attached --target <id>` connects to an already-running Attached Runtime Target and does not own infrastructure lifecycle. Prove attached work through `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.explore.list`, `runtime.explore.run`, profile-selected `run.begin`, artifacts, and ownership-bounded cleanup. Do not replace `stack.*`; managed stack lifecycle remains separate.
+
 The stable CI verification path is:
 
 ```sh

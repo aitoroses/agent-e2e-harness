@@ -39,6 +39,10 @@
       "types": "./dist/stack/index.d.ts",
       "default": "./dist/stack/index.js"
     },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
+    },
     "./dev-mcp": {
       "types": "./dist/dev-mcp/index.d.ts",
       "default": "./dist/dev-mcp/index.js"

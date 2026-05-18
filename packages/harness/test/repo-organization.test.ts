@@ -118,4 +118,61 @@ describe('repository organization contract', () => {
     expect(skill).not.toContain('starts the configured stack once');
     expect(skill).not.toContain('active app stack');
   });
+
+  it('keeps public docs and skill self-contained for Runtime Targets and Attached Runtime Mode', () => {
+    const docs = [
+      text('README.md'),
+      text('packages/harness/README.md'),
+      text('apps/showcase/README.md'),
+      text('CONTEXT.md'),
+      text('AGENTS.md'),
+      text('skills/agent-e2e-harness/SKILL.md'),
+      text('skills/agent-e2e-harness/references/dev-mcp-loop.md'),
+      text('skills/agent-e2e-harness/references/validation-checklist.md'),
+    ].join('\n');
+
+    expect(docs).toContain('Runtime Target');
+    expect(docs).toContain('Attached Runtime Target');
+    expect(docs).toContain('Attached Runtime Mode');
+    expect(docs).toContain('agent-e2e attached --target <id>');
+    expect(docs).toContain('managedRuntime');
+    expect(docs).toContain('attachedRuntime');
+    expect(docs).toContain('runtime.list');
+    expect(docs).toContain('runtime.status');
+    expect(docs).toContain('runtime.logs');
+    expect(docs).toContain('runtime.access.status');
+    expect(docs).toContain('runtime.explore.list');
+    expect(docs).toContain('runtime.explore.run');
+    expect(docs).toContain('observation');
+    expect(docs).toContain('runMutation');
+    expect(docs).toContain('runtimeMutation');
+    expect(docs).toContain('does not own infrastructure lifecycle');
+    expect(showcasePackage.scripts['attached:mcp']).toBe('agent-e2e attached --target showcase-compose');
+    expect(showcasePackage.scripts['compose:up']).toContain('docker compose');
+  });
+
+  it('keeps the showcase Compose attached path Dockerfile-backed and honestly documented', () => {
+    const compose = text('apps/showcase/compose.yaml');
+    const dockerfile = text('apps/showcase/Dockerfile');
+    const nextConfig = text('apps/showcase/next.config.mjs');
+    const showcaseReadme = text('apps/showcase/README.md');
+    const transcript = text('docs/showcase/mcporter-proof-transcript.md');
+
+    expect(compose).toContain('build:');
+    expect(compose).toContain('dockerfile: apps/showcase/Dockerfile');
+    expect(compose).not.toContain('volumes:');
+    expect(compose).not.toContain('npm install');
+    expect(dockerfile).toContain('npm ci --ignore-scripts');
+    expect(dockerfile).toContain('PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1');
+    expect(nextConfig).toContain('allowedDevOrigins');
+    expect(nextConfig).toContain('127.0.0.1');
+    expect(showcaseReadme).toContain('AGENT_E2E_SHOWCASE_ROOT');
+    expect(showcaseReadme).toContain('attached shares the default MCP port');
+    expect(showcaseReadme).toContain('Access Context status is reported without exposing secret material');
+    expect(showcaseReadme).toContain('browser.open authentication wiring is not automatic in this v1 path');
+    expect(transcript).toContain('Attached Runtime Mode Docker Compose proof');
+    expect(transcript).toContain('runtime.status` returned `ready`');
+    expect(transcript).toContain('run.teardown` deleted the same note');
+    expect(transcript).toContain('runtime.access.status');
+  });
 });

@@ -95,3 +95,52 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.sto
 ## Runtime Note
 
 The Dev MCP server remains Bun-backed. The showcase stack lifecycle is composed directly by the showcase stack provider, which owns Testcontainers PostgreSQL readiness and the managed `next dev` process while Dev MCP keeps the stable Streamable HTTP endpoint.
+
+## Attached Runtime Mode Docker Compose proof
+
+Captured on 2026-05-18 against the public attached-mode command path for PRD #66. Docker was available locally (`Docker Engine 29.4.0`, `docker compose v5.1.2`). The showcase Compose stack built from `apps/showcase/Dockerfile`, started externally, and Attached Runtime Mode connected to it through `agent-e2e attached --target showcase-compose --port 3777`.
+
+Public path:
+
+```sh
+docker version
+docker compose version
+npm run compose:up --workspace @agent-e2e/showcase
+AGENT_E2E_MCP_PORT=3777 npm run attached:mcp --workspace @agent-e2e/showcase
+mcporter list http://127.0.0.1:3777/mcp --allow-http --schema --json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool runtime.list --args '{}' --output json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool runtime.status --args '{"targetId":"showcase-compose"}' --output json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool runtime.access.status --args '{"targetId":"showcase-compose"}' --output json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool runtime.logs --args '{"targetId":"showcase-compose","serviceId":"showcase","tail":20}' --output json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool runtime.explore.list --args '{"targetId":"showcase-compose"}' --output json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool runtime.explore.run --args '{"targetId":"showcase-compose","toolId":"compose.services","input":{}}' --output json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool run.begin --args '{"journeyId":"showcase:proof-notes","profileId":"profile:compose-attached","runId":"showcase-compose-attached-green"}' --output json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool browser.open --args '{"targetUrl":"http://127.0.0.1:3100?agentE2ERunId=showcase-compose-attached-green","journeyId":"showcase:proof-notes","runId":"showcase-compose-attached-green"}' --output json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool browser.wait --args '{"browserSessionId":"browser-1779107883589-7fa9e2","until":{"kind":"text","text":"workspace:seed"},"timeoutMs":10000}' --output json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool browser.snapshot --args '{"browserSessionId":"browser-1779107883589-7fa9e2"}' --output json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool browser.find --args '{"browserSessionId":"browser-1779107883589-7fa9e2","by":"role","value":"button","name":"Create proof note"}' --output json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool browser.act --args '{"browserSessionId":"browser-1779107883589-7fa9e2","ref":"@f1","action":"click"}' --output json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool browser.wait --args '{"browserSessionId":"browser-1779107883589-7fa9e2","until":{"kind":"text","text":"Proof note persisted"},"timeoutMs":10000}' --output json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool journey.step --args '{"runId":"showcase-compose-attached-green","phaseId":"phase:proof-notes","stepId":"step:create-proof-note","browserSessionId":"browser-1779107883589-7fa9e2"}' --output json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool cleanup.plan --args '{"runId":"showcase-compose-attached-green"}' --output json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool run.teardown --args '{"runId":"showcase-compose-attached-green"}' --output json
+mcporter call --http-url http://127.0.0.1:3777/mcp --allow-http --tool browser.close --args '{"browserSessionId":"browser-1779107883589-7fa9e2"}' --output json
+npm run compose:down --workspace @agent-e2e/showcase
+```
+
+Observed evidence:
+
+- `compose:up` built image `agent-e2e-showcase-compose:local` from `apps/showcase/Dockerfile`, using `.dockerignore` and `npm ci --ignore-scripts`; `postgres` became healthy and `showcase` started.
+- `agent-e2e attached --target showcase-compose` stayed running on alternate port `3777`, avoiding the default `agent-e2e dev` port at `3766`.
+- `mcporter list` discovered the attached Runtime Tool Surface, including `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.explore.list`, and `runtime.explore.run`.
+- `runtime.list` returned attached target `showcase-compose` with capabilities `status`, `logs`, `access`, and `explore`.
+- `runtime.status` returned `ready` with service `showcase-web` at `http://127.0.0.1:3100`.
+- `runtime.access.status` returned the declared `compose-runtime-logs` Access Context without secret material.
+- `runtime.logs` returned structured Compose log entries with `truncated: false` and wrote `.agents-e2e/artifacts/_runtime/showcase-compose/runtime-logs-2026-05-18t12-36-00-693z.json`.
+- `runtime.explore.list` exposed product-owned observation tool `compose.services`; `runtime.explore.run` returned `postgres` and `showcase` as running services.
+- `run.begin` selected profile `profile:compose-attached`, bound `runtimeTargetId: "showcase-compose"`, seeded baseline state through `http://127.0.0.1:3100/api/seed`, and wrote run artifacts under `.agents-e2e/artifacts/showcase-proof-notes/showcase-compose-attached-green/`.
+- The Playwright-owned MCP browser opened `http://127.0.0.1:3100?agentE2ERunId=showcase-compose-attached-green`; `browser.snapshot` showed `workspace:seed`, `user:seed`, and the `Create proof note` button.
+- `browser.act` clicked the proof button, `browser.wait` matched `Proof note persisted`, and browser network evidence included `POST /api/notes` with `201`.
+- `journey.step` passed both proofs, observed note `proof-note:1779107899233:be0333`, recorded it as run-owned, and returned before/after screenshot, console, network, result, and step-feedback artifacts.
+- `cleanup.plan` planned one run-owned `note`; `run.teardown` deleted the same note through `resource-registry-adapter`.
+- `browser.close` closed the MCP-owned browser session. `compose:down` stopped the externally owned Compose stack separately.

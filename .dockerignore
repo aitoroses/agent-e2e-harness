@@ -1,0 +1,8 @@
+node_modules
+**/node_modules
+packages/harness/dist
+apps/showcase/.next
+.agents-e2e
+.git
+.omx
+npm-debug.log

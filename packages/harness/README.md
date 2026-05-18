@@ -37,6 +37,7 @@ import { defineJourney } from '@agent-e2e/harness/core';
 import { defineAgentE2EConfig } from '@agent-e2e/harness/dev-mcp';
 import { runAgentE2EVerifyFromConfig } from '@agent-e2e/harness/verify';
 import { createProcessStackProvider, createStackStartContext } from '@agent-e2e/harness/stack';
+import { managedRuntime, attachedRuntime } from '@agent-e2e/harness/runtime';
 import { createRunArtifactRecorder } from '@agent-e2e/harness/artifacts';
 ```
 
@@ -47,7 +48,59 @@ Subpaths are intentionally split:
 - `verify` runs configured journeys in CI and writes suite reports.
 - `playwright-mcp` owns browser sessions and browser forensics.
 - `stack` owns generic app/service lifecycle.
+- `runtime` owns Runtime Target helpers and Attached Runtime Mode diagnostics.
 - `artifacts` records and reads validation evidence.
+
+## Runtime Targets and Attached Runtime Mode
+
+Runtime Targets declare where journeys run or collect evidence. Use `managedRuntime(...)` for harness-owned local stacks and `attachedRuntime(...)` for an **Attached Runtime Target** whose infrastructure is externally owned.
+
+```ts
+import { defineAgentE2EConfig } from '@agent-e2e/harness/dev-mcp';
+import { attachedRuntime, managedRuntime, defineRuntimeExploreTool } from '@agent-e2e/harness/runtime';
+import { z } from 'zod/v4';
+
+export default defineAgentE2EConfig({
+  journeys: [
+    defineJourney({
+      id: 'checkout:smoke',
+      profiles: [
+        { id: 'local', data: {}, isDefault: true, runtimeTargetId: 'local-dev' },
+        {
+          id: 'staging',
+          data: { baseUrl: 'https://staging.example.com' },
+          runtimeTargetId: 'staging',
+          runtime: { allowRunLifecycle: true, allowRunMutationTools: ['orders.create-owned'] }
+        }
+      ],
+      phases: [/* ... */]
+    })
+  ],
+  runtimeTargets: [
+    managedRuntime({ id: 'local-dev', label: 'Local dev stack' }),
+    attachedRuntime({
+      id: 'staging',
+      label: 'Staging',
+      status: async () => stagingStatusPacket(),
+      logs: async ({ serviceId, tail, level }) => readStagingLogs({ serviceId, tail, level }),
+      access: [{ id: 'browser-session', kind: 'browserStorageState' }],
+      explore: [
+        defineRuntimeExploreTool({
+          id: 'release.version',
+          title: 'Read release version',
+          description: 'Observe the deployed release version.',
+          risk: 'observation',
+          input: z.object({}),
+          output: z.object({ version: z.string() }),
+          run: async () => ({ version: await readReleaseVersion() })
+        })
+      ]
+    })
+  ]
+});
+```
+
+Run attached mode with `agent-e2e attached --target <id>`. Attached Runtime Mode does not own infrastructure lifecycle. Start or stop production, staging, preview, Kubernetes, or Docker Compose through product controls, then connect the harness. The attached MCP surface exposes `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.explore.list`, and `runtime.explore.run`. `runtime.logs` requires `tail`, accepts optional `serviceId` and best-effort `level`, and writes an artifact. Runtime Tool Risk values are `observation`, `runMutation`, and `runtimeMutation`; observation runs by default, runMutation requires Journey Profile opt-in, and runtimeMutation is blocked by default. Access Context status and Access Resolvers must not expose secret material in agent-visible responses; automatic `browser.open` authentication wiring is not part of this v1 attached runtime path unless product code supplies it.
 
 ## Minimal Journey
 

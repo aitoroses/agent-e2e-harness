@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { isLongLivedCliCommand } from "../src/cli/index.js";
 
 const execFileAsync = promisify(execFile);
 const cliPath = resolve(process.cwd(), "dist/cli/index.js");
@@ -16,10 +17,27 @@ describe("Agent E2E CLI", () => {
 
     expect(stdout).toContain("agent-e2e");
     expect(stdout).toContain("dev");
+    expect(stdout).toContain("attached");
     expect(stdout).toContain("verify");
     expect(stdout).not.toContain("dev-mcp");
     expect(stdout).not.toContain("demo");
     expect(stdout).not.toContain("seed");
+  });
+
+  it("documents the Attached Runtime Mode command", async () => {
+    const { stdout } = await execFileAsync("bun", [cliPath, "attached", "--help"], { cwd: process.cwd() });
+
+    expect(stdout).toContain("agent-e2e attached");
+    expect(stdout).toContain("--target <id>");
+    expect(stdout).toContain("Attached Runtime Mode");
+    expect(stdout).toContain("Use --port when dev is already running on the default MCP port");
+    expect(stdout).not.toContain("Dev MCP");
+  });
+
+  it("keeps dev and attached commands long-lived after startup", () => {
+    expect(isLongLivedCliCommand("dev")).toBe(true);
+    expect(isLongLivedCliCommand("attached")).toBe(true);
+    expect(isLongLivedCliCommand("verify")).toBe(false);
   });
 
   it("documents the Dev MCP command", async () => {
