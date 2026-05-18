@@ -19,6 +19,18 @@ import type {
   StackStatusPacket,
 } from "../stack/index.js";
 import {
+  createRuntimeTargetRegistry,
+  runRuntimeExploreTool,
+  runtimeAccessStatus,
+  runtimeExploreDescriptors,
+  runtimeStatus,
+  writeRuntimeLogsArtifact,
+  type RuntimeLogsInput,
+  type RuntimeTarget,
+  type RuntimeTargetRegistry,
+  type RuntimeToolRisk,
+} from "../runtime/index.js";
+import {
   DEFAULT_DEV_MCP_CONFIG_FILES,
   loadAgentE2EConfig,
   resolveAgentE2EConfigPath,
@@ -49,6 +61,7 @@ export interface AgentE2EDevMcpApiContract {
 
 export type DevMcpToolGroup =
   | "stack"
+  | "runtime"
   | "run"
   | "browser"
   | "journey"
@@ -69,6 +82,12 @@ export const DEV_MCP_TOOL_GRAMMAR = [
   "stack.explore.list",
   "stack.explore.run",
   "stack.stop",
+  "runtime.list",
+  "runtime.status",
+  "runtime.logs",
+  "runtime.access.status",
+  "runtime.explore.list",
+  "runtime.explore.run",
   "journey.list",
   "journey.inspect",
   "run.begin",
@@ -109,9 +128,12 @@ export interface DevMcpBrowserSessionController extends DevMcpBrowserWorkbenchCo
 type DevMcpHarnessProvider = McpHarnessServer | (() => Promise<McpHarnessServer | undefined> | McpHarnessServer | undefined);
 
 export interface DevMcpToolRouterOptions<TStackHandle = unknown> {
+  journeys?: readonly ExecutableJourney<any>[];
   harness?: DevMcpHarnessProvider;
   browserSessions?: DevMcpBrowserSessionController;
   stackProvider?: StackProvider<TStackHandle>;
+  runtimeTargets?: readonly RuntimeTarget[];
+  runtimeTargetId?: string;
   artifactRoot?: string;
 }
 
@@ -155,6 +177,7 @@ export interface AgentE2EDevMcpConfig<
   resourceRegistry?: ResourceRegistry<OwnedResource<TTypes> & { kind: string; id: string }>;
   resourceAdapters?: readonly ResourceAdapter<TTypes>[];
   stackProvider?: StackProvider<TStackHandle>;
+  runtimeTargets?: readonly RuntimeTarget[];
   browserSessions?: DevMcpBrowserSessionController | false;
   harness?: DevMcpHarnessProvider;
   artifactRoot?: string;
@@ -264,6 +287,7 @@ export async function startAgentE2EDevMcp<
     : resolvedConfig.browserSessions ?? await createDefaultBrowserSessions(artifactRoot);
 
   const serverOptions: DevMcpHttpServerOptions<TStackHandle> = {
+    journeys: resolvedConfig.journeys,
     harness,
     artifactRoot,
     host,
@@ -272,6 +296,7 @@ export async function startAgentE2EDevMcp<
     allowedOrigins: resolvedConfig.allowedOrigins ?? localDevOrigins(host),
   };
   if (resolvedConfig.stackProvider) serverOptions.stackProvider = resolvedConfig.stackProvider;
+  if (resolvedConfig.runtimeTargets) serverOptions.runtimeTargets = resolvedConfig.runtimeTargets;
   if (browserSessions) serverOptions.browserSessions = browserSessions;
   const server = await startDevMcpStreamableHttpServer<TStackHandle>(serverOptions);
   const manifest: AgentE2EDevMcpManifest = {
@@ -391,6 +416,9 @@ function resourceAdaptersFromConfig<
 export function createDevMcpToolRouter<TStackHandle = unknown>(
   options: DevMcpToolRouterOptions<TStackHandle> = {},
 ): DevMcpToolRouter {
+  const runtimeRegistry = options.runtimeTargets && options.runtimeTargets.length > 0
+    ? createRuntimeTargetRegistry({ targets: options.runtimeTargets })
+    : undefined;
   const stackInstances = options.stackProvider
     ? new StackInstanceManager(options.stackProvider, {
         artifactRoot: options.artifactRoot ?? DEFAULT_AGENT_E2E_ARTIFACT_ROOT,
@@ -542,6 +570,62 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
               return blocked(name, error.code, error.message);
             throw error;
           }
+        }
+        case "runtime.list": {
+          if (!runtimeRegistry)
+            return missingDependency(name, "runtimeTargets");
+          return ok(name, { targets: runtimeRegistry.list() });
+        }
+        case "runtime.status": {
+          if (!runtimeRegistry)
+            return missingDependency(name, "runtimeTargets");
+          const target = resolveRuntimeTarget(runtimeRegistry, args, options.runtimeTargetId);
+          return ok(name, { targetId: target.id, runtime: await runtimeStatus(target) });
+        }
+        case "runtime.access.status": {
+          if (!runtimeRegistry)
+            return missingDependency(name, "runtimeTargets");
+          const target = resolveRuntimeTarget(runtimeRegistry, args, options.runtimeTargetId);
+          return ok(name, { targetId: target.id, access: await runtimeAccessStatus(target) });
+        }
+        case "runtime.logs": {
+          if (!runtimeRegistry)
+            return missingDependency(name, "runtimeTargets");
+          const target = resolveRuntimeTarget(runtimeRegistry, args, options.runtimeTargetId);
+          const input: RuntimeLogsInput = {
+            tail: positiveIntegerArg(args, "tail"),
+          };
+          const serviceId = optionalStringArg(args, "serviceId");
+          const level = optionalStringArg(args, "level");
+          if (serviceId) input.serviceId = serviceId;
+          if (level) input.level = level;
+          if (!target.logs)
+            return blocked(name, "runtime-logs-unavailable", `Runtime Target ${target.id} does not expose runtime.logs.`);
+          const logs = await target.logs(input);
+          const artifact = await writeRuntimeLogsArtifact({
+            targetId: target.id,
+            logs,
+            ...(options.artifactRoot ? { artifactRoot: options.artifactRoot } : {}),
+          });
+          return ok(name, { targetId: target.id, logs: { ...logs, artifacts: [...(logs.artifacts ?? []), artifact] }, artifact });
+        }
+        case "runtime.explore.list": {
+          if (!runtimeRegistry)
+            return missingDependency(name, "runtimeTargets");
+          const target = resolveRuntimeTarget(runtimeRegistry, args, options.runtimeTargetId);
+          return ok(name, { targetId: target.id, tools: await runtimeExploreDescriptors(target) });
+        }
+        case "runtime.explore.run": {
+          if (!runtimeRegistry)
+            return missingDependency(name, "runtimeTargets");
+          const unexpectedKey = firstUnexpectedKey(args, ["targetId", "toolId", "input", "journeyId", "profileId", "runId"]);
+          if (unexpectedKey)
+            return failed(name, "runtime-explore-invalid-arguments", `runtime.explore.run does not accept argument: ${unexpectedKey}`);
+          const target = resolveRuntimeTarget(runtimeRegistry, args, options.runtimeTargetId);
+          const toolId = stringArg(args, "toolId");
+          const gate = runtimeExploreRiskGate(runtimeRegistry, target, toolId, args, options.journeys);
+          if (gate) return gate;
+          return ok(name, { targetId: target.id, toolId, output: await runRuntimeExploreTool(target, toolId, args.input) });
         }
         case "browser.open":
           if (!options.browserSessions)
@@ -851,6 +935,66 @@ function optionalStackId(args: Record<string, unknown>): string | undefined {
   return args.stackId;
 }
 
+function resolveRuntimeTarget(
+  registry: RuntimeTargetRegistry,
+  args: Record<string, unknown>,
+  selectedTargetId: string | undefined,
+): RuntimeTarget {
+  const targetId = optionalStringArg(args, "targetId")
+    ?? selectedTargetId
+    ?? singleRuntimeTargetId(registry);
+  if (!targetId)
+    throw new Error("Missing required string argument: targetId");
+  return registry.require(targetId);
+}
+
+function singleRuntimeTargetId(registry: RuntimeTargetRegistry): string | undefined {
+  const targets = registry.list();
+  return targets.length === 1 ? targets[0]?.id : undefined;
+}
+
+function runtimeExploreRiskGate(
+  registry: RuntimeTargetRegistry,
+  target: RuntimeTarget,
+  toolId: string,
+  args: Record<string, unknown>,
+  journeys: readonly ExecutableJourney<any>[] | undefined,
+): DevMcpToolResponse | undefined {
+  const tool = (target.explore ?? []).find((candidate) => candidate.id === toolId);
+  if (!tool)
+    return failed("runtime.explore.run", "runtime-explore-tool-not-found", `Unknown Runtime Exploration Tool: ${toolId}`, { targetId: target.id, toolId });
+  if (tool.risk === "observation") return undefined;
+  if (tool.risk === "runtimeMutation")
+    return blocked(
+      "runtime.explore.run",
+      "runtime-mutation-blocked",
+      `Runtime Exploration Tool ${toolId} has runtimeMutation risk and is blocked by default.`,
+    );
+  if (!profileAllowsRuntimeRisk(registry, tool.risk, toolId, args, journeys))
+    return blocked(
+      "runtime.explore.run",
+      "run-mutation-requires-profile-opt-in",
+      `Runtime Exploration Tool ${toolId} has runMutation risk and requires selected Journey Profile opt-in.`,
+    );
+  return undefined;
+}
+
+function profileAllowsRuntimeRisk(
+  registry: RuntimeTargetRegistry,
+  risk: RuntimeToolRisk,
+  toolId: string,
+  args: Record<string, unknown>,
+  journeys: readonly ExecutableJourney<any>[] | undefined,
+): boolean {
+  if (risk !== "runMutation") return false;
+  const journeyId = optionalStringArg(args, "journeyId");
+  const profileId = optionalStringArg(args, "profileId");
+  if (!journeyId || !profileId || !journeys) return false;
+  const journey = journeys.find((candidate) => candidate.id === journeyId);
+  const profile = journey?.getProfile(profileId);
+  return profile ? registry.profileAllowsRunMutation(profile, toolId) : false;
+}
+
 async function closeBrowserSessions(
   browserSessions: DevMcpBrowserSessionController | undefined,
 ): Promise<unknown> {
@@ -886,6 +1030,16 @@ function implementedToolNames(
 
   if (options.stackProvider)
     tools.push("stack.start", "stack.list", "stack.status", "stack.logs", "stack.explore.list", "stack.explore.run", "stack.stop");
+
+  if (options.runtimeTargets && options.runtimeTargets.length > 0)
+    tools.push(
+      "runtime.list",
+      "runtime.status",
+      "runtime.logs",
+      "runtime.access.status",
+      "runtime.explore.list",
+      "runtime.explore.run",
+    );
 
   if (options.harness)
     tools.push(
@@ -926,6 +1080,12 @@ function summaryFor(name: DevMcpToolName): string {
     "stack.explore.list": "List provider-declared stack exploration tools.",
     "stack.explore.run": "Run one provider-declared stack exploration tool.",
     "stack.stop": "Stop the managed development stack.",
+    "runtime.list": "List configured Runtime Targets.",
+    "runtime.status": "Read Runtime Target readiness and service status.",
+    "runtime.logs": "Read bounded Runtime Target logs with artifacted evidence.",
+    "runtime.access.status": "Read secret-safe Runtime Target access status.",
+    "runtime.explore.list": "List product-declared Runtime Exploration Tools.",
+    "runtime.explore.run": "Run one product-declared Runtime Exploration Tool with risk gates.",
     "run.begin": "Begin a journey run.",
     "run.reseed":
       "Delete journey-owned resources and run environment seed again.",
@@ -990,6 +1150,30 @@ function inputSchemaForTool(
         serviceId: stringId().describe("Service id returned by stack.status or stack.start."),
         tail: z.number().int().positive().describe("Number of recent log lines to return."),
         stream: z.enum(["stdout", "stderr", "combined"]).optional(),
+      };
+    case "runtime.list":
+      return {};
+    case "runtime.status":
+    case "runtime.access.status":
+    case "runtime.explore.list":
+      return {
+        targetId: stringId().optional().describe("Runtime Target id returned by runtime.list. Optional only when the server selected one target."),
+      };
+    case "runtime.logs":
+      return {
+        targetId: stringId().optional().describe("Runtime Target id returned by runtime.list. Optional only when the server selected one target."),
+        serviceId: stringId().optional().describe("Optional service id returned by runtime.status."),
+        tail: z.number().int().positive().describe("Number of recent log entries to return."),
+        level: stringId().optional().describe("Optional best-effort provider-specific log level filter."),
+      };
+    case "runtime.explore.run":
+      return {
+        targetId: stringId().optional().describe("Runtime Target id returned by runtime.list. Optional only when the server selected one target."),
+        toolId: stringId().describe("Runtime Exploration Tool id returned by runtime.explore.list."),
+        input: z.unknown().describe("Input parsed by the selected product-declared tool schema."),
+        journeyId: stringId().optional().describe("Journey id used with profileId for runMutation opt-in checks."),
+        profileId: stringId().optional().describe("Journey Profile id used for runMutation opt-in checks."),
+        runId: stringId().optional().describe("Optional run id for future artifact correlation."),
       };
     case "journey.inspect":
       return {

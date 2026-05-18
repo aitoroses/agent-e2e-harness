@@ -4,6 +4,7 @@ import { agentE2ECoreApi } from '@agent-e2e/harness/core';
 import { DEFAULT_AGENT_E2E_ARTIFACT_ROOT } from '@agent-e2e/harness/artifacts';
 import { renderTerminalReport } from '@agent-e2e/harness/verify';
 import { createStackStartContext } from '@agent-e2e/harness/stack';
+import { attachedRuntime } from '@agent-e2e/harness/runtime';
 
 describe('public package exports', () => {
   it('loads the package-root API contract through the package export map', () => {
@@ -32,5 +33,13 @@ describe('public package exports', () => {
 
   it('loads StackStartContext utilities through the /stack subpath export', () => {
     expect(typeof createStackStartContext).toBe('function');
+  });
+
+  it('loads Runtime Target utilities through the /runtime subpath export', () => {
+    expect(attachedRuntime({ id: 'attached' })).toMatchObject({
+      id: 'attached',
+      kind: 'attached',
+      lifecycleOwner: 'external'
+    });
   });
 });
