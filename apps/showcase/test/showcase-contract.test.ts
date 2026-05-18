@@ -4,11 +4,14 @@ import { beginJourneyRun, runJourneyStep } from "@agent-e2e/harness";
 import { createShowcaseJourney } from "../src/journey.js";
 import { createShowcaseMcpJourney } from "../src/harness/dev-mcp-journey.js";
 import { createShowcaseDevStackProvider } from "../src/harness/dev-stack.js";
+import { createShowcaseComposeAttachedRuntimeTarget } from "../src/harness/compose-attached-runtime.js";
 import type { ShowcaseStackExecution } from "../src/harness/dev-stack.js";
 import {
   BASELINE_USER,
   BASELINE_WORKSPACE,
   PROOF_NOTE_BODY,
+  SHOWCASE_ATTACHED_PROFILE_ID,
+  SHOWCASE_COMPOSE_TARGET_ID,
 } from "../src/proof-notes-contract.js";
 
 afterEach(() => {
@@ -53,6 +56,36 @@ describe("showcase journey contracts", () => {
     expect(devMcpStep?.proofs.map((proof) => proof.id)).toEqual(
       ciStep?.proofs.map((proof) => proof.id),
     );
+  });
+
+  it("declares Docker Compose as an attached Runtime Target with product-owned diagnostics", async () => {
+    const target = createShowcaseComposeAttachedRuntimeTarget();
+    const journey = createShowcaseMcpJourney();
+    const attachedProfile = journey.getProfile(SHOWCASE_ATTACHED_PROFILE_ID);
+
+    expect(target).toMatchObject({
+      id: SHOWCASE_COMPOSE_TARGET_ID,
+      kind: "attached",
+      lifecycleOwner: "external",
+      label: "Showcase Docker Compose",
+    });
+    expect(target.logs).toBeTypeOf("function");
+    expect(target.explore).toEqual([
+      expect.objectContaining({
+        id: "compose.services",
+        risk: "observation",
+      }),
+    ]);
+    expect(attachedProfile).toMatchObject({
+      runtimeTargetId: SHOWCASE_COMPOSE_TARGET_ID,
+      runtime: { allowRunLifecycle: true },
+    });
+    await expect(target.status?.()).resolves.toMatchObject({
+      services: [
+        expect.objectContaining({ id: "showcase-web", url: "http://127.0.0.1:3100" }),
+        expect.objectContaining({ id: "postgres" }),
+      ],
+    });
   });
 
   it("does not adopt stale proof notes from another run", async () => {

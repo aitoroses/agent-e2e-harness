@@ -7,6 +7,8 @@ import {
 
 export const SHOWCASE_JOURNEY_ID = "showcase:proof-notes";
 export const SHOWCASE_PROFILE_ID = "profile:default";
+export const SHOWCASE_ATTACHED_PROFILE_ID = "profile:compose-attached";
+export const SHOWCASE_COMPOSE_TARGET_ID = "showcase-compose";
 export const SHOWCASE_PHASE_ID = "phase:proof-notes";
 export const SHOWCASE_STEP_ID = "step:create-proof-note";
 export const PROOF_NOTE_RESOURCE_KIND = "note";

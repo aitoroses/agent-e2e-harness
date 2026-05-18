@@ -10,6 +10,8 @@ import {
   PROOF_BASELINE_RESOURCE_KIND,
   PROOF_NOTE_BODY,
   PROOF_NOTE_RESOURCE_KIND,
+  SHOWCASE_ATTACHED_PROFILE_ID,
+  SHOWCASE_COMPOSE_TARGET_ID,
   SHOWCASE_JOURNEY_ID,
   SHOWCASE_PHASE_ID,
   SHOWCASE_PROFILE_ID,
@@ -48,7 +50,15 @@ export function createShowcaseJourney(
   >({
     id: SHOWCASE_JOURNEY_ID,
     title: "Proof Notes persisted journey",
-    profiles: [{ id: SHOWCASE_PROFILE_ID, data: { baseUrl }, isDefault: true }],
+    profiles: [
+      { id: SHOWCASE_PROFILE_ID, data: { baseUrl }, isDefault: true },
+      {
+        id: SHOWCASE_ATTACHED_PROFILE_ID,
+        data: { baseUrl },
+        runtimeTargetId: SHOWCASE_COMPOSE_TARGET_ID,
+        runtime: { allowRunLifecycle: true },
+      },
+    ],
     seed: async ({ execution, profile }) => {
       if (!execution)
         throw new Error("Showcase seed requires Playwright execution");
