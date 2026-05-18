@@ -52,6 +52,7 @@ export interface McpHarnessServer {
 
 interface RunMetadata {
   stackBinding?: { stackId: string };
+  runtimeBinding?: { targetId: string; kind: string };
 }
 
 export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarnessTypes>(
@@ -114,7 +115,11 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           if (result.status === 'blocked') return { status: 'blocked', seedGate: result.seedGate, guidance: result.seedGate.guidance };
           runs.set(result.run.id, result.run);
           const stackId = optionalStringArg(args, 'stackId');
-          const metadata: RunMetadata = stackId ? { stackBinding: { stackId } } : {};
+          const runtimeBinding = runtimeBindingArg(args);
+          const metadata: RunMetadata = {
+            ...(stackId ? { stackBinding: { stackId } } : {}),
+            ...(runtimeBinding ? { runtimeBinding } : {}),
+          };
           runMetadata.set(result.run.id, metadata);
           const artifacts = createRunArtifactRecorder(
             {
@@ -387,11 +392,19 @@ function runMetrics<TTypes extends AnyHarnessTypes>(
 }
 
 function runMetadataResponse(metadata: RunMetadata | undefined): Record<string, unknown> {
-  if (!metadata?.stackBinding) return {};
+  if (!metadata?.stackBinding && !metadata?.runtimeBinding) return {};
   return {
-    stackId: metadata.stackBinding.stackId,
-    stackBinding: metadata.stackBinding
+    ...(metadata.stackBinding ? { stackId: metadata.stackBinding.stackId, stackBinding: metadata.stackBinding } : {}),
+    ...(metadata.runtimeBinding ? { runtimeTargetId: metadata.runtimeBinding.targetId, runtimeBinding: metadata.runtimeBinding } : {})
   };
+}
+
+function runtimeBindingArg(args: Record<string, unknown>): { targetId: string; kind: string } | undefined {
+  if (isRecord(args.runtimeBinding) && typeof args.runtimeBinding.targetId === 'string' && typeof args.runtimeBinding.kind === 'string') {
+    return { targetId: args.runtimeBinding.targetId, kind: args.runtimeBinding.kind };
+  }
+  const targetId = optionalStringArg(args, 'runtimeTargetId');
+  return targetId ? { targetId, kind: 'unknown' } : undefined;
 }
 
 function getJourney<TTypes extends AnyHarnessTypes>(
@@ -421,6 +434,10 @@ function stringArg(args: Record<string, unknown>, name: string): string {
 function optionalStringArg(args: Record<string, unknown>, name: string): string | undefined {
   const value = args[name];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function optionalArgs<T extends Record<string, unknown>>(value: T): T {

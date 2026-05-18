@@ -16,10 +16,20 @@ describe("Agent E2E CLI", () => {
 
     expect(stdout).toContain("agent-e2e");
     expect(stdout).toContain("dev");
+    expect(stdout).toContain("attached");
     expect(stdout).toContain("verify");
     expect(stdout).not.toContain("dev-mcp");
     expect(stdout).not.toContain("demo");
     expect(stdout).not.toContain("seed");
+  });
+
+  it("documents the Attached Runtime Mode command", async () => {
+    const { stdout } = await execFileAsync("bun", [cliPath, "attached", "--help"], { cwd: process.cwd() });
+
+    expect(stdout).toContain("agent-e2e attached");
+    expect(stdout).toContain("--target <id>");
+    expect(stdout).toContain("Attached Runtime Mode");
+    expect(stdout).not.toContain("Dev MCP");
   });
 
   it("documents the Dev MCP command", async () => {

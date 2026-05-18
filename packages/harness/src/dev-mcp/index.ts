@@ -178,6 +178,7 @@ export interface AgentE2EDevMcpConfig<
   resourceAdapters?: readonly ResourceAdapter<TTypes>[];
   stackProvider?: StackProvider<TStackHandle>;
   runtimeTargets?: readonly RuntimeTarget[];
+  runtimeTargetId?: string;
   browserSessions?: DevMcpBrowserSessionController | false;
   harness?: DevMcpHarnessProvider;
   artifactRoot?: string;
@@ -196,6 +197,16 @@ export interface AgentE2EDevMcpManifest {
   host: string;
   port: number;
   path: string;
+  mode?: "dev" | "attached";
+  runtime?: {
+    targetId?: string;
+    listTool: "runtime.list";
+    statusTool: "runtime.status";
+    logsTool: "runtime.logs";
+    accessStatusTool: "runtime.access.status";
+    exploreListTool: "runtime.explore.list";
+    exploreRunTool: "runtime.explore.run";
+  };
   stack?: {
     startTool: "stack.start";
     listTool: "stack.list";
@@ -220,6 +231,10 @@ export interface StartAgentE2EDevMcpFromConfigOptions {
   allowedOrigins?: readonly string[];
   installSignalHandlers?: boolean;
   logger?: Pick<Console, "log" | "error"> | false;
+}
+
+export interface StartAgentE2EAttachedFromConfigOptions extends StartAgentE2EDevMcpFromConfigOptions {
+  targetId: string;
 }
 
 export const devMcpApiContract: AgentE2EDevMcpApiContract = {
@@ -265,6 +280,35 @@ export async function startAgentE2EDevMcpFromConfig<
   });
 }
 
+export async function startAgentE2EAttachedFromConfig<
+  TTypes extends AnyHarnessTypes = AnyHarnessTypes,
+  TStackHandle = unknown,
+>(
+  options: StartAgentE2EAttachedFromConfigOptions,
+): Promise<AgentE2EDevMcpServerHandle> {
+  const configPath = resolveAgentE2EConfigPath(options);
+  const config = await loadAgentE2EConfig<TTypes, TStackHandle>({
+    configPath,
+    cacheBust: true,
+  });
+  const registry = createRuntimeTargetRegistry({ targets: config.runtimeTargets ?? [] });
+  const target = registry.require(options.targetId);
+  if (target.kind !== "attached")
+    throw new Error(`Attached Runtime Mode requires an attached Runtime Target: ${options.targetId}`);
+
+  return await startAgentE2EDevMcp<TTypes, TStackHandle>({
+    ...config,
+    runtimeTargetId: options.targetId,
+    ...(options.artifactRoot ? { artifactRoot: options.artifactRoot } : {}),
+    ...(options.host ? { host: options.host } : {}),
+    ...(options.port !== undefined ? { port: options.port } : {}),
+    ...(options.path ? { path: options.path } : {}),
+    ...(options.allowedOrigins ? { allowedOrigins: options.allowedOrigins } : {}),
+    ...(options.installSignalHandlers !== undefined ? { installSignalHandlers: options.installSignalHandlers } : {}),
+    ...(options.logger !== undefined ? { logger: options.logger } : {}),
+  });
+}
+
 export async function startAgentE2EDevMcp<
   TTypes extends AnyHarnessTypes = AnyHarnessTypes,
   TStackHandle = unknown,
@@ -297,6 +341,7 @@ export async function startAgentE2EDevMcp<
   };
   if (resolvedConfig.stackProvider) serverOptions.stackProvider = resolvedConfig.stackProvider;
   if (resolvedConfig.runtimeTargets) serverOptions.runtimeTargets = resolvedConfig.runtimeTargets;
+  if (resolvedConfig.runtimeTargetId) serverOptions.runtimeTargetId = resolvedConfig.runtimeTargetId;
   if (browserSessions) serverOptions.browserSessions = browserSessions;
   const server = await startDevMcpStreamableHttpServer<TStackHandle>(serverOptions);
   const manifest: AgentE2EDevMcpManifest = {
@@ -305,6 +350,20 @@ export async function startAgentE2EDevMcp<
     host: server.host,
     port: server.port,
     path: server.path,
+    mode: resolvedConfig.runtimeTargetId ? "attached" : "dev",
+    ...(resolvedConfig.runtimeTargets
+      ? {
+          runtime: {
+            ...(resolvedConfig.runtimeTargetId ? { targetId: resolvedConfig.runtimeTargetId } : {}),
+            listTool: "runtime.list",
+            statusTool: "runtime.status",
+            logsTool: "runtime.logs",
+            accessStatusTool: "runtime.access.status",
+            exploreListTool: "runtime.explore.list",
+            exploreRunTool: "runtime.explore.run",
+          },
+        }
+      : {}),
     ...(resolvedConfig.stackProvider
       ? {
           stack: {
@@ -373,13 +432,15 @@ function logDevMcpReady<
 ): void {
   if (config.logger === false) return;
   const logger = config.logger ?? console;
-  logger.log("Agent E2E Dev MCP ready");
+  logger.log(config.runtimeTargetId ? "Agent E2E Attached Runtime Mode ready" : "Agent E2E Dev MCP ready");
   logger.log(`  MCP:       ${server.url}`);
   logger.log(`  Codex:     codex mcp add agent-e2e --url ${server.url}`);
   logger.log(`  Claude:    claude mcp add --scope project --transport http agent-e2e ${server.url}`);
+  if (config.runtimeTargetId)
+    logger.log(`  Runtime:   attached target ${config.runtimeTargetId}; infrastructure lifecycle is externally owned`);
   logger.log(`  Stack:     ${config.stackProvider ? "call stack.start; use returned service URLs as browser targets" : "not configured"}`);
   logger.log("  Browser:   Playwright-owned MCP sessions enabled");
-  logger.log("  Tools:     stack.*, run.*, journey.*, browser.*, artifact.*, cleanup.*");
+  logger.log(`  Tools:     ${config.runtimeTargets ? "runtime.*, " : ""}stack.*, run.*, journey.*, browser.*, artifact.*, cleanup.*`);
   logger.log(`  Artifacts: ${artifactRoot}`);
 }
 
@@ -428,6 +489,10 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
     stackId: string;
     journeyId: string;
     artifactRoot?: string | undefined;
+  }>();
+  const runRuntimeBindings = new Map<string, {
+    targetId: string;
+    kind: RuntimeTarget["kind"];
   }>();
 
   async function callTool(
@@ -742,6 +807,14 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
     name: DevMcpToolName,
     args: Record<string, unknown>,
   ): Promise<DevMcpToolResponse> {
+    if (args.targetId !== undefined)
+      return blocked(
+        name,
+        "run-target-override-unsupported",
+        "run.begin resolves Runtime Target through the selected Journey Profile; targetId override is not supported in v1.",
+      );
+
+    const runtimeBinding = runtimeBindingForRun(args);
     if (!stackInstances) {
       if (args.stackId !== undefined)
         return blocked(
@@ -753,11 +826,46 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
         name,
         await resolveHarness(options.harness),
         "beginRun",
-        withDevExecution(args, options.browserSessions, undefined),
+        withRuntimeRunArgs(
+          withDevExecution(args, options.browserSessions, undefined),
+          runtimeBinding?.target,
+        ),
       );
     }
 
     const stackId = optionalStackId(args);
+    if (runtimeBinding?.target.kind === "attached") {
+      if (stackId)
+        return blocked(
+          name,
+          "run-attached-stack-id-unsupported",
+          "run.begin selected an attached Runtime Target through the Journey Profile and does not accept stackId.",
+        );
+      const response = await fromHarness(
+        name,
+        await resolveHarness(options.harness),
+        "beginRun",
+        withRuntimeRunArgs(
+          withDevExecution(args, options.browserSessions, undefined),
+          runtimeBinding.target,
+        ),
+      );
+      if (response.status === "ok" && typeof response.runId === "string") {
+        runRuntimeBindings.set(response.runId, {
+          targetId: runtimeBinding.target.id,
+          kind: runtimeBinding.target.kind,
+        });
+        return {
+          ...response,
+          runtimeTargetId: runtimeBinding.target.id,
+          runtimeBinding: {
+            targetId: runtimeBinding.target.id,
+            kind: runtimeBinding.target.kind,
+          },
+        };
+      }
+      return response;
+    }
     if (!stackId)
       return blocked(
         name,
@@ -778,7 +886,10 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
       name,
       await resolveHarness(options.harness),
       "beginRun",
-      withDevExecution(args, options.browserSessions, stack),
+      withRuntimeRunArgs(
+        withDevExecution(args, options.browserSessions, stack),
+        runtimeBinding?.target,
+      ),
     );
     if (response.status === "ok" && typeof response.runId === "string") {
       runStackBindings.set(response.runId, {
@@ -786,7 +897,23 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
         journeyId: stringArg(args, "journeyId"),
         artifactRoot: optionalStringArg(args, "artifactRoot") ?? options.artifactRoot,
       });
-      return { ...response, stackId, stackBinding: { stackId } };
+      if (runtimeBinding?.target) {
+        runRuntimeBindings.set(response.runId, {
+          targetId: runtimeBinding.target.id,
+          kind: runtimeBinding.target.kind,
+        });
+      }
+      return {
+        ...response,
+        stackId,
+        stackBinding: { stackId },
+        ...(runtimeBinding?.target
+          ? {
+              runtimeTargetId: runtimeBinding.target.id,
+              runtimeBinding: { targetId: runtimeBinding.target.id, kind: runtimeBinding.target.kind },
+            }
+          : {}),
+      };
     }
     return response;
   }
@@ -795,9 +922,19 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
     name: DevMcpToolName,
     args: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    if (!stackInstances) return withDevExecution(args, options.browserSessions, undefined);
     const runId = stringArg(args, "runId");
+    const runtimeBinding = runRuntimeBindings.get(runId);
+    if (!stackInstances)
+      return withRuntimeRunArgs(
+        withDevExecution(args, options.browserSessions, undefined),
+        runtimeBinding ? runtimeRegistry?.get(runtimeBinding.targetId) : undefined,
+      );
     const binding = runStackBindings.get(runId);
+    if (!binding && runtimeBinding?.kind === "attached")
+      return withRuntimeRunArgs(
+        withDevExecution(args, options.browserSessions, undefined),
+        runtimeRegistry?.get(runtimeBinding.targetId),
+      );
     if (!binding) {
       throw new StackInstanceManagerError(
         "run-stack-binding-missing",
@@ -805,7 +942,10 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
       );
     }
     const stack = await stackInstances.execution(binding.stackId, name);
-    return withDevExecution(args, options.browserSessions, stack);
+    return withRuntimeRunArgs(
+      withDevExecution(args, options.browserSessions, stack),
+      runtimeBinding ? runtimeRegistry?.get(runtimeBinding.targetId) : undefined,
+    );
   }
 
   function validateStackEvidenceBinding(
@@ -891,11 +1031,27 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
     const previousBinding = typeof args.runId === "string"
       ? runStackBindings.get(args.runId)
       : undefined;
+    const previousRuntimeBinding = typeof args.runId === "string"
+      ? runRuntimeBindings.get(args.runId)
+      : undefined;
     const response = await fromHarnessWithRunStackBinding(name, "reseedRun", args);
     if (response.status === "ok" && previousBinding && typeof response.runId === "string") {
       runStackBindings.set(response.runId, previousBinding);
     }
+    if (response.status === "ok" && previousRuntimeBinding && typeof response.runId === "string") {
+      runRuntimeBindings.set(response.runId, previousRuntimeBinding);
+    }
     return response;
+  }
+
+  function runtimeBindingForRun(args: Record<string, unknown>): { target: RuntimeTarget } | undefined {
+    if (!runtimeRegistry || !options.journeys) return undefined;
+    const journeyId = stringArg(args, "journeyId");
+    const journey = options.journeys.find((candidate) => candidate.id === journeyId);
+    if (!journey) return undefined;
+    const profile = journey.getProfile(optionalStringArg(args, "profileId"));
+    const target = runtimeRegistry.resolveProfileTarget(profile);
+    return target ? { target } : undefined;
   }
 
   async function dispose(): Promise<DevMcpDisposeResult> {
@@ -1270,6 +1426,28 @@ function withDevExecution(
     : undefined;
   const execution = stack ? withStackStatus(browserExecution, stack) : browserExecution;
   return execution === undefined ? args : { ...args, execution };
+}
+
+function withRuntimeRunArgs(
+  args: Record<string, unknown>,
+  target: RuntimeTarget | undefined,
+): Record<string, unknown> {
+  if (!target) return args;
+  const runtimeBinding = { targetId: target.id, kind: target.kind };
+  return {
+    ...args,
+    runtimeTargetId: target.id,
+    runtimeBinding,
+    execution: withRuntimeTarget(args.execution, target),
+  };
+}
+
+function withRuntimeTarget(execution: unknown, target: RuntimeTarget): unknown {
+  const runtime = { targetId: target.id, kind: target.kind, target };
+  if (execution === undefined) return { runtime };
+  if (!isRecord(execution)) return execution;
+  if ("runtime" in execution) return execution;
+  return { ...execution, runtime };
 }
 
 function withStackStatus(execution: unknown, stack: StackExecutionSurface): unknown {

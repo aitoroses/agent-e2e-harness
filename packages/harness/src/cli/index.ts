@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
 import {
+  startAgentE2EAttachedFromConfig,
   startAgentE2EDevMcpFromConfig,
+  type StartAgentE2EAttachedFromConfigOptions,
   type StartAgentE2EDevMcpFromConfigOptions,
 } from "../dev-mcp/index.js";
 import {
@@ -22,6 +24,8 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       return 0;
     case "dev":
       return await runDevCommand(flags);
+    case "attached":
+      return await runAttachedCommand(flags);
     case "verify":
       return await runVerifyCommand(flags);
     default:
@@ -29,6 +33,16 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       printHelp();
       return 1;
   }
+}
+
+async function runAttachedCommand(flags: string[]): Promise<number> {
+  if (flags.includes("--help") || flags.includes("-h")) {
+    printAttachedHelp();
+    return 0;
+  }
+
+  await startAgentE2EAttachedFromConfig(parseAttachedOptions(flags));
+  return 0;
 }
 
 async function runDevCommand(flags: string[]): Promise<number> {
@@ -91,6 +105,50 @@ function parseDevOptions(flags: string[]): StartAgentE2EDevMcpFromConfigOptions 
     }
   }
   return options;
+}
+
+function parseAttachedOptions(flags: string[]): StartAgentE2EAttachedFromConfigOptions {
+  const options: Partial<StartAgentE2EAttachedFromConfigOptions> = {};
+  for (let index = 0; index < flags.length; index += 1) {
+    const flag = flags[index];
+    if (!flag) continue;
+    const value = flags[index + 1];
+    switch (flag) {
+      case "--target":
+        options.targetId = requireValue(flag, value);
+        index += 1;
+        break;
+      case "--config":
+      case "-c":
+        options.configPath = requireValue(flag, value);
+        index += 1;
+        break;
+      case "--cwd":
+        options.cwd = requireValue(flag, value);
+        index += 1;
+        break;
+      case "--host":
+        options.host = requireValue(flag, value);
+        index += 1;
+        break;
+      case "--port":
+        options.port = parsePort(requireValue(flag, value));
+        index += 1;
+        break;
+      case "--path":
+        options.path = requireValue(flag, value);
+        index += 1;
+        break;
+      case "--artifact-root":
+        options.artifactRoot = requireValue(flag, value);
+        index += 1;
+        break;
+      default:
+        throw new Error(`Unknown attached option: ${flag}`);
+    }
+  }
+  if (!options.targetId) throw new Error("attached requires --target <id>");
+  return options as StartAgentE2EAttachedFromConfigOptions;
 }
 
 function parseVerifyOptions(flags: string[]): RunAgentE2EVerifyFromConfigOptions {
@@ -208,6 +266,7 @@ function printHelp(): void {
 
 Commands:
   dev      Start the Dev MCP server from agent-e2e.config.ts
+  attached Start Attached Runtime Mode for an externally owned Runtime Target
   verify   Run configured journeys through the CI verify runner
 `);
 }
@@ -218,6 +277,24 @@ function printDevHelp(): void {
 Starts the Bun-backed Agent E2E Dev MCP server from agent-e2e.config.ts.
 
 Options:
+  -c, --config <path>       Config path, defaults to agent-e2e.config.ts
+      --cwd <path>          Working directory for config resolution
+      --host <host>         MCP host, defaults to 127.0.0.1
+      --port <port>         MCP port, defaults to 3766
+      --path <path>         MCP HTTP path, defaults to /mcp
+      --artifact-root <dir> Artifact root, defaults to .agents-e2e/artifacts
+`);
+}
+
+function printAttachedHelp(): void {
+  process.stdout.write(`agent-e2e attached
+
+Starts Attached Runtime Mode for an externally owned Runtime Target declared
+in agent-e2e.config.ts. The harness connects to an already-running runtime;
+it does not start or stop production, staging, preview, or Compose infrastructure.
+
+Options:
+      --target <id>         Required attached Runtime Target id
   -c, --config <path>       Config path, defaults to agent-e2e.config.ts
       --cwd <path>          Working directory for config resolution
       --host <host>         MCP host, defaults to 127.0.0.1

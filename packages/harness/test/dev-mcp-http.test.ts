@@ -9,6 +9,7 @@ import { defineJourney, type HarnessTypes } from "@agent-e2e/harness/core";
 import {
   defineAgentE2EConfig,
   loadAgentE2EConfig,
+  startAgentE2EAttachedFromConfig,
   startAgentE2EDevMcpFromConfig,
   startAgentE2EDevMcp,
   startDevMcpStreamableHttpServer,
@@ -402,6 +403,47 @@ describe("Dev MCP Streamable HTTP server", () => {
       await rm(tmpRoot, { recursive: true, force: true });
     }
   });
+
+  it("starts Attached Runtime Mode from config and exposes runtime tools", async () => {
+    const tmpRoot = await mkdtemp(join(tmpdir(), "agent-e2e-attached-mcp-"));
+    const configPath = join(tmpRoot, "agent-e2e.config.mjs");
+    await writeAttachedConfig(configPath);
+
+    const server = await startAgentE2EAttachedFromConfig({
+      configPath,
+      targetId: "compose",
+      port: 0,
+      installSignalHandlers: false,
+      logger: false,
+    });
+    handles.push(server);
+    expect(server.manifest).toMatchObject({
+      mode: "attached",
+      runtime: { targetId: "compose", listTool: "runtime.list" },
+    });
+
+    const client = new Client({
+      name: "agent-e2e-attached-client",
+      version: "0.0.0",
+    });
+    await client.connect(new StreamableHTTPClientTransport(new URL(server.url)));
+    try {
+      const tools = await client.listTools();
+      expect(tools.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(["runtime.list", "runtime.status"]));
+      const status = await client.callTool({ name: "runtime.status", arguments: {} });
+      const text = status.content[0]?.type === "text" ? status.content[0].text : "";
+      expect(JSON.parse(text)).toMatchObject({
+        status: "ok",
+        targetId: "compose",
+        runtime: { status: "ready" },
+      });
+    } finally {
+      await client.close();
+      await server.close();
+      handles = handles.filter((handle) => handle !== server);
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 async function listJourneyIds(client: Client): Promise<string[]> {
@@ -426,6 +468,34 @@ export default {
     })
   ]
 };
+`,
+  );
+}
+
+async function writeAttachedConfig(path: string): Promise<void> {
+  await writeFile(
+    path,
+    `import { defineJourney } from '@agent-e2e/harness/core';
+import { defineAgentE2EConfig } from '@agent-e2e/harness/dev-mcp';
+import { attachedRuntime } from '@agent-e2e/harness/runtime';
+
+export default defineAgentE2EConfig({
+  browserSessions: false,
+  journeys: [
+    defineJourney({
+      id: 'journey:attached',
+      title: 'Attached',
+      profiles: [{ id: 'attached', data: {}, isDefault: true, runtimeTargetId: 'compose' }],
+      phases: [{ id: 'phase', title: 'Phase', steps: [{ id: 'step', title: 'Step', execute: async () => ({ status: 'passed' }) }] }]
+    })
+  ],
+  runtimeTargets: [
+    attachedRuntime({
+      id: 'compose',
+      status: async () => ({ status: 'ready', summary: 'ready', services: [], artifacts: [], warnings: [], errors: [] })
+    })
+  ]
+});
 `,
   );
 }
