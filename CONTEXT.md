@@ -121,6 +121,26 @@ _Avoid_: ambient local service, manual database, localStorage fixture
 The app/runtime infrastructure required for a dev-mode harness run, including databases, app processes, containers, queues, and local services, provisioned and torn down through harness-owned lifecycle hooks while concrete infrastructure remains product- or showcase-owned.
 _Avoid_: hidden test setup, seed side effect, external prerequisite, manual stack
 
+**Runtime Target**:
+A declared place where an **Executable Journey** can run or collect evidence, including harness-managed local stacks and externally owned staging, production, preview, Docker Compose, Kubernetes, or other already-running runtimes.
+_Avoid_: environment, deployment, production stack
+
+**Attached Runtime Target**:
+An externally owned **Runtime Target** that the harness connects to without owning infrastructure lifecycle.
+_Avoid_: managed stack, deployment provider
+
+**Attached Runtime Mode**:
+The `agent-e2e attached --target <id>` MCP mode for inspecting and optionally running journeys against an **Attached Runtime Target**.
+_Avoid_: dev mode, one-shot production check
+
+**Runtime Tool Surface**:
+The `runtime.*` MCP family: `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.explore.list`, and `runtime.explore.run`.
+_Avoid_: hiding attached runtimes under stack lifecycle tools
+
+**Runtime Tool Risk**:
+The declared side-effect class for Runtime Exploration Tools: `observation`, `runMutation`, or `runtimeMutation`.
+_Avoid_: safe boolean, hidden side effects
+
 **Verify Worker Stack**:
 A **Managed Execution Stack** instance assigned to one verify worker so multiple selected runs can execute serially inside isolated runtime resources while the suite still parallelizes across workers.
 _Avoid_: per-run stack, shared parallel stack, worker fixture

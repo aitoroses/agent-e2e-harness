@@ -166,6 +166,23 @@ That direct composition is intentional for the launch showcase:
 
 Consumer apps should implement `stackProvider` directly in `agent-e2e.config.ts` when their infrastructure clients are compatible with the Dev MCP runtime. Runtime-specific readiness belongs in the consumer provider or a future dedicated adapter package, not in a private lifecycle bridge.
 
+## Attached Docker Compose Runtime
+
+The showcase also dogfoods **Attached Runtime Mode** with Docker Compose. Compose startup is intentionally separate because attached mode does not own infrastructure lifecycle.
+
+```sh
+npm run compose:up --workspace @agent-e2e/showcase
+npm run attached:mcp --workspace @agent-e2e/showcase
+```
+
+`attached:mcp` runs `agent-e2e attached --target showcase-compose`. The attached target is declared with `attachedRuntime(...)` in `agent-e2e.config.ts`, and the attached Journey Profile selects it through `runtimeTargetId: "showcase-compose"`. Use `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.explore.list`, and `runtime.explore.run` to inspect the already-running Compose app. The product-owned diagnostic `compose.services` is an `observation` Runtime Exploration Tool; Docker-specific behavior stays in `apps/showcase`, not harness core.
+
+The attached smoke path uses the same proof-notes journey and ownership ledger. Seed and cleanup operate only on run-owned proof-note resources after the selected profile opts into run lifecycle; Compose containers remain externally owned. Stop Compose separately:
+
+```sh
+npm run compose:down --workspace @agent-e2e/showcase
+```
+
 ## Artifacts
 
 Interactive artifacts are generated under `.agents-e2e/artifacts/<journey>/<run>/`:

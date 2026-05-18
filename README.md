@@ -114,6 +114,14 @@ stack.explore.run
 
 `stack.start` returns a `stackId`; pass that id to `stack.status`, `run.begin`, `stack.logs`, `stack.explore.run`, and `stack.stop`. `stack.list` recovers currently running Stack Instances. `run.begin` requires a valid `stackId` when a stack provider exists, creates a **Run Stack Binding** for that run, and rejects `stackId` when no provider exists. `stack.status` is the unified stack-state packet: `StackStatusPacket.services` is the journey-facing runtime contract for dynamic URLs, readiness, health checks, stable service ids, endpoints, warnings, errors, artifacts, and next actions. There are no native `stack.services`, `stack.health`, or `stack.env` tools in v1. Runtime-specific inspection is provider-owned through `stack.explore.*`.
 
+For staging, production, preview, or Docker Compose systems that are already running, declare a **Runtime Target** instead of hiding it under `stack.*`. Use `managedRuntime(...)` for harness-owned local stacks and `attachedRuntime(...)` for an **Attached Runtime Target** whose lifecycle is externally owned. Start the long-lived attached MCP surface with:
+
+```sh
+agent-e2e attached --target <id>
+```
+
+Attached Runtime Mode does not own infrastructure lifecycle. It exposes target diagnostics through `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.explore.list`, and `runtime.explore.run`. Runtime exploration risk is declared as `observation`, `runMutation`, or `runtimeMutation`; observation runs by default, runMutation requires Journey Profile opt-in, and runtimeMutation is blocked by default. `run.begin` resolves the Runtime Target from the selected profile and does not accept a free `targetId` override.
+
 ## Build the proof loop
 
 These six examples cover the full loop: define the journey, register typed resources, wire `agent-e2e.config.ts`, connect an agent through MCP, read run artifacts, and promote the same journey suite to CI.

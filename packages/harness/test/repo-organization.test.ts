@@ -118,4 +118,36 @@ describe('repository organization contract', () => {
     expect(skill).not.toContain('starts the configured stack once');
     expect(skill).not.toContain('active app stack');
   });
+
+  it('keeps public docs and skill self-contained for Runtime Targets and Attached Runtime Mode', () => {
+    const docs = [
+      text('README.md'),
+      text('packages/harness/README.md'),
+      text('apps/showcase/README.md'),
+      text('CONTEXT.md'),
+      text('AGENTS.md'),
+      text('skills/agent-e2e-harness/SKILL.md'),
+      text('skills/agent-e2e-harness/references/dev-mcp-loop.md'),
+      text('skills/agent-e2e-harness/references/validation-checklist.md'),
+    ].join('\n');
+
+    expect(docs).toContain('Runtime Target');
+    expect(docs).toContain('Attached Runtime Target');
+    expect(docs).toContain('Attached Runtime Mode');
+    expect(docs).toContain('agent-e2e attached --target <id>');
+    expect(docs).toContain('managedRuntime');
+    expect(docs).toContain('attachedRuntime');
+    expect(docs).toContain('runtime.list');
+    expect(docs).toContain('runtime.status');
+    expect(docs).toContain('runtime.logs');
+    expect(docs).toContain('runtime.access.status');
+    expect(docs).toContain('runtime.explore.list');
+    expect(docs).toContain('runtime.explore.run');
+    expect(docs).toContain('observation');
+    expect(docs).toContain('runMutation');
+    expect(docs).toContain('runtimeMutation');
+    expect(docs).toContain('does not own infrastructure lifecycle');
+    expect(showcasePackage.scripts['attached:mcp']).toBe('agent-e2e attached --target showcase-compose');
+    expect(showcasePackage.scripts['compose:up']).toContain('docker compose');
+  });
 });

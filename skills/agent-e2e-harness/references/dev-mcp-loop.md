@@ -68,6 +68,28 @@ mcporter call \
 
 Prefer `--http-url ... --tool ...` for localhost. Do not rely on dotted URL selector shapes such as `http://127.0.0.1:3766/mcp.journey.list`; they can fail for local MCP URLs.
 
+## Attached Runtime Mode
+
+For an already-running Runtime Target, start the attached MCP surface:
+
+```sh
+agent-e2e attached --target <id>
+```
+
+Attached Runtime Mode does not own infrastructure lifecycle. Use product commands to start/stop staging, production, preview, Kubernetes, or Docker Compose. Then validate with:
+
+```sh
+mcporter list http://127.0.0.1:3766/mcp --schema --json --allow-http
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool runtime.list --args '{}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool runtime.status --args '{"targetId":"<id>"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool runtime.logs --args '{"targetId":"<id>","tail":80}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool runtime.access.status --args '{"targetId":"<id>"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool runtime.explore.list --args '{"targetId":"<id>"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool runtime.explore.run --args '{"targetId":"<id>","toolId":"<observation-tool>","input":{}}' --output json
+```
+
+Use Journey Profiles with `runtimeTargetId` to run attached journeys. Seed and cleanup are allowed only when the profile opts into run lifecycle and must stay ownership-ledger bounded.
+
 ## Proof Tool Sequence
 
 Drive the proof through standard MCP calls:
