@@ -4,6 +4,8 @@ Use this reference when writing `agent-e2e.config.ts`, journeys, resources, or s
 
 ## Journey Template
 
+A Journey is the durable contract CI will run. It is not the agent's exploratory transcript. Encode the reviewed path as explicit profiles, seed, phases, steps, proofs, owned resources, and cleanup rules.
+
 ```ts
 import { defineJourney, type HarnessTypes } from "@agent-e2e/harness/core";
 
@@ -73,9 +75,12 @@ export const exampleJourney = defineJourney<AppHarness>({
 Rules:
 
 - Seed prerequisites, not the behavior being proven.
+- Treat the Journey/Profile as the owner of the seed contract: checked prerequisites, created setup, forbidden product-visible state, and cleanup boundary should be visible from the journey contract.
+- Reuse seed helper functions when they reduce duplication, but avoid shared mutable seed state across journeys.
 - Keep tags on journeys, not profiles.
 - Return owned resources from steps that create durable data.
 - Use real app assertions, not screenshots as the only proof.
+- Promote agent-discovered paths into reviewed Journey code before adding them to verify suites.
 - Keep one journey thin at first; add more after the tracer bullet passes.
 
 ## Resource Registry Template

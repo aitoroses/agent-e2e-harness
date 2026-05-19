@@ -175,4 +175,36 @@ describe('repository organization contract', () => {
     expect(transcript).toContain('run.teardown` deleted the same note');
     expect(transcript).toContain('runtime.access.status');
   });
+
+  it('keeps public docs and the skill clear on the journey, trajectory, and proofs model', () => {
+    const rootReadme = text('README.md');
+    const skillDocs = [
+      text('skills/agent-e2e-harness/SKILL.md'),
+      text('skills/agent-e2e-harness/references/dev-mcp-loop.md'),
+      text('skills/agent-e2e-harness/references/journey-patterns.md'),
+      text('skills/agent-e2e-harness/references/validation-checklist.md'),
+      text('skills/agent-e2e-harness/references/verify-ci.md'),
+    ].join('\n');
+
+    expect(rootReadme).toContain('contract-verification tool, not a record-and-replay tool');
+    expect(rootReadme).toContain('Journey, Trajectory, Proofs');
+    expect(rootReadme).toContain('Journey**: the reviewed, inspectable contract in code');
+    expect(rootReadme).toContain('Trajectory**: the path an agent discovers');
+    expect(rootReadme).toContain('Proofs**: deterministic evidence');
+    expect(rootReadme).toContain('promoted into reviewed journey code');
+    expect(rootReadme).toContain('Seed ownership belongs to the journey and its selected Journey Profile');
+    expect(rootReadme).toContain('Avoid shared mutable seed state across journeys');
+    expect(rootReadme).toContain('Stable CI proof is the priority');
+    expect(rootReadme).toContain('supporting forensics');
+
+    expect(skillDocs).toContain('record-and-replay transcript');
+    expect(skillDocs).toContain('**Journey** is the reviewed code contract');
+    expect(skillDocs).toContain('**Trajectory** is the path the agent discovers');
+    expect(skillDocs).toContain('**Proofs** are deterministic artifacts');
+    expect(skillDocs).toContain('Promote agent-discovered paths into reviewed Journey code');
+    expect(skillDocs).toContain('shared mutable seed state across journeys is discouraged');
+    expect(skillDocs).toContain('proof stability and structured failure artifacts over visual or trajectory diffs');
+    expect(skillDocs).toContain('The call sequence is the development Trajectory');
+    expect(skillDocs).toContain('confirmation that verify ran reviewed Journey code');
+  });
 });
