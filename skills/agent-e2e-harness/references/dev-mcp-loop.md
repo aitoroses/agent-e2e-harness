@@ -123,6 +123,8 @@ stack.stop
 
 For multi-step journeys, use `journey.phase` or `journey.untilPhase` when appropriate.
 
+The call sequence is the development Trajectory. It can include false starts, debugging probes, Browser Workbench reads, and stack exploration. Keep it as evidence while learning the app, then promote only the stable user path into reviewed Journey code before CI depends on it.
+
 ## Evidence To Capture
 
 Capture these facts before changing implementation again:

@@ -7,13 +7,21 @@ description: "Install and adopt Agent E2E Harness in an application: add the pac
 
 Use this skill to help agents install, set up, build journeys for, operate, and verify an application with Agent E2E Harness.
 
-The target outcome is not a hand-written Playwright test. The target outcome is an application that exposes a standard MCP development surface with `agent-e2e dev`, lets an agent prove one real user flow from seeded state, cleans owned resources, time-travels through artifacts, and verifies the configured journey suite in CI with `agent-e2e verify`.
+The target outcome is not a hand-written Playwright test or a record-and-replay transcript. The target outcome is an application that exposes a standard MCP development surface with `agent-e2e dev`, lets an agent prove one real user flow from seeded state, cleans owned resources, time-travels through artifacts, and verifies the configured journey suite in CI with `agent-e2e verify`.
 
 Mental model:
 
 - `agent-e2e dev` starts the agent's Exploration Surface: a local Streamable HTTP MCP server at `http://127.0.0.1:3766/mcp` by default.
 - The agent explores one or more explicit Stack Instances through MCP tools, binds a run to the selected `stackId` with a Run Stack Binding, learns the stable path, and crystallizes that trajectory into an Executable Journey.
 - `agent-e2e verify` runs the crystallized journey suite through worker-scoped verify Stack Instances. It is not a general exploration shell; it can use only verify-safe observation tools.
+
+Contract model:
+
+- **Journey** is the reviewed code contract: profiles, seed, phases, steps, proofs, owned resources, and cleanup.
+- **Trajectory** is the path the agent discovers while exploring through Dev MCP. Treat it as development evidence, not as CI's source of truth.
+- **Proofs** are deterministic artifacts from running the Journey from seed: observed payloads, step feedback, screenshots/snapshots, console/network signals, ownership ledgers, cleanup results, and verify suite reports.
+
+Promote agent-discovered paths into reviewed Journey code before CI depends on them. Do not leave CI anchored to an unreviewed browser transcript, visual diff, or ad-hoc trajectory. The Journey/Profile owns the seed contract; reusable helper functions are fine, but shared mutable seed state across journeys is discouraged because it makes failures order-dependent. Prefer proof stability and structured failure artifacts over visual or trajectory diffs.
 
 ## Load References
 

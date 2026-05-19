@@ -14,6 +14,8 @@ This is the default CI path. It loads `agent-e2e.config.ts`, starts worker-scope
 
 Do not ask users to maintain a separate Playwright, Vitest, or custom executable wrapper as the primary CI path.
 
+Verify runs reviewed Journey contracts, not recorded trajectories. Use screenshots, snapshots, console, network, and trajectory history as failure forensics, but make CI pass/fail depend on structured proof checks, observed payloads, cleanup status, and suite reports.
+
 ## Selection Defaults
 
 Default behavior:

@@ -118,6 +118,7 @@ agent-e2e verify --reporter json
 
 Final evidence must include:
 
+- confirmation that verify ran reviewed Journey code, not an unreviewed trajectory or recorder transcript
 - selected suite or selectors
 - run count and pass/fail count
 - report directory

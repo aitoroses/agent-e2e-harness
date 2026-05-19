@@ -1,14 +1,28 @@
 # Agent E2E Harness
 
-Agent E2E Harness helps coding agents prove their own work.
+Agent E2E Harness helps coding agents prove their own work. It is a contract-verification tool, not a record-and-replay tool: the durable artifact is the reviewed journey contract plus its proof evidence, not a captured browser transcript.
 
 Journeys give agents a repeatable way to seed app state, start the stack, move through UI/API steps, capture artifacts, clean owned data, and rerun from a known point. The outcome is practical time travel for app state: the agent can go back to a clean checkpoint, inspect what changed, and turn the passing journey into the same CI check humans review.
 
 ![An agent driving a journey from seeded state through phases and steps, emitting artifacts](docs/launch/v1.0/hero-agent-journey-readme.png)
 
-_A journey starts from seeded state, runs through MCP-controlled steps, and leaves artifacts CI can replay._
+_A journey starts from seeded state, runs through MCP-controlled steps, and leaves artifacts CI can verify._
 
 The agent is the primary user. Humans and CI read the same evidence the agent left behind.
+
+## Journey, Trajectory, Proofs
+
+Agent E2E Harness separates three things that recorders often collapse:
+
+- **Journey**: the reviewed, inspectable contract in code. It names the profiles, seed contract, phases, steps, proofs, owned resources, and cleanup rules that humans and CI can depend on.
+- **Trajectory**: the path an agent discovers while exploring the live app through Dev MCP tools. It is useful evidence while debugging, but it is not the CI contract by itself.
+- **Proofs**: deterministic evidence that the journey satisfied its expectations from a seeded environment: step feedback, observed payloads, ownership ledgers, cleanup results, snapshots, screenshots, console/network signals, metrics, and suite reports.
+
+During development, agents may explore, try alternate routes, and learn a stable trajectory. Before CI depends on that work, the discovered path must be promoted into reviewed journey code: explicit steps, assertions, seed expectations, profile data, resource ownership, and cleanup behavior. CI should run that journey contract through `agent-e2e verify`; it should not depend on an unreviewed transcript, a visual diff of the agent's trajectory, or a recorder-generated script.
+
+Seed ownership belongs to the journey and its selected Journey Profile. A journey may compose reusable seed helpers, but the profile should still make the seed contract explicit: which prerequisites are checked, which setup is created, which product-visible state is forbidden, and which cleanup boundary applies. Avoid shared mutable seed state across journeys, because it makes proof failures order-dependent and hard to diagnose.
+
+Stable CI proof is the priority. Visual artifacts and trajectory history help explain failures, but they are supporting forensics. The pass/fail contract should come from structured proof checks, observed payloads, ownership-bounded cleanup, and the report artifacts under `.agents-e2e/artifacts/_suites/<suite-id>/`.
 
 ## Install in 5 minutes
 
