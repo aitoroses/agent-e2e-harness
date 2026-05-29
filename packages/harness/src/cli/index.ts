@@ -55,8 +55,56 @@ async function runDevCommand(flags: string[]): Promise<number> {
     return 0;
   }
 
-  await startAgentE2EDevMcpFromConfig(parseDevOptions(flags));
+  const plan = planDevInvocation(flags, process.env);
+  if (plan.mode === "reexec") return await reexecUnderBunWatch(plan.argv);
+
+  await startAgentE2EDevMcpFromConfig(parseDevOptions(plan.flags));
   return 0;
+}
+
+export const WATCH_REEXEC_ENV = "AGENT_E2E_WATCH_REEXEC";
+
+export type DevInvocationPlan =
+  | { mode: "serve"; flags: string[] }
+  | { mode: "reexec"; argv: string[] };
+
+/**
+ * Decide whether `dev` should serve directly or re-exec itself under
+ * `bun --watch`. Bun cannot hot-reload the journey/config module graph in
+ * process (it ignores cache-busting import queries), so `--watch` delegates
+ * reloading to Bun, which restarts the whole process on file change behind the
+ * same MCP port. The re-exec sets a sentinel env var so the restarted child
+ * (which still carries `--watch`) serves instead of re-exec'ing again.
+ */
+export function planDevInvocation(
+  flags: string[],
+  env: NodeJS.ProcessEnv,
+): DevInvocationPlan {
+  const wantsWatch = flags.includes("--watch");
+  const withoutWatch = flags.filter((flag) => flag !== "--watch");
+  if (wantsWatch && !env[WATCH_REEXEC_ENV]) {
+    const entry = process.argv[1] ?? "";
+    return { mode: "reexec", argv: ["--watch", entry, "dev", ...withoutWatch] };
+  }
+  return { mode: "serve", flags: withoutWatch };
+}
+
+async function reexecUnderBunWatch(argv: string[]): Promise<number> {
+  const { spawn } = await import("node:child_process");
+  // process.execPath is the Bun binary when the bin runs under its `env bun`
+  // shebang, which is required for TypeScript configs anyway.
+  const child = spawn(process.execPath, argv, {
+    stdio: "inherit",
+    env: { ...process.env, [WATCH_REEXEC_ENV]: "1" },
+  });
+  const forward = (signal: NodeJS.Signals) => {
+    if (!child.killed) child.kill(signal);
+  };
+  process.on("SIGINT", () => forward("SIGINT"));
+  process.on("SIGTERM", () => forward("SIGTERM"));
+  return await new Promise<number>((resolve) => {
+    child.on("exit", (code) => resolve(code ?? 0));
+  });
 }
 
 async function runVerifyCommand(flags: string[]): Promise<number> {
@@ -287,6 +335,10 @@ Options:
       --port <port>         MCP port, defaults to 3766
       --path <path>         MCP HTTP path, defaults to /mcp
       --artifact-root <dir> Artifact root, defaults to .agents-e2e/artifacts
+      --watch               Reload on file change by restarting under bun --watch.
+                            Bun cannot hot-swap the journey/config module graph
+                            in process, so this restarts the server (same MCP
+                            port) and disposes the managed stack on each restart.
 `);
 }
 

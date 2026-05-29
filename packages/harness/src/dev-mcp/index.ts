@@ -43,7 +43,17 @@ import {
   implementedBrowserWorkbenchToolNames,
   type DevMcpBrowserWorkbenchController,
 } from "./browser-workbench-tools.js";
-import { createReloadingHarnessSource, type ReloadingHarnessSourceOptions } from "./reloading-harness.js";
+import {
+  createReloadingHarnessSource,
+  runtimeSupportsInProcessReload,
+  type ReloadingHarnessSourceOptions,
+} from "./reloading-harness.js";
+
+export {
+  createReloadingHarnessSource,
+  runtimeSupportsInProcessReload,
+  type ReloadingHarnessSourceOptions,
+};
 import { StackInstanceManager, StackInstanceManagerError, stoppedStackStatus } from "./stack-instance-manager.js";
 
 type RuntimeZod = typeof import("zod/v4").z;

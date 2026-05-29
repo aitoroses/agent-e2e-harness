@@ -6,7 +6,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { isLongLivedCliCommand } from "../src/cli/index.js";
+import { isLongLivedCliCommand, planDevInvocation, WATCH_REEXEC_ENV } from "../src/cli/index.js";
 
 const execFileAsync = promisify(execFile);
 const cliPath = resolve(process.cwd(), "dist/cli/index.js");
@@ -46,8 +46,33 @@ describe("Agent E2E CLI", () => {
     expect(stdout).toContain("agent-e2e dev");
     expect(stdout).toContain("agent-e2e.config.ts");
     expect(stdout).toContain("--artifact-root");
+    expect(stdout).toContain("--watch");
+    expect(stdout).toContain("bun --watch");
     expect(stdout).not.toContain("--no-reload");
     expect(stdout).not.toContain("--manifest");
+  });
+
+  it("serves dev directly without --watch and strips the flag", () => {
+    const plan = planDevInvocation(["--port", "4000"], {});
+    expect(plan).toEqual({ mode: "serve", flags: ["--port", "4000"] });
+  });
+
+  it("re-execs under bun --watch when --watch is requested fresh", () => {
+    const plan = planDevInvocation(["--watch", "--port", "4000"], {});
+    expect(plan.mode).toBe("reexec");
+    if (plan.mode === "reexec") {
+      expect(plan.argv[0]).toBe("--watch");
+      // --watch is stripped from the child's dev flags to avoid re-exec recursion.
+      expect(plan.argv).toContain("dev");
+      expect(plan.argv.filter((arg) => arg === "--watch")).toHaveLength(1);
+      expect(plan.argv).toContain("--port");
+      expect(plan.argv).toContain("4000");
+    }
+  });
+
+  it("serves directly inside the watch re-exec child (sentinel set) without recursing", () => {
+    const plan = planDevInvocation(["--watch", "--port", "4000"], { [WATCH_REEXEC_ENV]: "1" });
+    expect(plan).toEqual({ mode: "serve", flags: ["--port", "4000"] });
   });
 
   it("documents the config-backed verify command", async () => {

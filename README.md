@@ -448,7 +448,7 @@ Most E2E tools are built around human-authored tests. This harness is built arou
 Three honest trade-offs:
 
 - **You write more upfront.** A journey defines profiles, seed, phases, steps, proofs, and a resource registry. That is more than a Playwright spec or a codegen capture. The payoff is the agent can debug, reseed, and rerun without rewriting any of it, and there is no second test artifact when the proof becomes CI.
-- **You take a runtime dependency on Bun for the CLI.** The CLI loads `agent-e2e.config.ts` directly so Dev MCP can hot-reload behind a stable URL and verify can run from the same config in CI.
+- **You take a runtime dependency on Bun for the CLI.** The CLI loads `agent-e2e.config.ts` directly, and verify can run from the same config in CI. To pick up journey/config edits, run `agent-e2e dev --watch`: Bun restarts the server on file change behind the same MCP URL (Bun cannot hot-swap the module graph in process, so reload is restart-based; the managed stack is disposed on each restart and must be re-started).
 - **You commit to the harness's domain model.** Journeys, profiles, owned resources, feedback envelopes, and observed payloads are opinionated shapes. If you only need to record a happy path once, codegen is shorter. If you need an agent to discover, debug, fix, and promote a flow without re-explaining it every time, the model pays for itself.
 
 ## Public package surfaces

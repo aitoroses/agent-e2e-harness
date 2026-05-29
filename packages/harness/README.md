@@ -206,7 +206,7 @@ Then run the Dev MCP server through the package CLI:
 }
 ```
 
-The CLI creates the MCP harness, default Playwright browser sessions, `.agents-e2e/artifacts`, signal handlers, and a hot-reloaded journey registry. Bun runs `agent-e2e.config.ts` directly; when the config file changes, new MCP calls see the updated journeys without reconnecting the MCP client. It uses `127.0.0.1:3766/mcp` by default; set `AGENT_E2E_MCP_PORT` to override it. App URLs come from `stack.start` / `stack.status` service URLs, not from Dev MCP configuration.
+The CLI creates the MCP harness, default Playwright browser sessions, `.agents-e2e/artifacts`, and signal handlers. Bun runs `agent-e2e.config.ts` directly. To iterate on journeys, run `agent-e2e dev --watch`: Bun restarts the server on any source change behind the same MCP URL, so MCP clients keep the same endpoint. (Reload is restart-based, not in-process: Bun keys modules by path and ignores cache-busting import queries, so an edited journey cannot be hot-swapped into a running process. On each restart the managed stack is disposed and must be re-started with `stack.start`. Under Node, `createReloadingHarnessSource` does reload edited modules in process, but the Dev MCP CLI requires Bun for `.ts` configs.) It uses `127.0.0.1:3766/mcp` by default; set `AGENT_E2E_MCP_PORT` to override it. App URLs come from `stack.start` / `stack.status` service URLs, not from Dev MCP configuration.
 
 ## Proof Loop
 

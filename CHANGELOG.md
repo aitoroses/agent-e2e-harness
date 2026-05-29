@@ -23,6 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - First-class Testcontainers PostgreSQL Stack Provider at the `@agent-e2e/harness/testcontainers` subpath export (`createPostgresTestcontainersProvider`). `pg`, `@testcontainers/postgresql`, and `testcontainers` are optional peer dependencies loaded lazily, so the package-root and `/core` surfaces stay provider-agnostic and consumers no longer copy-paste their own provider. The showcase now consumes this export.
+- `agent-e2e dev --watch`: reloads journey/config edits by re-exec'ing the Dev MCP server under `bun --watch`, which restarts the process on file change behind the same MCP port and disposes the managed stack on each restart. `createReloadingHarnessSource` and `runtimeSupportsInProcessReload` are now re-exported from `@agent-e2e/harness/dev-mcp`.
+
+### Fixed
+
+- Documented honest hot-reload behavior. Previously the docs claimed Bun hot-reloads journeys behind a stable URL so "new MCP calls see the updated journeys"; in practice Bun ignores cache-busting `import(url?query)` queries (it keys local modules by path), so `createReloadingHarnessSource` could not hot-swap edited journey/config modules in process under the one runtime the Dev MCP mandates. The source now detects this and warns once instead of silently serving stale journeys, and reload is delivered through restart (`dev --watch`). In-process reload still works under Node, where the query bust is honored.
 
 ### Changed
 
