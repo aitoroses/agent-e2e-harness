@@ -261,6 +261,7 @@ browser.eval
 browser.playwright
 browser.screenshot
 journey.step
+journey.untilStep
 journey.phase
 journey.untilPhase
 artifact.read
@@ -268,6 +269,8 @@ cleanup.plan
 run.reseed
 stack.stop
 ```
+
+The journey time-travel grammar is `journey.step` (one step), `journey.untilStep` (a phase up to and including a target step), `journey.phase` / `journey.untilPhase` (a whole phase to its boundary). The UI-validation model treats each step as a distinct visual frame, so `journey.untilStep` makes every frame individually addressable: it runs a phase from its first step up to **and including** the target step and parks the managed state there, mirroring `journey.untilPhase`'s envelope (`results[]`, landed step at `results.at(-1)`). A step is addressed by its stable `stepId` within a `phaseId` (`{ runId, phaseId, stepId }`, the same address `journey.step` uses) — never a positional ordinal — and an unknown journey/phase/step returns the same coherent not-found envelope as the other journey tools.
 
 The fixed stack grammar is intentionally small: `stack.start`, `stack.list`, `stack.status`, `stack.stop`, `stack.logs`, `stack.explore.list`, and `stack.explore.run`. `stack.start` accepts an optional caller-chosen `stackId` and returns the effective id. `stack.list` recovers running Stack Instances. `stack.status`, `stack.logs`, `stack.explore.run`, and `stack.stop` require an explicit `stackId`; there is no public stop-all tool. `run.begin` requires a valid `stackId` when a stack provider exists, creates the run's **Run Stack Binding**, and rejects `stackId` when no provider exists. `stack.status` is the unified stack-state packet: `StackStatusPacket.services` is the journey-facing runtime contract for dynamic URLs, stable service ids, endpoints, checks, warnings, errors, artifacts, and next actions. There are no native `stack.services`, `stack.health`, or `stack.env` tools in v1.
 

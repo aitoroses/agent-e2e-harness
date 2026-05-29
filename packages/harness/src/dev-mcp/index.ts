@@ -120,6 +120,7 @@ export const DEV_MCP_TOOL_GRAMMAR = [
   "cleanup.plan",
   "artifact.read",
   "journey.step",
+  "journey.untilStep",
   "journey.untilPhase",
   "journey.phase",
   ...DEV_MCP_BROWSER_WORKBENCH_TOOLS,
@@ -600,6 +601,8 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           return fromHarness(name, await resolveHarness(options.harness), "readArtifact", args);
         case "journey.step":
           return fromHarnessWithRunStackBinding(name, "runStep", args);
+        case "journey.untilStep":
+          return fromHarnessWithRunStackBinding(name, "runUntilStep", args);
         case "journey.phase":
         case "journey.untilPhase":
           return fromHarnessWithRunStackBinding(name, "runPhase", args);
@@ -1293,6 +1296,7 @@ function implementedToolNames(
       "cleanup.plan",
       "artifact.read",
       "journey.step",
+      "journey.untilStep",
       "journey.phase",
       "journey.untilPhase",
     );
@@ -1346,6 +1350,7 @@ function summaryFor(name: DevMcpToolName): string {
     "browser.screenshot": browserWorkbenchSummary("browser.screenshot"),
     "browser.close": browserWorkbenchSummary("browser.close"),
     "journey.step": "Run one journey step.",
+    "journey.untilStep": "Run journey steps up to and including a target step (visual frame).",
     "journey.untilPhase": "Run journey steps until a phase boundary.",
     "journey.phase": "Run a journey phase.",
     "artifact.read": "Read a safe emitted artifact.",
@@ -1451,6 +1456,7 @@ function inputSchemaForTool(
         path: stringId().optional(),
       };
     case "journey.step":
+    case "journey.untilStep":
       return {
         runId: stringId(),
         phaseId: stringId(),

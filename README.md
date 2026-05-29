@@ -329,12 +329,15 @@ browser.eval
 browser.playwright
 browser.screenshot
 journey.step
+journey.untilStep
 journey.phase
 journey.untilPhase
 artifact.read
 cleanup.plan
 run.reseed
 ```
+
+`journey.untilStep` is step-granular time travel: it runs a phase from its first step up to **and including** a target step, then parks the managed state exactly at that step's visual frame. It mirrors `journey.untilPhase`'s contract and envelope (`results[]`, with the landed step at `results.at(-1)`) but lands at a single step instead of the phase boundary, so each step is individually addressable by its stable `stepId` (`{ runId, phaseId, stepId }`, the same address `journey.step` uses). An unknown journey, phase, or step returns the same coherent not-found envelope as the other journey tools.
 
 Use `stack.logs` for live service logs after the stack is active. It requires a `stackId`, one `serviceId`, a required `tail`, and optional `stream`. Use `stack.explore.list` to discover provider-declared tools and `stack.explore.run` with `stackId` to run one of them with Zod-validated input/output. `stack.logs` and `stack.explore.run` accept optional `runId` only to capture artifacts, and reject capture when the run is bound to a different `stackId`.
 
@@ -448,7 +451,7 @@ Most E2E tools are built around human-authored tests. This harness is built arou
 | Primary user                           | Human author           | Human author              | Human author               | Coding agent in dev mode                             |
 | Seeded environment as a gate           | Ad-hoc fixtures        | None                      | None                       | **Environment Seed** + **Seed Gate** + warnings      |
 | Discovery surface for the agent        | Read the test file     | Read the recorded file    | Read the recording         | **Inspectable Journey Contract** via `journey.inspect` |
-| Step-by-step debug from one MCP call   | Rerun the whole spec   | Rerun the whole recording | Rerun the whole recording  | `journey.step`, `journey.phase`, `journey.untilPhase` |
+| Step-by-step debug from one MCP call   | Rerun the whole spec   | Rerun the whole recording | Rerun the whole recording  | `journey.step`, `journey.untilStep`, `journey.phase`, `journey.untilPhase` |
 | Time-travel app state while debugging  | Manual reset scripts   | Rerun from the start      | Rerun from the start       | Seed, inspect, cleanup, reseed, and rerun            |
 | Bounded teardown of agent-created data | Cleanup blocks (best-effort) | None              | None                       | **Ownership Ledger** + **Resource Adapter** + reseed |
 | Same artifact in dev and CI            | Maybe                  | Maybe                     | Recordings drift           | `agent-e2e verify` runs the same journey suite       |

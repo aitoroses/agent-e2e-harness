@@ -267,6 +267,86 @@ describe("Dev MCP Tool Router", () => {
     await rm(artifactRoot, { recursive: true, force: true });
   });
 
+  it("journey.untilStep lands the managed state at a target step and is deterministic", async () => {
+    const artifactRoot = await mkdtemp(join(tmpdir(), "agent-e2e-router-until-step-"));
+    const journey = defineJourney<RouterHarness>({
+      id: "journey:frames",
+      title: "Frames journey",
+      seed: () => ({ environment: { created: [] } }),
+      profiles: [{ id: "profile:frames", data: {}, isDefault: true }],
+      phases: [
+        {
+          id: "phase:frames",
+          title: "Frames phase",
+          steps: [
+            { id: "step:a", title: "Frame A", execute: async () => ({ status: "passed", observed: { message: "a" } }) },
+            { id: "step:b", title: "Frame B", execute: async () => ({ status: "passed", observed: { message: "b" } }) },
+            { id: "step:c", title: "Frame C", execute: async () => ({ status: "passed", observed: { message: "c" } }) },
+          ],
+        },
+      ],
+    });
+    const harness = createMcpHarnessServer({ journeys: [journey], artifactRoot });
+    const router = createDevMcpToolRouter({ harness });
+
+    await router.callTool("run.begin", {
+      journeyId: "journey:frames",
+      execution: { runId: "frames-run" },
+    });
+
+    // Lands at step:b: runs the phase from its first step up to AND INCLUDING the
+    // target step, and parks the managed state at that frame (results.at(-1)).
+    const landed = await router.callTool("journey.untilStep", {
+      runId: "frames-run",
+      phaseId: "phase:frames",
+      stepId: "step:b",
+    });
+    expect(landed).toMatchObject({
+      status: "ok",
+      tool: "journey.untilStep",
+      results: [
+        expect.objectContaining({ stepId: "step:a", status: "passed" }),
+        expect.objectContaining({ stepId: "step:b", status: "passed", observed: { message: "b" } }),
+      ],
+    });
+    const landedResults = landed.results as Array<{ stepId: string }>;
+    expect(landedResults).toHaveLength(2);
+    expect(landedResults.at(-1)?.stepId).toBe("step:b");
+    // step:c is past the target frame and must not have run.
+    expect(landedResults.some((result) => result.stepId === "step:c")).toBe(false);
+
+    // Deterministic / idempotent: a second identical call lands at the same frame.
+    const again = await router.callTool("journey.untilStep", {
+      runId: "frames-run",
+      phaseId: "phase:frames",
+      stepId: "step:b",
+    });
+    expect((again.results as Array<{ stepId: string }>).map((result) => result.stepId)).toEqual([
+      "step:a",
+      "step:b",
+    ]);
+
+    // Unknown step → coherent not-found envelope (same shape as the other journey tools).
+    await expect(
+      router.callTool("journey.untilStep", {
+        runId: "frames-run",
+        phaseId: "phase:frames",
+        stepId: "step:missing",
+      }),
+    ).resolves.toMatchObject({ status: "not-found", tool: "journey.untilStep", subject: "step" });
+
+    // Unknown phase → coherent not-found envelope.
+    await expect(
+      router.callTool("journey.untilStep", {
+        runId: "frames-run",
+        phaseId: "phase:missing",
+        stepId: "step:a",
+      }),
+    ).resolves.toMatchObject({ status: "not-found", tool: "journey.untilStep", subject: "phase" });
+
+    await rm(artifactRoot, { recursive: true, force: true });
+  });
+
   it("normalizes unsupported harness response status at the Dev MCP seam", async () => {
     const router = createDevMcpToolRouter({
       harness: {

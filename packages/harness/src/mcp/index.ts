@@ -274,14 +274,25 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           if (injectedExecution) runs.set(run.id, executableRun);
           const phase = executableRun.journey.phases.find((candidate) => candidate.id === stringArg(args, 'phaseId'));
           if (!phase) return notFound('phase');
-          const results: StepRunResult<TTypes>[] = [];
-          for (const step of phase.steps) {
-            const result = await runJourneyStep(executableRun, { phaseId: phase.id, stepId: step.id });
-            rememberStepArtifacts(emittedArtifacts, result);
-            results.push(result);
-            if (result.status === 'failed' || result.status === 'error') break;
-          }
-          return { status: 'ok', results, guidance: results.at(-1)?.guidance ?? [] };
+          return runPhaseStepSequence(executableRun, phase.id, phase.steps, emittedArtifacts);
+        }
+
+        case 'runUntilStep': {
+          // Step-granular time travel: run the named phase from its first step up
+          // to AND INCLUDING the target step, mirroring runPhase's contract and
+          // envelope. Reuses the same runJourneyStep machinery as runPhase; the
+          // landed step is results.at(-1) (its stepId === the requested stepId).
+          const run = runs.get(stringArg(args, 'runId'));
+          if (!run) return notFound('run');
+          const injectedExecution = args.execution as TTypes['executionSurface'] | undefined;
+          const executableRun = injectedExecution ? { ...run, execution: injectedExecution } : run;
+          if (injectedExecution) runs.set(run.id, executableRun);
+          const phase = executableRun.journey.phases.find((candidate) => candidate.id === stringArg(args, 'phaseId'));
+          if (!phase) return notFound('phase');
+          const targetStepId = stringArg(args, 'stepId');
+          const targetIndex = phase.steps.findIndex((step) => step.id === targetStepId);
+          if (targetIndex < 0) return notFound('step');
+          return runPhaseStepSequence(executableRun, phase.id, phase.steps.slice(0, targetIndex + 1), emittedArtifacts);
         }
 
         case 'readArtifact': {
@@ -418,6 +429,25 @@ function rememberStepArtifacts<TTypes extends AnyHarnessTypes>(
   result: StepRunResult<TTypes>
 ): void {
   for (const artifact of result.artifacts) emittedArtifacts.set(artifact.id, artifact);
+}
+
+// Shared runner for runPhase and runUntilStep: executes an ordered slice of a
+// phase's steps, stopping early on the first failed/error step, and returns the
+// proof-light envelope both tools expose ({ status, results, guidance }).
+async function runPhaseStepSequence<TTypes extends AnyHarnessTypes>(
+  executableRun: JourneyRun<TTypes>,
+  phaseId: string,
+  steps: readonly { id: string }[],
+  emittedArtifacts: Map<string, ArtifactRef>
+): Promise<{ status: 'ok'; results: StepRunResult<TTypes>[]; guidance: StepRunResult<TTypes>['guidance'] }> {
+  const results: StepRunResult<TTypes>[] = [];
+  for (const step of steps) {
+    const result = await runJourneyStep(executableRun, { phaseId, stepId: step.id });
+    rememberStepArtifacts(emittedArtifacts, result);
+    results.push(result);
+    if (result.status === 'failed' || result.status === 'error') break;
+  }
+  return { status: 'ok', results, guidance: results.at(-1)?.guidance ?? [] };
 }
 
 function notFound(subject: string): McpToolResponse {
