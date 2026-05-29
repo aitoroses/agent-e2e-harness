@@ -43,6 +43,16 @@ const postgres = createPostgresTestcontainersProvider({
 });
 ```
 
+## Quickstart
+
+Scaffold a minimal, runnable setup instead of copying boilerplate:
+
+```sh
+npx agent-e2e init
+```
+
+This writes `agent-e2e.config.ts` (a `defineAgentE2EConfig` with the sample journey wired in) and `journeys/sample.journey.ts` (one phase = state, one proof-light step = frame), then prints the exact next commands (`agent-e2e dev`, then `agent-e2e list` / `agent-e2e call run.begin …`). It is non-destructive — existing files are skipped, not overwritten, unless you pass `--force` — and takes an optional `agent-e2e init [targetDir]`. The generated config omits `browserSessions` so the Dev MCP auto-creates a Playwright session, and carries commented wiring for an explicit `createPlaywrightMcpBrowserSessionManager()` and a stack provider for when you outgrow the defaults. Point `baseUrl` at your app and grow the journey from there; the sections below show the full shapes.
+
 ## Public Exports
 
 ```ts

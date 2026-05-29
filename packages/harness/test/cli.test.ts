@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { defineJourney } from "@agent-e2e/harness/core";
-import { startAgentE2EDevMcp } from "@agent-e2e/harness/dev-mcp";
+import { loadAgentE2EConfig, startAgentE2EDevMcp } from "@agent-e2e/harness/dev-mcp";
 import type { StackProvider } from "@agent-e2e/harness/stack";
 import {
   devMcpCallTimeoutMs,
@@ -19,6 +19,7 @@ import {
   toolResultExitCode,
   WATCH_REEXEC_ENV,
 } from "../src/cli/index.js";
+import { generateScaffoldFiles, parseInitOptions, runInit } from "../src/cli/init.js";
 
 const execFileAsync = promisify(execFile);
 const cliPath = resolve(process.cwd(), "dist/cli/index.js");
@@ -204,6 +205,92 @@ export default {
     expect(toolResultExitCode({ structuredContent: { status: "failed" } })).toBe(1);
     expect(toolResultExitCode({ structuredContent: { status: "not-found" } })).toBe(1);
     expect(toolResultExitCode({ isError: true })).toBe(1);
+  });
+
+  it("documents the init quickstart command", async () => {
+    const top = await execFileAsync("node", [cliPath, "--help"]);
+    expect(top.stdout).toContain("init ");
+
+    const initHelp = await execFileAsync("node", [cliPath, "init", "--help"]);
+    expect(initHelp.stdout).toContain("agent-e2e init [targetDir]");
+    expect(initHelp.stdout).toContain("agent-e2e.config.ts");
+    expect(initHelp.stdout).toContain("journeys/sample.journey.ts");
+    expect(initHelp.stdout).toContain("--force");
+  });
+
+  it("parses init options: positional targetDir + --force, rejects junk", () => {
+    expect(parseInitOptions([])).toEqual({ targetDir: ".", force: false });
+    expect(parseInitOptions(["./app"])).toEqual({ targetDir: "./app", force: false });
+    expect(parseInitOptions(["./app", "--force"])).toEqual({ targetDir: "./app", force: true });
+    expect(parseInitOptions(["-f"])).toEqual({ targetDir: ".", force: true });
+    expect(() => parseInitOptions(["--nope"])).toThrow();
+    expect(() => parseInitOptions(["a", "b"])).toThrow();
+  });
+
+  it("scaffolds a config and a sample journey wired to it", () => {
+    const files = generateScaffoldFiles();
+    const byPath = new Map(files.map((file) => [file.relativePath, file.contents]));
+
+    const config = byPath.get("agent-e2e.config.ts");
+    expect(config).toContain("defineAgentE2EConfig");
+    expect(config).toContain('createSampleJourney');
+    expect(config).toContain("./journeys/sample.journey.js");
+
+    const journey = byPath.get("journeys/sample.journey.ts");
+    expect(journey).toContain("definePlaywrightJourney");
+    expect(journey).toContain('id: "sample:home"');
+    expect(journey).toContain('id: "phase:home"');
+    expect(journey).toContain('id: "step:title"');
+  });
+
+  it("writes both files, is non-destructive, and overwrites only with --force", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-e2e-init-"));
+    const collected: string[] = [];
+    const stdout = { write: (chunk: string) => (collected.push(chunk), true) };
+    const configPath = join(dir, "agent-e2e.config.ts");
+    try {
+      const first = await runInit({ targetDir: dir, force: false }, { stdout });
+      expect(first.map((outcome) => outcome.status)).toEqual(["written", "written"]);
+      expect(existsSync(configPath)).toBe(true);
+      expect(existsSync(join(dir, "journeys", "sample.journey.ts"))).toBe(true);
+
+      // A user edit must survive a re-run without --force.
+      await writeFile(configPath, "// my edits\n", "utf8");
+      const second = await runInit({ targetDir: dir, force: false }, { stdout });
+      expect(second.map((outcome) => outcome.status)).toEqual(["skipped", "skipped"]);
+      expect(await readFile(configPath, "utf8")).toBe("// my edits\n");
+
+      // --force regenerates the scaffold over the edit.
+      const third = await runInit({ targetDir: dir, force: true }, { stdout });
+      expect(third.map((outcome) => outcome.status)).toEqual(["overwritten", "overwritten"]);
+      expect(await readFile(configPath, "utf8")).toContain("defineAgentE2EConfig");
+
+      expect(collected.join("")).toContain("Next steps:");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("scaffolds a config that actually loads and satisfies the public types", async () => {
+    // Scaffold inside the package so the generated `@agent-e2e/harness` imports
+    // resolve to this package's own exports (self-reference); then load the real
+    // TypeScript through the same jiti loader the Dev MCP uses. A passing load
+    // proves the template is live code producing a valid ExecutableJourney, not
+    // dead boilerplate.
+    const dir = await mkdtemp(join(process.cwd(), ".agent-e2e-init-load-"));
+    try {
+      await runInit({ targetDir: dir, force: false }, { stdout: { write: () => true } });
+      const config = await loadAgentE2EConfig({ configPath: join(dir, "agent-e2e.config.ts") });
+      expect(config.journeys).toHaveLength(1);
+      const contract = config.journeys[0]!.toInspectableContract();
+      expect(contract.id).toBe("sample:home");
+      expect(contract.defaultProfileId).toBe("local");
+      expect(contract.phases[0]!.id).toBe("phase:home");
+      expect(contract.phases[0]!.steps[0]!.id).toBe("step:title");
+      expect(contract.phases[0]!.steps[0]!.proofs[0]!.id).toBe("proof:title-present");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("drives a live Dev MCP server through `list` and `call` (no hand-written client)", async () => {

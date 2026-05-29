@@ -98,7 +98,20 @@ Expected:
 "agent-e2e dev"
 ```
 
-**5. Drop an `agent-e2e.config.ts` at the app root** with at least one journey, a stack provider, and a typed resource registry. The examples below show the shapes.
+**5. Scaffold a starting point with `agent-e2e init`.** From the app root:
+
+```sh
+npx agent-e2e init
+```
+
+This writes a minimal, runnable starting point and prints the exact next commands:
+
+```text
+agent-e2e.config.ts          defineAgentE2EConfig with the sample journey wired in
+journeys/sample.journey.ts   one phase (state) + one proof-light step (frame)
+```
+
+`init` is non-destructive: it never overwrites an existing file — it skips it and tells you, so re-running is safe. Pass `--force` to regenerate over your edits, or `agent-e2e init ./some/dir` to scaffold elsewhere. The generated config omits `browserSessions` (the Dev MCP auto-creates a Playwright session) and includes commented wiring for an explicit session manager and a stack provider when you outgrow the defaults. Edit `baseUrl`, then grow the journey toward your real app — the examples below show the full shapes (stack provider, typed resource registry, richer proofs).
 
 **6. Start Dev MCP.** Run:
 
@@ -475,7 +488,7 @@ The v1.0 package exports six entries. All are stable.
 - `@agent-e2e/harness/stack` - stack provider contract, `StackStartContext`, `StackStatusPacket`, `StackLifecyclePhase`, `createStackStartContext`, `createProcessStackProvider`, `allocateTcpPort`.
 - `@agent-e2e/harness/artifacts` - artifact recorder and reader helpers: `createRunArtifacts`, `createRunArtifactRecorder`, `readArtifact`, `resolveArtifactPath`, canonical filenames, and `DEFAULT_AGENT_E2E_ARTIFACT_ROOT`.
 
-The reference CLI is `agent-e2e`. It exposes `agent-e2e dev` for Dev MCP and `agent-e2e verify` for CI. Both accept `--config`, `--cwd`, and `--artifact-root`; `dev` also accepts `--host`, `--port`, and `--path`, while `verify` adds selectors, profiles, workers, reporters, cleanup mode, fail-fast, and warning strictness.
+The reference CLI is `agent-e2e`. `agent-e2e init [targetDir]` scaffolds a minimal, runnable `agent-e2e.config.ts` plus a sample journey to start from (non-destructive; `--force` to overwrite). `agent-e2e dev` runs the Dev MCP server and `agent-e2e verify` runs the CI suite; both accept `--config`, `--cwd`, and `--artifact-root`, `dev` also accepts `--host`, `--port`, and `--path`, while `verify` adds selectors, profiles, workers, reporters, cleanup mode, fail-fast, and warning strictness. `agent-e2e list` and `agent-e2e call <toolName> [jsonArgs]` drive a running Dev MCP server without a hand-written client.
 
 ## Showcase app
 

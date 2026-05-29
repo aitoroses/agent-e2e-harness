@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `agent-e2e init [targetDir]`: a one-command scaffolder that writes a minimal, runnable starting point — `agent-e2e.config.ts` (a `defineAgentE2EConfig` with a sample journey wired in) and `journeys/sample.journey.ts` (one phase = state, one proof-light step = frame) — and prints the exact next commands (`agent-e2e dev`, then `agent-e2e list` / `agent-e2e call run.begin …`). It is idempotent and non-destructive: an existing file is skipped with a notice rather than overwritten, unless `--force` is passed; the report lists what was written vs skipped. The generated config omits `browserSessions` (the Dev MCP auto-creates a Playwright session) and carries commented wiring for an explicit `createPlaywrightMcpBrowserSessionManager()` (which type-checks under strict mode as of 1.4.0) and a stack provider. The generated config type-checks against the public types under strict + `exactOptionalPropertyTypes` and loads through the same jiti loader the Dev MCP uses, so the scaffold is live code rather than dead boilerplate.
+
 ### Changed
 
 ### Deprecated

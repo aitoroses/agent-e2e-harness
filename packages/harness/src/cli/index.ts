@@ -14,6 +14,7 @@ import {
   type VerifyCleanupMode,
   type VerifyReporterMode,
 } from "../verify/index.js";
+import { parseInitOptions, runInit } from "./init.js";
 
 export async function runCli(argv = process.argv.slice(2)): Promise<number> {
   const [command, ...flags] = argv;
@@ -25,6 +26,8 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
     case "-h":
       printHelp();
       return 0;
+    case "init":
+      return await runInitCommand(flags);
     case "dev":
       return await runDevCommand(flags);
     case "attached":
@@ -53,6 +56,15 @@ async function runAttachedCommand(flags: string[]): Promise<number> {
   }
 
   await startAgentE2EAttachedFromConfig(parseAttachedOptions(flags));
+  return 0;
+}
+
+async function runInitCommand(flags: string[]): Promise<number> {
+  if (flags.includes("--help") || flags.includes("-h")) {
+    printInitHelp();
+    return 0;
+  }
+  await runInit(parseInitOptions(flags));
   return 0;
 }
 
@@ -448,11 +460,29 @@ function printHelp(): void {
   process.stdout.write(`agent-e2e
 
 Commands:
+  init     Scaffold a minimal agent-e2e.config.ts and a sample journey
   dev      Start the Dev MCP server from agent-e2e.config.ts
   attached Start Attached Runtime Mode for an externally owned Runtime Target
   verify   Run configured journeys through the CI verify runner
   list     List the running Dev MCP server's tool names
   call     Call a Dev MCP tool and print its result
+`);
+}
+
+function printInitHelp(): void {
+  process.stdout.write(`agent-e2e init [targetDir]
+
+Scaffolds a minimal, runnable harness setup into [targetDir] (default: current
+directory):
+
+  agent-e2e.config.ts          defineAgentE2EConfig with the sample journey wired in
+  journeys/sample.journey.ts   one phase (state) + one proof-light step (frame)
+
+Non-destructive: existing files are left untouched and reported as skipped
+unless --force is passed. Prints what it wrote, what it skipped, and next steps.
+
+Options:
+  -f, --force   Overwrite existing files instead of skipping them
 `);
 }
 
