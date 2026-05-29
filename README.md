@@ -62,7 +62,7 @@ Expected output line:
 added N packages
 ```
 
-**3. Install Bun `>=1.3.0`.** The Dev MCP CLI runs on Bun so `agent-e2e.config.ts` loads directly and the journey registry can hot-reload behind a stable MCP URL.
+**3. Install Bun `>=1.3.14`.** The Dev MCP CLI runs on Bun so `agent-e2e.config.ts` loads directly. `>=1.3.14` is a hard minimum: Bun `<=1.3.5` hangs forever in `PostgreSqlContainer.start()` during PostgreSQL's multi-phase init (initdb -> shutdown -> restart), which breaks any Testcontainers PostgreSQL stack provider. `1.3.14` fixes it.
 
 ```sh
 bun --version
@@ -71,7 +71,7 @@ bun --version
 Expected:
 
 ```text
-1.3.0
+1.3.14
 ```
 
 **4. Add the `dev:mcp` script** to the app's `package.json`:

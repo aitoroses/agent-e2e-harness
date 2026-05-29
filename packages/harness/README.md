@@ -28,7 +28,7 @@ Add optional peers for the integrations you use:
 npm install -D @modelcontextprotocol/sdk playwright
 ```
 
-`@modelcontextprotocol/sdk` is needed for the local Dev MCP HTTP server. `playwright` is needed for browser sessions. Dev MCP uses Bun `>=1.3.0` as the TypeScript runtime for the config and entrypoint. Database clients, containers, queues, and other infrastructure dependencies belong in the consumer app that implements a stack provider.
+`@modelcontextprotocol/sdk` is needed for the local Dev MCP HTTP server. `playwright` is needed for browser sessions. Dev MCP uses Bun `>=1.3.14` as the TypeScript runtime for the config and entrypoint (Bun `<=1.3.5` hangs in Testcontainers PostgreSQL startup, so `>=1.3.14` is a hard minimum). Database clients, containers, queues, and other infrastructure dependencies belong in the consumer app that implements a stack provider.
 
 ## Public Exports
 

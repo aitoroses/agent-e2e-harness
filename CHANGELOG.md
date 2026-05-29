@@ -18,6 +18,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
+## [1.4.0] - 2026-05-29
+
+### Changed
+
+- Bumped the package version to `1.4.0` for the next release (the workspace had drifted to a `0.0.0` repo-root version while `1.3.0` was published).
+- Raised `engines.bun` to `>=1.3.14`. Bun `<=1.3.5` hangs forever in `PostgreSqlContainer.start()` during PostgreSQL's multi-phase init (initdb -> shutdown -> restart); `1.3.14` resolves it. Documented the minimum Bun and the rationale in the README.
+
 ## [1.3.0] - 2026-05-16
 
 ### Added
