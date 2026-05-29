@@ -1,8 +1,18 @@
-import { stat } from "node:fs/promises";
+import { statSync, watch, type FSWatcher } from "node:fs";
+import { dirname } from "node:path";
 import type { AnyHarnessTypes, ResourceAdapter } from "../core/index.js";
 import { createMcpHarnessServer, type McpHarnessServer } from "../mcp/index.js";
 import { loadAgentE2EConfig } from "./config-loader.js";
 import type { AgentE2EDevMcpConfig } from "./index.js";
+
+const RELOAD_SOURCE_EXTENSIONS = [
+  ".ts", ".mts", ".cts", ".tsx",
+  ".js", ".mjs", ".cjs", ".jsx",
+  ".json",
+];
+const RELOAD_IGNORED_SEGMENTS = new Set([
+  "node_modules", "dist", ".git", ".agents-e2e", ".next", ".cache",
+]);
 
 export interface ReloadingHarnessSourceOptions<
   TTypes extends AnyHarnessTypes,
@@ -10,50 +20,78 @@ export interface ReloadingHarnessSourceOptions<
 > {
   configPath: string;
   artifactRoot?: string;
-  logger?: Pick<Console, "warn"> | false;
+  /** Watch the config directory for edits and reload on change. Default true. */
+  watch?: boolean;
+}
+
+export interface ReloadingHarnessSource {
+  currentHarness(): Promise<McpHarnessServer>;
+  /** Stop the filesystem watcher. */
+  close(): void;
 }
 
 /**
- * True only on runtimes where re-importing a module with a cache-busting query
- * actually re-evaluates it. Node honors `import(url?query)`; Bun does NOT —
- * it keys local modules by path and ignores the query, so in-process journey
- * reload is impossible under Bun (the runtime the Dev MCP mandates for `.ts`
- * configs). Under Bun, real reload comes from a process restart — use
- * `agent-e2e dev --watch` (Bun `--watch` restarts on file change behind the
- * same MCP port, and the server disposes the managed stack on exit).
+ * Serves the MCP harness from the consumer config and reloads it in process
+ * when the config or any imported journey source changes — on Node, Bun, or
+ * Deno. jiti (via `loadAgentE2EConfig({ cacheBust: true })`) re-evaluates the
+ * whole module graph from disk, so an edited journey is reflected without a
+ * server restart and without reconnecting the MCP client.
+ *
+ * A recursive watch on the config directory sets a dirty flag (covering journey
+ * files that live outside the config file itself). If the platform does not
+ * support recursive watching, the source falls back to reloading on every read,
+ * which is still correct — just less efficient.
  */
-export function runtimeSupportsInProcessReload(): boolean {
-  return !("Bun" in globalThis);
-}
-
 export function createReloadingHarnessSource<
   TTypes extends AnyHarnessTypes,
   TStackHandle,
->(options: ReloadingHarnessSourceOptions<TTypes, TStackHandle>) {
+>(options: ReloadingHarnessSourceOptions<TTypes, TStackHandle>): ReloadingHarnessSource {
   let cachedHarness: McpHarnessServer | undefined;
+  let dirty = true;
   let cachedMtimeMs = -1;
-  let warnedNoReload = false;
-  const logger = options.logger === false ? undefined : options.logger ?? console;
+  let watcher: FSWatcher | undefined;
+
+  if (options.watch ?? true) {
+    try {
+      watcher = watch(
+        dirname(options.configPath),
+        { recursive: true },
+        (_event, filename) => {
+          if (!filename) {
+            dirty = true;
+            return;
+          }
+          const name = filename.toString();
+          const segments = name.split(/[\\/]/);
+          if (segments.some((segment) => RELOAD_IGNORED_SEGMENTS.has(segment))) return;
+          if (!RELOAD_SOURCE_EXTENSIONS.some((ext) => name.endsWith(ext))) return;
+          dirty = true;
+        },
+      );
+      watcher.unref?.();
+      watcher.on("error", () => {
+        // Watcher died; force per-read reloads so edits are never missed.
+        watcher?.close();
+        watcher = undefined;
+        dirty = true;
+      });
+    } catch {
+      // Recursive watch unsupported on this platform; reload on every read.
+      watcher = undefined;
+    }
+  }
 
   return {
     async currentHarness(): Promise<McpHarnessServer> {
-      const currentMtimeMs = await configMtime(options.configPath);
-      if (cachedHarness && currentMtimeMs === cachedMtimeMs)
-        return cachedHarness;
-
-      if (cachedHarness && !runtimeSupportsInProcessReload()) {
-        // A change was detected, but Bun cannot hot-swap the module graph in
-        // process. Be honest instead of silently serving stale journeys.
-        if (!warnedNoReload) {
-          warnedNoReload = true;
-          logger?.warn(
-            "[agent-e2e] Config change detected, but Bun cannot hot-reload the journey/config modules in process. " +
-              "Restart the Dev MCP server to pick up edits, or run `agent-e2e dev --watch` so Bun restarts it automatically (the managed stack is disposed on exit).",
-          );
-        }
-        cachedMtimeMs = currentMtimeMs;
-        return cachedHarness;
-      }
+      // Reuse the cache only when (a) a watcher is active, (b) no change has
+      // been observed, and (c) the config file's own mtime is unchanged. The
+      // mtime check makes edits to the config file itself reflect immediately
+      // (no dependency on async watch-event delivery); the watcher covers edits
+      // to separately-imported journey files. Without a watcher, always reload.
+      const mtimeMs = configMtimeMs(options.configPath);
+      if (cachedHarness && !dirty && watcher && mtimeMs === cachedMtimeMs) return cachedHarness;
+      dirty = false;
+      cachedMtimeMs = mtimeMs;
 
       const config = await loadAgentE2EConfig<TTypes, TStackHandle>({
         configPath: options.configPath,
@@ -66,8 +104,11 @@ export function createReloadingHarnessSource<
         ...(resourceAdapters.length > 0 ? { resourceAdapters } : {}),
         ...(options.artifactRoot ?? config.artifactRoot ? { artifactRoot: options.artifactRoot ?? config.artifactRoot } : {}),
       });
-      cachedMtimeMs = currentMtimeMs;
       return cachedHarness;
+    },
+    close(): void {
+      watcher?.close();
+      watcher = undefined;
     },
   };
 }
@@ -88,6 +129,10 @@ async function resolveHarness<TTypes extends AnyHarnessTypes, TStackHandle>(
   return typeof harness === "function" ? await harness() : harness;
 }
 
-async function configMtime(path: string): Promise<number> {
-  return (await stat(path)).mtimeMs;
+function configMtimeMs(path: string): number {
+  try {
+    return statSync(path).mtimeMs;
+  } catch {
+    return -1;
+  }
 }

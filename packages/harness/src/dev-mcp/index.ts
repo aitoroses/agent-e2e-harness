@@ -45,13 +45,13 @@ import {
 } from "./browser-workbench-tools.js";
 import {
   createReloadingHarnessSource,
-  runtimeSupportsInProcessReload,
+  type ReloadingHarnessSource,
   type ReloadingHarnessSourceOptions,
 } from "./reloading-harness.js";
 
 export {
   createReloadingHarnessSource,
-  runtimeSupportsInProcessReload,
+  type ReloadingHarnessSource,
   type ReloadingHarnessSourceOptions,
 };
 import { StackInstanceManager, StackInstanceManagerError, stoppedStackStatus } from "./stack-instance-manager.js";
