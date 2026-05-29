@@ -30,6 +30,19 @@ npm install -D @modelcontextprotocol/sdk playwright
 
 `@modelcontextprotocol/sdk` is needed for the local Dev MCP HTTP server. `playwright` is needed for browser sessions. Dev MCP uses Bun `>=1.3.14` as the TypeScript runtime for the config and entrypoint (Bun `<=1.3.5` hangs in Testcontainers PostgreSQL startup, so `>=1.3.14` is a hard minimum). Database clients, containers, queues, and other infrastructure dependencies belong in the consumer app that implements a stack provider.
 
+For the common PostgreSQL case you do not have to hand-write that provider: import `createPostgresTestcontainersProvider` from `@agent-e2e/harness/testcontainers`. Its infra packages (`pg`, `@testcontainers/postgresql`, `testcontainers`) are optional peer dependencies loaded lazily, so they are only required if you actually use this subpath:
+
+```ts
+import { createPostgresTestcontainersProvider } from "@agent-e2e/harness/testcontainers";
+
+const postgres = createPostgresTestcontainersProvider({
+  database: "app",
+  username: "app",
+  password: "app",
+  schemaSql: SCHEMA_SQL,
+});
+```
+
 ## Public Exports
 
 ```ts

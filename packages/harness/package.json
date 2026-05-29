@@ -58,6 +58,10 @@
     "./artifacts": {
       "types": "./dist/artifacts/index.d.ts",
       "default": "./dist/artifacts/index.js"
+    },
+    "./testcontainers": {
+      "types": "./dist/testcontainers/index.d.ts",
+      "default": "./dist/testcontainers/index.js"
     }
   },
   "files": [
@@ -73,7 +77,10 @@
   "peerDependencies": {
     "playwright": "^1.59.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "zod": "^4.2.1"
+    "zod": "^4.2.1",
+    "@testcontainers/postgresql": ">=11.14.0",
+    "pg": ">=8",
+    "testcontainers": ">=11.14.0"
   },
   "bin": {
     "agent-e2e": "./dist/cli/index.js"
@@ -86,6 +93,15 @@
       "optional": true
     },
     "zod": {
+      "optional": true
+    },
+    "@testcontainers/postgresql": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    },
+    "testcontainers": {
       "optional": true
     }
   },
