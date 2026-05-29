@@ -23,7 +23,6 @@
   "author": "Aitor Roses",
   "license": "MIT",
   "engines": {
-    "bun": ">=1.3.14",
     "node": ">=22.0.0"
   },
   "exports": {

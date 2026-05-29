@@ -62,16 +62,16 @@ Expected output line:
 added N packages
 ```
 
-**3. Install Bun `>=1.3.14`.** The Dev MCP CLI runs on Bun so `agent-e2e.config.ts` loads directly. `>=1.3.14` is a hard minimum: Bun `<=1.3.5` hangs forever in `PostgreSqlContainer.start()` during PostgreSQL's multi-phase init (initdb -> shutdown -> restart), which breaks any Testcontainers PostgreSQL stack provider. `1.3.14` fixes it.
+**3. Use Node `>=22` (or Bun).** The Dev MCP CLI is runtime-agnostic: `agent-e2e.config.ts` and the journey files it imports load via [jiti](https://github.com/unjs/jiti), so `.ts` configs run directly on Node, Bun, or Deno — no precompile step and no required runtime switch. Node is the default interpreter and the recommended one (real in-process hot-reload, and ~6s vs ~25s Testcontainers PostgreSQL startup). If you do run on Bun with the Testcontainers PostgreSQL provider, use Bun `>=1.3.14` — Bun `<=1.3.5` hangs in `PostgreSqlContainer.start()`.
 
 ```sh
-bun --version
+node --version
 ```
 
 Expected:
 
 ```text
-1.3.14
+v22.0.0   # or newer
 ```
 
 **4. Add the `dev:mcp` script** to the app's `package.json`:
@@ -448,7 +448,7 @@ Most E2E tools are built around human-authored tests. This harness is built arou
 Three honest trade-offs:
 
 - **You write more upfront.** A journey defines profiles, seed, phases, steps, proofs, and a resource registry. That is more than a Playwright spec or a codegen capture. The payoff is the agent can debug, reseed, and rerun without rewriting any of it, and there is no second test artifact when the proof becomes CI.
-- **You take a runtime dependency on Bun for the CLI.** The CLI loads `agent-e2e.config.ts` directly, and verify can run from the same config in CI. To pick up journey/config edits, run `agent-e2e dev --watch`: Bun restarts the server on file change behind the same MCP URL (Bun cannot hot-swap the module graph in process, so reload is restart-based; the managed stack is disposed on each restart and must be re-started).
+- **The CLI is runtime-agnostic (Node or Bun).** jiti loads `agent-e2e.config.ts` and the journey files it imports directly, and verify runs from the same config in CI. Journey/config edits hot-reload in process behind a stable MCP URL — no restart, no MCP reconnect. (`agent-e2e dev --watch` remains as an optional hard-restart fallback.)
 - **You commit to the harness's domain model.** Journeys, profiles, owned resources, feedback envelopes, and observed payloads are opinionated shapes. If you only need to record a happy path once, codegen is shorter. If you need an agent to discover, debug, fix, and promote a flow without re-explaining it every time, the model pays for itself.
 
 ## Public package surfaces

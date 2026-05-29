@@ -23,16 +23,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - First-class Testcontainers PostgreSQL Stack Provider at the `@agent-e2e/harness/testcontainers` subpath export (`createPostgresTestcontainersProvider`). `pg`, `@testcontainers/postgresql`, and `testcontainers` are optional peer dependencies loaded lazily, so the package-root and `/core` surfaces stay provider-agnostic and consumers no longer copy-paste their own provider. The showcase now consumes this export.
-- `agent-e2e dev --watch`: reloads journey/config edits by re-exec'ing the Dev MCP server under `bun --watch`, which restarts the process on file change behind the same MCP port and disposes the managed stack on each restart. `createReloadingHarnessSource` and `runtimeSupportsInProcessReload` are now re-exported from `@agent-e2e/harness/dev-mcp`.
+- Runtime-agnostic config loading via [jiti](https://github.com/unjs/jiti): `agent-e2e.config.ts` and the journey files it imports now load on Node, Bun, or Deno — no precompile step. The `"Bun" in globalThis` gate that threw for TypeScript configs off Bun is removed.
+- Real in-process journey hot-reload on any runtime: `createReloadingHarnessSource` watches the config directory and re-evaluates the changed TypeScript graph through jiti (fresh instance, module cache disabled), so `journey.list`/`journey.inspect` reflect an edited journey or config file on the next call behind a stable MCP URL — no server restart, no MCP reconnect. `agent-e2e dev --watch` is kept as an optional hard-restart fallback. `createReloadingHarnessSource` / `ReloadingHarnessSource` are re-exported from `@agent-e2e/harness/dev-mcp`.
 
 ### Fixed
 
-- Documented honest hot-reload behavior. Previously the docs claimed Bun hot-reloads journeys behind a stable URL so "new MCP calls see the updated journeys"; in practice Bun ignores cache-busting `import(url?query)` queries (it keys local modules by path), so `createReloadingHarnessSource` could not hot-swap edited journey/config modules in process under the one runtime the Dev MCP mandates. The source now detects this and warns once instead of silently serving stale journeys, and reload is delivered through restart (`dev --watch`). In-process reload still works under Node, where the query bust is honored.
+- Honest, working hot-reload. Earlier docs claimed Bun hot-reloads journeys behind a stable URL, but Bun ignores cache-busting `import(url?query)` queries (it keys local modules by path), so in-process reload never worked under Bun — the runtime the Dev MCP previously mandated. Loading consumer TypeScript through jiti instead delivers genuine in-process reload on every runtime (a known limitation: only TypeScript journeys reload in process; plain `.mjs`/`.js` journeys go through native ESM, which is globally URL-cached — keep journeys in `.ts`).
 
 ### Changed
 
 - Bumped the package version to `1.4.0` for the next release (the workspace had drifted to a `0.0.0` repo-root version while `1.3.0` was published).
-- Raised `engines.bun` to `>=1.3.14`. Bun `<=1.3.5` hangs forever in `PostgreSqlContainer.start()` during PostgreSQL's multi-phase init (initdb -> shutdown -> restart); `1.3.14` resolves it. Documented the minimum Bun and the rationale in the README.
+- The Dev MCP is now runtime-agnostic. Removed the hard `bun` engine requirement (`engines` keeps `node >=22`); the bin shebang is now `node`. Node is the default and recommended runtime (real in-process hot-reload, and ~6s vs ~25s Testcontainers PostgreSQL startup). Bun still works; if you run on Bun with the Testcontainers PostgreSQL provider, use Bun `>=1.3.14` (Bun `<=1.3.5` hangs in `PostgreSqlContainer.start()`) — this is now advisory, not enforced.
 
 ### Security
 

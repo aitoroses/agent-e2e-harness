@@ -47,7 +47,9 @@ describe("Agent E2E CLI", () => {
     expect(stdout).toContain("agent-e2e.config.ts");
     expect(stdout).toContain("--artifact-root");
     expect(stdout).toContain("--watch");
-    expect(stdout).toContain("bun --watch");
+    expect(stdout).toContain("in-process hot-reload");
+    expect(stdout).toContain("fallback");
+    expect(stdout).toContain("Node or");
     expect(stdout).not.toContain("--no-reload");
     expect(stdout).not.toContain("--manifest");
   });
@@ -57,7 +59,7 @@ describe("Agent E2E CLI", () => {
     expect(plan).toEqual({ mode: "serve", flags: ["--port", "4000"] });
   });
 
-  it("re-execs under bun --watch when --watch is requested fresh", () => {
+  it("re-execs under the runtime's --watch when --watch is requested fresh", () => {
     const plan = planDevInvocation(["--watch", "--port", "4000"], {});
     expect(plan.mode).toBe("reexec");
     if (plan.mode === "reexec") {

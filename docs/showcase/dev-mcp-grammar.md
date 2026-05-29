@@ -4,7 +4,7 @@ The default Dev MCP grammar defines reusable Agent E2E Harness vocabulary for lo
 
 ## Default mode
 
-- Dev MCP runs over local Streamable HTTP for standard MCP clients; `agent-e2e dev --watch` restarts the server on source change behind the same endpoint for journey iteration (restart-based reload, since Bun cannot hot-swap modules in process).
+- Dev MCP runs over local Streamable HTTP for standard MCP clients; TypeScript journey/config edits hot-reload in process via jiti behind the same endpoint (no restart). `agent-e2e dev --watch` is an optional hard-restart fallback.
 - Dev MCP owns Playwright browser sessions; callers never pass `browser` or `page` over MCP.
 - Dev browser sessions are headed by default.
 - Verify/CI may run headless by default.

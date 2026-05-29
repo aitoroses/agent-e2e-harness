@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import {
   startAgentE2EAttachedFromConfig,
   startAgentE2EDevMcpFromConfig,
@@ -56,7 +56,7 @@ async function runDevCommand(flags: string[]): Promise<number> {
   }
 
   const plan = planDevInvocation(flags, process.env);
-  if (plan.mode === "reexec") return await reexecUnderBunWatch(plan.argv);
+  if (plan.mode === "reexec") return await reexecUnderRuntimeWatch(plan.argv);
 
   await startAgentE2EDevMcpFromConfig(parseDevOptions(plan.flags));
   return 0;
@@ -69,12 +69,12 @@ export type DevInvocationPlan =
   | { mode: "reexec"; argv: string[] };
 
 /**
- * Decide whether `dev` should serve directly or re-exec itself under
- * `bun --watch`. Bun cannot hot-reload the journey/config module graph in
- * process (it ignores cache-busting import queries), so `--watch` delegates
- * reloading to Bun, which restarts the whole process on file change behind the
- * same MCP port. The re-exec sets a sentinel env var so the restarted child
- * (which still carries `--watch`) serves instead of re-exec'ing again.
+ * Decide whether `dev` should serve directly or re-exec itself under the
+ * runtime's `--watch`. The default path is in-process hot-reload (jiti
+ * re-evaluates edited journey/config modules), so `--watch` is an opt-in
+ * fallback that hard-restarts the whole process on file change behind the same
+ * MCP port. The re-exec sets a sentinel env var so the restarted child (which
+ * still carries `--watch`) serves instead of re-exec'ing again.
  */
 export function planDevInvocation(
   flags: string[],
@@ -89,10 +89,10 @@ export function planDevInvocation(
   return { mode: "serve", flags: withoutWatch };
 }
 
-async function reexecUnderBunWatch(argv: string[]): Promise<number> {
+async function reexecUnderRuntimeWatch(argv: string[]): Promise<number> {
   const { spawn } = await import("node:child_process");
-  // process.execPath is the Bun binary when the bin runs under its `env bun`
-  // shebang, which is required for TypeScript configs anyway.
+  // Re-exec under the same runtime's --watch (Node or Bun both support it);
+  // process.execPath is whichever interpreter launched the CLI.
   const child = spawn(process.execPath, argv, {
     stdio: "inherit",
     env: { ...process.env, [WATCH_REEXEC_ENV]: "1" },
@@ -326,7 +326,9 @@ Commands:
 function printDevHelp(): void {
   process.stdout.write(`agent-e2e dev
 
-Starts the Bun-backed Agent E2E Dev MCP server from agent-e2e.config.ts.
+Starts the Agent E2E Dev MCP server from agent-e2e.config.ts. Runs on Node or
+Bun (TypeScript config/journeys are loaded via jiti). Journey and config edits
+hot-reload in process automatically, behind a stable MCP URL.
 
 Options:
   -c, --config <path>       Config path, defaults to agent-e2e.config.ts
@@ -335,10 +337,10 @@ Options:
       --port <port>         MCP port, defaults to 3766
       --path <path>         MCP HTTP path, defaults to /mcp
       --artifact-root <dir> Artifact root, defaults to .agents-e2e/artifacts
-      --watch               Reload on file change by restarting under bun --watch.
-                            Bun cannot hot-swap the journey/config module graph
-                            in process, so this restarts the server (same MCP
-                            port) and disposes the managed stack on each restart.
+      --watch               Optional fallback: hard-restart the server on file
+                            change via the runtime's --watch, instead of the
+                            default in-process hot-reload. Disposes the managed
+                            stack on each restart.
 `);
 }
 

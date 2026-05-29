@@ -28,7 +28,7 @@ Add optional peers for the integrations you use:
 npm install -D @modelcontextprotocol/sdk playwright
 ```
 
-`@modelcontextprotocol/sdk` is needed for the local Dev MCP HTTP server. `playwright` is needed for browser sessions. Dev MCP uses Bun `>=1.3.14` as the TypeScript runtime for the config and entrypoint (Bun `<=1.3.5` hangs in Testcontainers PostgreSQL startup, so `>=1.3.14` is a hard minimum). Database clients, containers, queues, and other infrastructure dependencies belong in the consumer app that implements a stack provider.
+`@modelcontextprotocol/sdk` is needed for the local Dev MCP HTTP server. `playwright` is needed for browser sessions. The Dev MCP is runtime-agnostic: TypeScript config and journeys load via jiti on Node `>=22`, Bun, or Deno — Bun is no longer required. (If you do run on Bun with the Testcontainers PostgreSQL provider, use Bun `>=1.3.14`; Bun `<=1.3.5` hangs in PostgreSQL startup.) Database clients, containers, queues, and other infrastructure dependencies belong in the consumer app that implements a stack provider.
 
 For the common PostgreSQL case you do not have to hand-write that provider: import `createPostgresTestcontainersProvider` from `@agent-e2e/harness/testcontainers`. Its infra packages (`pg`, `@testcontainers/postgresql`, `testcontainers`) are optional peer dependencies loaded lazily, so they are only required if you actually use this subpath:
 
@@ -206,7 +206,7 @@ Then run the Dev MCP server through the package CLI:
 }
 ```
 
-The CLI creates the MCP harness, default Playwright browser sessions, `.agents-e2e/artifacts`, and signal handlers. Bun runs `agent-e2e.config.ts` directly. To iterate on journeys, run `agent-e2e dev --watch`: Bun restarts the server on any source change behind the same MCP URL, so MCP clients keep the same endpoint. (Reload is restart-based, not in-process: Bun keys modules by path and ignores cache-busting import queries, so an edited journey cannot be hot-swapped into a running process. On each restart the managed stack is disposed and must be re-started with `stack.start`. Under Node, `createReloadingHarnessSource` does reload edited modules in process, but the Dev MCP CLI requires Bun for `.ts` configs.) It uses `127.0.0.1:3766/mcp` by default; set `AGENT_E2E_MCP_PORT` to override it. App URLs come from `stack.start` / `stack.status` service URLs, not from Dev MCP configuration.
+The CLI creates the MCP harness, default Playwright browser sessions, `.agents-e2e/artifacts`, and signal handlers. jiti loads `agent-e2e.config.ts` (and the journey files it imports) directly on Node or Bun. Edits to those TypeScript modules hot-reload **in process**: `createReloadingHarnessSource` watches the config directory and re-evaluates the changed graph through jiti, so `journey.list`/`journey.inspect` reflect the edit on the next call behind the same MCP URL — no server restart, no MCP reconnect. (Caveat: jiti owns TypeScript; plain `.mjs`/`.js` journeys go through native ESM, which is globally cached by URL and does not in-process reload — keep journeys in `.ts`. `agent-e2e dev --watch` is an optional hard-restart fallback that disposes the managed stack on each restart.) It uses `127.0.0.1:3766/mcp` by default; set `AGENT_E2E_MCP_PORT` to override it. App URLs come from `stack.start` / `stack.status` service URLs, not from Dev MCP configuration.
 
 ## Proof Loop
 
