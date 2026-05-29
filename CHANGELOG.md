@@ -29,6 +29,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Bumped the package version to `1.4.0` for the next release (the workspace had drifted to a `0.0.0` repo-root version while `1.3.0` was published).
 - Raised `engines.bun` to `>=1.3.14`. Bun `<=1.3.5` hangs forever in `PostgreSqlContainer.start()` during PostgreSQL's multi-phase init (initdb -> shutdown -> restart); `1.3.14` resolves it. Documented the minimum Bun and the rationale in the README.
 
+### Security
+
+- `stack.start`, `stack.status`, `stack.list`, and `stack.stop` no longer echo the raw provider handle or secret-bearing status into the MCP tool transcript. The `stack.start` handle is now projected to top-level safe scalars only — nested provider internals (docker modems, sockets, the full Testcontainers `inspectResult` with env/mounts/overlay paths) are dropped wholesale, and secret-keyed fields (passwords, tokens, DSNs, connection strings) are redacted. Stack status responses mask the URL of any endpoint declared `sensitive: true` (and matching service URLs). In-process journey handlers still receive the unredacted execution surface, so behavior is unchanged; only the agent-visible transcript and artifacts are sanitized.
+
 ## [1.3.0] - 2026-05-16
 
 ### Added

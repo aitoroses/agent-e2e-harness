@@ -531,7 +531,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             return ok(name, {
               stackId: started.stackId,
               handle: serializableHandle(started.handle),
-              stack: started.stack,
+              stack: redactStackStatusPacket(started.stack),
               allocations: started.allocations,
             });
           } catch (error) {
@@ -543,13 +543,16 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
         case "stack.list": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
-          return ok(name, { stacks: await stackInstances!.list() });
+          const listed = await stackInstances!.list();
+          return ok(name, {
+            stacks: listed.map((item) => ({ ...item, stack: redactStackStatusPacket(item.stack) })),
+          });
         }
         case "stack.status": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
           try {
-            return ok(name, { stack: await stackInstances!.status(optionalStackId(args)) });
+            return ok(name, { stack: redactStackStatusPacket(await stackInstances!.status(optionalStackId(args))) });
           } catch (error) {
             if (error instanceof StackInstanceManagerError)
               return blocked(name, error.code, error.message);
@@ -629,7 +632,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
           try {
-            return ok(name, { stack: await stackInstances!.stop(optionalStackId(args)) });
+            return ok(name, { stack: redactStackStatusPacket(await stackInstances!.stop(optionalStackId(args))) });
           } catch (error) {
             if (error instanceof StackInstanceManagerError)
               return blocked(name, error.code, error.message);
@@ -1510,31 +1513,78 @@ function missingDependency(
   );
 }
 
+export const REDACTED_VALUE = "[redacted]";
+
+const SECRET_KEY_PATTERN =
+  /(pass(word|phrase|wd)?|secret|token|credential|api[-_]?key|access[-_]?key|private[-_]?key|connection[-_]?(string|uri|url)|\bdsn\b)/i;
+
+const DROP_HANDLE_FIELD = Symbol("drop-handle-field");
+
+/**
+ * Project a provider handle into a transcript-safe summary before it crosses
+ * the MCP tool boundary. Only top-level scalar fields (and arrays of scalars)
+ * survive; nested provider objects — docker modems, sockets, the full
+ * Testcontainers `inspectResult` with env, mounts, and overlay paths — are
+ * dropped wholesale, and any field whose key looks like a secret (passwords,
+ * tokens, DSNs, connection strings) is redacted. This stops `stack.start` from
+ * echoing the entire handle (tens of KB, potential secret leak) into the tool
+ * transcript while keeping the declared-safe `stack` status packet as the
+ * primary, structured view of the running stack.
+ */
 function serializableHandle(handle: unknown): unknown {
   if (!isRecord(handle)) return handle;
-  return Object.fromEntries(
-    Object.entries(handle)
-      .filter(([, value]) => isSerializableHandleField(value))
-      .map(([key, value]) => [key, serializableHandleValue(value)]),
-  );
+  const projection: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(handle)) {
+    if (SECRET_KEY_PATTERN.test(key)) {
+      projection[key] = REDACTED_VALUE;
+      continue;
+    }
+    const scalar = scalarHandleField(value);
+    if (scalar !== DROP_HANDLE_FIELD) projection[key] = scalar;
+  }
+  return projection;
 }
 
-function serializableHandleValue(value: unknown): unknown {
+function scalarHandleField(value: unknown): unknown {
+  if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean")
+    return value;
   if (Array.isArray(value))
-    return value.filter(isSerializableHandleField).map(serializableHandleValue);
-  if (isRecord(value)) return serializableHandle(value);
-  return value;
+    return value.filter(
+      (item) =>
+        item === null ||
+        typeof item === "string" ||
+        typeof item === "number" ||
+        typeof item === "boolean",
+    );
+  // Drop nested objects, functions, and other provider internals entirely.
+  return DROP_HANDLE_FIELD;
 }
 
-function isSerializableHandleField(value: unknown): boolean {
-  return (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean" ||
-    Array.isArray(value) ||
-    (isRecord(value) && !("pid" in value || "stdin" in value || "stdout" in value))
-  );
+/**
+ * Redact secret-bearing endpoints from a stack status packet before it is
+ * returned in a tool response or written to an artifact. Endpoints declared
+ * `sensitive: true` (e.g. a PostgreSQL DSN) have their URL masked, and any
+ * service URL that matches a sensitive endpoint URL is masked too. In-process
+ * journey handlers receive the unredacted execution surface separately, so this
+ * only affects what the agent and artifacts see.
+ */
+function redactStackStatusPacket(packet: StackStatusPacket): StackStatusPacket {
+  const sensitiveUrls = new Set<string>();
+  const services = packet.services.map((service) => {
+    const next = { ...service };
+    if (service.endpoints) {
+      next.endpoints = service.endpoints.map((endpoint) => {
+        if (endpoint.sensitive && typeof endpoint.url === "string") {
+          sensitiveUrls.add(endpoint.url);
+          return { ...endpoint, url: REDACTED_VALUE };
+        }
+        return endpoint;
+      });
+    }
+    if (typeof next.url === "string" && sensitiveUrls.has(next.url)) next.url = REDACTED_VALUE;
+    return next;
+  });
+  return { ...packet, services };
 }
 
 function stringArg(args: Record<string, unknown>, name: string): string {
