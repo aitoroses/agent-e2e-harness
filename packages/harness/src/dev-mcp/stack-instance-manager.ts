@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import {
   createStackExecutionSurface,
   createStackStartContext,
@@ -8,6 +9,11 @@ import {
   type StackProvider,
   type StackStatusPacket,
 } from "../stack/index.js";
+
+/** Total start attempts (first try + retries) when none is configured. */
+const DEFAULT_STACK_START_MAX_ATTEMPTS = 2;
+/** Delay between bounded start retries when none is configured. */
+const DEFAULT_STACK_START_RETRY_BACKOFF_MS = 750;
 
 export class StackInstanceManagerError extends Error {
   constructor(
@@ -51,11 +57,19 @@ export class StackInstanceManager<TStackHandle> {
 
   constructor(
     private readonly provider: StackProvider<TStackHandle>,
-    private readonly options: { artifactRoot: string },
+    private readonly options: {
+      artifactRoot: string;
+      /** Total start attempts (first try + retries); minimum 1. */
+      startMaxAttempts?: number;
+      /** Delay between bounded start retries, in milliseconds. */
+      startRetryBackoffMs?: number;
+    },
   ) {}
 
   async start(input: { stackId?: string } = {}): Promise<StackInstanceStartResult<TStackHandle>> {
     const stackId = input.stackId ?? this.generateStackId();
+    // Deterministic precondition: never retry an id collision, and never invoke
+    // the provider for one. This guard must run before the bounded retry loop.
     if (this.handles.has(stackId)) {
       throw new StackInstanceManagerError(
         "stack-id-already-running",
@@ -63,6 +77,41 @@ export class StackInstanceManager<TStackHandle> {
       );
     }
 
+    // A freshly-started Dev MCP server's very first stack.start hits cold-start
+    // timing — Docker image pull/daemon warmup, a cold dev-server compile gated
+    // by a readiness probe — which intermittently trips the readiness deadline
+    // and throws. The next call always succeeds because the image is cached and
+    // the dev server is warm, so a small bounded retry lets the first call
+    // self-heal. We only retry the provider start/readiness path: a
+    // StackInstanceManagerError is a deterministic precondition failure and is
+    // surfaced immediately. Each failed attempt fully tears its own handle down
+    // (see startOnce), so retrying cannot leak or stack handles.
+    const maxAttempts = Math.max(1, this.options.startMaxAttempts ?? DEFAULT_STACK_START_MAX_ATTEMPTS);
+    const backoffMs = Math.max(0, this.options.startRetryBackoffMs ?? DEFAULT_STACK_START_RETRY_BACKOFF_MS);
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await this.startOnce(stackId);
+      } catch (error) {
+        if (error instanceof StackInstanceManagerError) throw error;
+        lastError = error;
+        if (attempt < maxAttempts && backoffMs > 0) await delay(backoffMs);
+      }
+    }
+
+    const reason = lastError instanceof Error ? lastError.message : String(lastError);
+    // Rethrow as a plain Error (not a StackInstanceManagerError) so the Dev MCP
+    // router maps it to a coherent `failed` envelope rather than a `blocked`
+    // precondition envelope.
+    throw new Error(
+      maxAttempts > 1
+        ? `Managed stack failed to start after ${maxAttempts} attempts. Last error: ${reason}`
+        : reason,
+    );
+  }
+
+  private async startOnce(stackId: string): Promise<StackInstanceStartResult<TStackHandle>> {
     const context = createStackStartContext({
       mode: "dev",
       stackId,

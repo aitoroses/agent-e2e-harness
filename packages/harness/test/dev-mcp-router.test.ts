@@ -1539,12 +1539,14 @@ describe("Dev MCP Tool Router", () => {
         };
       },
     };
-    const router = createDevMcpToolRouter({ stackProvider: provider });
+    // maxAttempts: 1 isolates this cleanup test from the bounded-retry default.
+    const router = createDevMcpToolRouter({ stackProvider: provider, stackStart: { maxAttempts: 1 } });
 
     await expect(router.callTool("stack.start")).resolves.toMatchObject({
-      status: "error",
+      status: "failed",
       tool: "stack.start",
-      error: "readiness timeout",
+      code: "stack-start-failed",
+      message: "readiness timeout",
     });
     await expect(router.callTool("stack.list")).resolves.toMatchObject({
       status: "ok",
@@ -1570,14 +1572,110 @@ describe("Dev MCP Tool Router", () => {
         throw new Error("cleanup stop failed");
       },
     };
-    const router = createDevMcpToolRouter({ stackProvider: provider });
+    const router = createDevMcpToolRouter({ stackProvider: provider, stackStart: { maxAttempts: 1 } });
 
     await expect(router.callTool("stack.start")).resolves.toMatchObject({
-      status: "error",
+      status: "failed",
       tool: "stack.start",
-      error: expect.stringContaining("readiness timeout"),
+      code: "stack-start-failed",
+      message: expect.stringContaining("readiness timeout"),
     });
     expect(events).toEqual(["start", "status", "stop:stack-1"]);
+  });
+
+  it("retries a cold-start readiness failure and self-heals on a later attempt", async () => {
+    const events: string[] = [];
+    let attempts = 0;
+    const provider: StackProvider<{ id: string }> = {
+      id: "cold-start-stack",
+      start: async () => {
+        attempts += 1;
+        events.push(`start:${attempts}`);
+        return { id: `stack-${attempts}` };
+      },
+      // First readiness probe trips the cold-start deadline; the warm retry passes.
+      status: (handle) => {
+        events.push(`status:${handle.id}`);
+        if (attempts < 2) throw new Error("readiness timeout (cold start)");
+        return {
+          status: "ready",
+          summary: `ready:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        };
+      },
+      stop: async (handle) => {
+        events.push(`stop:${handle.id}`);
+        return {
+          status: "stopped",
+          summary: `stopped:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        };
+      },
+    };
+    // backoffMs: 0 keeps the test fast; maxAttempts defaults to 2.
+    const router = createDevMcpToolRouter({ stackProvider: provider, stackStart: { backoffMs: 0 } });
+
+    await expect(router.callTool("stack.start", { stackId: "warm" })).resolves.toMatchObject({
+      status: "ok",
+      tool: "stack.start",
+      stackId: "warm",
+      stack: { status: "ready" },
+    });
+    expect(attempts).toBe(2);
+    // The failed first attempt tore its own handle down before the retry.
+    expect(events).toEqual([
+      "start:1",
+      "status:stack-1",
+      "stop:stack-1",
+      "start:2",
+      "status:stack-2",
+    ]);
+  });
+
+  it("returns a coherent failed envelope after exhausting bounded start retries", async () => {
+    let attempts = 0;
+    const provider: StackProvider<{ id: string }> = {
+      id: "always-failing-stack",
+      start: async () => {
+        attempts += 1;
+        return { id: `stack-${attempts}` };
+      },
+      status: () => {
+        throw new Error("readiness timeout");
+      },
+      stop: async (handle) => ({
+        status: "stopped",
+        summary: `stopped:${handle.id}`,
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({
+      stackProvider: provider,
+      stackStart: { maxAttempts: 3, backoffMs: 0 },
+    });
+
+    const result = await router.callTool("stack.start", { stackId: "doomed" });
+    // Coherent envelope: a stable discriminator plus code+message, never the
+    // generic {status:"error"} shape that omits them and trips clients reading
+    // result.stack.
+    expect(result).toMatchObject({
+      status: "failed",
+      tool: "stack.start",
+      code: "stack-start-failed",
+      message: expect.stringContaining("after 3 attempts"),
+    });
+    expect(result.message).toContain("readiness timeout");
+    expect("stack" in result).toBe(false);
+    expect(attempts).toBe(3);
   });
 
   it("disposes all remaining Stack Instances and browser sessions", async () => {

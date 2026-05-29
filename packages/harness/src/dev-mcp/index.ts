@@ -197,6 +197,14 @@ export interface DevMcpToolRouterOptions<TStackHandle = unknown> {
   runtimeTargets?: readonly RuntimeTarget[];
   runtimeTargetId?: string;
   artifactRoot?: string;
+  /**
+   * Bounded retry for `stack.start` cold-start timing. A freshly-started server's
+   * first `stack.start` can trip provider readiness (Docker warmup, cold dev-server
+   * compile) and fail even though an immediate retry succeeds; a small bounded retry
+   * lets the first call self-heal. Defaults to 2 attempts with a 750ms backoff. Set
+   * `maxAttempts: 1` to disable.
+   */
+  stackStart?: { maxAttempts?: number; backoffMs?: number };
 }
 
 export interface DevMcpToolRouter {
@@ -244,6 +252,7 @@ export interface AgentE2EDevMcpConfig<
   browserSessions?: DevMcpBrowserSessionController | false;
   harness?: DevMcpHarnessProvider;
   artifactRoot?: string;
+  stackStart?: { maxAttempts?: number; backoffMs?: number };
   host?: string;
   port?: number;
   path?: string;
@@ -404,6 +413,7 @@ export async function startAgentE2EDevMcp<
     allowedOrigins: resolvedConfig.allowedOrigins ?? localDevOrigins(host),
   };
   if (resolvedConfig.stackProvider) serverOptions.stackProvider = resolvedConfig.stackProvider;
+  if (resolvedConfig.stackStart) serverOptions.stackStart = resolvedConfig.stackStart;
   if (resolvedConfig.runtimeTargets) serverOptions.runtimeTargets = resolvedConfig.runtimeTargets;
   if (resolvedConfig.runtimeTargetId) serverOptions.runtimeTargetId = resolvedConfig.runtimeTargetId;
   if (browserSessions) serverOptions.browserSessions = browserSessions;
@@ -547,6 +557,12 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
   const stackInstances = options.stackProvider
     ? new StackInstanceManager(options.stackProvider, {
         artifactRoot: options.artifactRoot ?? DEFAULT_AGENT_E2E_ARTIFACT_ROOT,
+        ...(options.stackStart?.maxAttempts !== undefined
+          ? { startMaxAttempts: options.stackStart.maxAttempts }
+          : {}),
+        ...(options.stackStart?.backoffMs !== undefined
+          ? { startRetryBackoffMs: options.stackStart.backoffMs }
+          : {}),
       })
     : undefined;
   const runStackBindings = new Map<string, {
@@ -601,7 +617,10 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           } catch (error) {
             if (error instanceof StackInstanceManagerError)
               return blocked(name, error.code, error.message);
-            throw error;
+            // A provider start/readiness failure (including bounded-retry
+            // exhaustion) must still produce a coherent envelope with code and
+            // message, never the generic {status:"error"} shape that omits them.
+            return failed(name, "stack-start-failed", error instanceof Error ? error.message : String(error));
           }
         }
         case "stack.list": {
@@ -620,7 +639,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           } catch (error) {
             if (error instanceof StackInstanceManagerError)
               return blocked(name, error.code, error.message);
-            throw error;
+            return failed(name, "stack-status-failed", error instanceof Error ? error.message : String(error));
           }
         }
         case "stack.logs": {
@@ -700,7 +719,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           } catch (error) {
             if (error instanceof StackInstanceManagerError)
               return blocked(name, error.code, error.message);
-            throw error;
+            return failed(name, "stack-stop-failed", error instanceof Error ? error.message : String(error));
           }
         }
         case "runtime.list": {
