@@ -6,7 +6,19 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { isCliEntrypoint, isLongLivedCliCommand, planDevInvocation, WATCH_REEXEC_ENV } from "../src/cli/index.js";
+import { defineJourney } from "@agent-e2e/harness/core";
+import { startAgentE2EDevMcp } from "@agent-e2e/harness/dev-mcp";
+import type { StackProvider } from "@agent-e2e/harness/stack";
+import {
+  devMcpCallTimeoutMs,
+  extractToolText,
+  isCliEntrypoint,
+  isLongLivedCliCommand,
+  parseCallInvocation,
+  planDevInvocation,
+  toolResultExitCode,
+  WATCH_REEXEC_ENV,
+} from "../src/cli/index.js";
 
 const execFileAsync = promisify(execFile);
 const cliPath = resolve(process.cwd(), "dist/cli/index.js");
@@ -154,5 +166,82 @@ export default {
     const { stdout } = await execFileAsync("node", [link, "--help"], { cwd: dir });
     expect(stdout).toContain("agent-e2e");
     expect(stdout).toContain("Commands:");
+  });
+
+  it("documents list and call as the canonical Dev MCP driver", async () => {
+    const top = await execFileAsync("node", [cliPath, "--help"]);
+    expect(top.stdout).toContain("list ");
+    expect(top.stdout).toContain("call ");
+    const callHelp = await execFileAsync("node", [cliPath, "call", "--help"]);
+    expect(callHelp.stdout).toContain("agent-e2e call <toolName> [jsonArgs]");
+    expect(callHelp.stdout).toContain("AGENT_E2E_MCP_CALL_TIMEOUT_MS");
+  });
+
+  it("resolves the per-call MCP timeout from env with a generous default", () => {
+    expect(devMcpCallTimeoutMs({})).toBe(300_000);
+    expect(devMcpCallTimeoutMs({ AGENT_E2E_MCP_CALL_TIMEOUT_MS: "5000" })).toBe(5000);
+    expect(() => devMcpCallTimeoutMs({ AGENT_E2E_MCP_CALL_TIMEOUT_MS: "nope" })).toThrow();
+  });
+
+  it("parses call invocations: tool required, default {}, JSON object only", () => {
+    expect(parseCallInvocation([])).toMatchObject({ ok: false });
+    expect(parseCallInvocation(["stack.list"])).toEqual({ ok: true, toolName: "stack.list", args: {} });
+    expect(parseCallInvocation(["run.begin", '{"journeyId":"x"}'])).toEqual({
+      ok: true,
+      toolName: "run.begin",
+      args: { journeyId: "x" },
+    });
+    expect(parseCallInvocation(["t", "{bad json"])).toMatchObject({ ok: false });
+    expect(parseCallInvocation(["t", "[1,2]"])).toMatchObject({ ok: false }); // not an object
+  });
+
+  it("extracts text content and maps tool status to an exit code", () => {
+    expect(extractToolText({ content: [{ type: "text", text: "a" }, { type: "text", text: "b" }] })).toBe("a\nb");
+    expect(extractToolText({ content: [{ type: "image" }] as never })).toBeUndefined();
+    expect(extractToolText({})).toBeUndefined();
+    expect(toolResultExitCode({ structuredContent: { status: "ok" } })).toBe(0);
+    expect(toolResultExitCode({ structuredContent: { status: "blocked" } })).toBe(0);
+    expect(toolResultExitCode({ structuredContent: { status: "failed" } })).toBe(1);
+    expect(toolResultExitCode({ structuredContent: { status: "not-found" } })).toBe(1);
+    expect(toolResultExitCode({ isError: true })).toBe(1);
+  });
+
+  it("drives a live Dev MCP server through `list` and `call` (no hand-written client)", async () => {
+    const journey = defineJourney({
+      id: "cli:demo",
+      title: "CLI demo",
+      profiles: [{ id: "default", data: {}, isDefault: true }],
+      phases: [{ id: "p", title: "P", steps: [{ id: "s", title: "S", execute: async () => ({ status: "passed" as const }) }] }],
+    });
+    const stackProvider: StackProvider<{ id: string }> = {
+      id: "cli-demo-stack",
+      async start() { return { id: "h" }; },
+      status() { return { status: "ready", summary: "ready", services: [], artifacts: [], warnings: [], errors: [] }; },
+      stop() { return { status: "stopped", summary: "stopped", services: [], artifacts: [], warnings: [], errors: [] }; },
+    };
+    const server = await startAgentE2EDevMcp({
+      journeys: [journey],
+      stackProvider,
+      browserSessions: false,
+      port: 0,
+      installSignalHandlers: false,
+      logger: false,
+    });
+    const env = { ...process.env, AGENT_E2E_MCP_URL: server.url };
+    try {
+      const list = await execFileAsync("node", [cliPath, "list"], { env });
+      const names = JSON.parse(list.stdout) as string[];
+      expect(names).toEqual(expect.arrayContaining(["stack.list", "journey.list", "run.begin"]));
+
+      const call = await execFileAsync("node", [cliPath, "call", "stack.list", "{}"], { env });
+      expect(JSON.parse(call.stdout)).toMatchObject({ status: "ok", tool: "stack.list", stacks: [] });
+
+      // Unknown tool -> non-zero exit.
+      await expect(execFileAsync("node", [cliPath, "call", "does.not.exist", "{}"], { env })).rejects.toMatchObject({
+        code: 1,
+      });
+    } finally {
+      await server.close();
+    }
   });
 });

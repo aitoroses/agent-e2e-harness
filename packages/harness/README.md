@@ -262,7 +262,17 @@ Stack-specific exploration belongs to the stack provider. Providers declare tool
 
 Use returned artifact refs to inspect failures instead of relying on terminal scrollback.
 
-Starting `agent-e2e dev` only proves the server booted. A proof run requires tool calls. For a fresh or remote agent session without this MCP registered, `mcporter` is the portable dynamic client path:
+Starting `agent-e2e dev` only proves the server booted. A proof run requires tool calls. The CLI ships its own MCP client, so you do not have to hand-write one or register the server first — `agent-e2e list` and `agent-e2e call` are the canonical way to drive the running server:
+
+```sh
+agent-e2e list                                   # tool names exposed by the running server
+agent-e2e call stack.start '{"stackId":"dev"}'   # call a tool with JSON args (defaults to {})
+agent-e2e call run.begin '{"journeyId":"my:journey","stackId":"dev"}'
+```
+
+`list`/`call` resolve the endpoint from the same config as `dev` (`AGENT_E2E_MCP_HOST/PORT/PATH`, or a full `AGENT_E2E_MCP_URL` override). `call` prints the tool's text result (JSON fallback), exits non-zero on a tool error, and uses a 300000ms per-call timeout (`AGENT_E2E_MCP_CALL_TIMEOUT_MS`) since `stack.start` exceeds the MCP SDK's 60s default. This replaces the previous "copy a ~50-line mcp-call.ts client" recipe.
+
+For a fresh or remote agent session that prefers a portable dynamic client, `mcporter` is an alternative:
 
 ```sh
 mcporter list http://127.0.0.1:3766/mcp --schema --json --allow-http

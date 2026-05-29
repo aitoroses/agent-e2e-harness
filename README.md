@@ -346,7 +346,16 @@ The Browser Workbench is the browser-side exploration surface. Use `browser.snap
 
 `journey.inspect` returns the full contract for one journey: phases, steps, proofs, profiles, and descriptions. Agents use it to plan, humans use it to read, and CI uses it to diff.
 
-For a fresh or remote agent session that does not already have this MCP server registered, use `mcporter` as a portable dynamic client. Local HTTP endpoints require `--allow-http`:
+The CLI ships its own MCP client, so driving the running server is a one-liner — no hand-written client, no registration step:
+
+```sh
+agent-e2e list                                   # tool names exposed by the running server
+agent-e2e call stack.start '{"stackId":"dev"}'   # JSON args optional (defaults to {})
+```
+
+`list`/`call` use the same endpoint config as `dev` (`AGENT_E2E_MCP_HOST/PORT/PATH`, or `AGENT_E2E_MCP_URL`); `call` prints the tool's text result, exits non-zero on a tool error, and allows a generous per-call timeout (`AGENT_E2E_MCP_CALL_TIMEOUT_MS`, default 300000) for slow tools like `stack.start`.
+
+For a fresh or remote agent session that prefers a portable dynamic client, `mcporter` also works. Local HTTP endpoints require `--allow-http`:
 
 ```sh
 mcporter list http://127.0.0.1:3766/mcp --schema --json --allow-http

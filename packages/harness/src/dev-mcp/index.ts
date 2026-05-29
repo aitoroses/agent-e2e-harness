@@ -119,6 +119,44 @@ export const DEFAULT_DEV_MCP_HOST = "127.0.0.1";
 export const DEFAULT_DEV_MCP_PORT = 3766;
 export const DEFAULT_DEV_MCP_PATH = "/mcp";
 export const DEFAULT_AGENT_E2E_DIR = ".agents-e2e";
+
+export interface DevMcpEndpoint {
+  host: string;
+  port: number;
+  path: string;
+  url: string;
+}
+
+export interface DevMcpEndpointOverrides {
+  host?: string | undefined;
+  port?: number | undefined;
+  path?: string | undefined;
+}
+
+/**
+ * Single source of truth for the Dev MCP endpoint. Precedence: explicit
+ * overrides (e.g. config) -> AGENT_E2E_MCP_HOST/PORT/PATH -> built-in defaults.
+ * Both the `dev` server and the `list`/`call` client resolve through here so a
+ * server and a client launched with the same environment agree on the URL.
+ */
+export function resolveDevMcpEndpoint(
+  overrides: DevMcpEndpointOverrides = {},
+  env: NodeJS.ProcessEnv = process.env,
+): DevMcpEndpoint {
+  const host = overrides.host ?? env.AGENT_E2E_MCP_HOST ?? DEFAULT_DEV_MCP_HOST;
+  const port = overrides.port ?? optionalPort(env.AGENT_E2E_MCP_PORT) ?? DEFAULT_DEV_MCP_PORT;
+  const path = overrides.path ?? env.AGENT_E2E_MCP_PATH ?? DEFAULT_DEV_MCP_PATH;
+  return { host, port, path, url: `http://${host}:${port}${path}` };
+}
+
+/**
+ * URL an MCP client should connect to. `AGENT_E2E_MCP_URL` wins as a full
+ * override; otherwise it is derived from the same endpoint config as the server.
+ */
+export function resolveDevMcpClientUrl(env: NodeJS.ProcessEnv = process.env): string {
+  return env.AGENT_E2E_MCP_URL ?? resolveDevMcpEndpoint({}, env).url;
+}
+
 export const DEFAULT_AGENT_E2E_ARTIFACT_ROOT = ".agents-e2e/artifacts";
 export interface DevMcpToolResponse {
   status: DevMcpToolStatus;
@@ -327,9 +365,11 @@ export async function startAgentE2EDevMcp<
 ): Promise<AgentE2EDevMcpServerHandle> {
   const resolvedConfig = config ?? await loadAgentE2EConfig<TTypes, TStackHandle>();
   const artifactRoot = resolvedConfig.artifactRoot ?? process.env.AGENT_E2E_ARTIFACT_ROOT ?? DEFAULT_AGENT_E2E_ARTIFACT_ROOT;
-  const host = resolvedConfig.host ?? process.env.AGENT_E2E_MCP_HOST ?? DEFAULT_DEV_MCP_HOST;
-  const port = resolvedConfig.port ?? optionalPort(process.env.AGENT_E2E_MCP_PORT) ?? DEFAULT_DEV_MCP_PORT;
-  const path = resolvedConfig.path ?? process.env.AGENT_E2E_MCP_PATH ?? DEFAULT_DEV_MCP_PATH;
+  const { host, port, path } = resolveDevMcpEndpoint({
+    host: resolvedConfig.host,
+    port: resolvedConfig.port,
+    path: resolvedConfig.path,
+  });
   const resourceAdapters = resourceAdaptersFromConfig(resolvedConfig);
   const harness = resolvedConfig.harness ?? createMcpHarnessServer<TTypes>({
     journeys: resolvedConfig.journeys,

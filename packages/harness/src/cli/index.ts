@@ -2,6 +2,7 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  resolveDevMcpClientUrl,
   startAgentE2EAttachedFromConfig,
   startAgentE2EDevMcpFromConfig,
   type StartAgentE2EAttachedFromConfigOptions,
@@ -30,6 +31,10 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       return await runAttachedCommand(flags);
     case "verify":
       return await runVerifyCommand(flags);
+    case "list":
+      return await runListCommand(flags);
+    case "call":
+      return await runCallCommand(flags);
     default:
       process.stderr.write(`Unknown command: ${command}\n\n`);
       printHelp();
@@ -62,6 +67,130 @@ async function runDevCommand(flags: string[]): Promise<number> {
 
   await startAgentE2EDevMcpFromConfig(parseDevOptions(plan.flags));
   return 0;
+}
+
+export const DEFAULT_MCP_CALL_TIMEOUT_MS = 300_000;
+
+/** Per-call MCP timeout. stack.start (image pull + migrations + boot) routinely
+ * exceeds the MCP SDK's 60s default, so the floor is generous and overridable. */
+export function devMcpCallTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.AGENT_E2E_MCP_CALL_TIMEOUT_MS;
+  if (raw === undefined || raw === "") return DEFAULT_MCP_CALL_TIMEOUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0)
+    throw new Error(`Invalid AGENT_E2E_MCP_CALL_TIMEOUT_MS: ${raw}`);
+  return parsed;
+}
+
+export type CallInvocation =
+  | { ok: true; toolName: string; args: Record<string, unknown> }
+  | { ok: false; error: string };
+
+/** Parse `call <toolName> [jsonArgs]`. jsonArgs defaults to {}; invalid JSON or a
+ * missing tool name yields a clear error instead of a thrown stack trace. */
+export function parseCallInvocation(flags: readonly string[]): CallInvocation {
+  const [toolName, jsonArgs] = flags;
+  if (!toolName) return { ok: false, error: "call requires <toolName>. Usage: agent-e2e call <toolName> [jsonArgs]" };
+  if (jsonArgs === undefined) return { ok: true, toolName, args: {} };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonArgs);
+  } catch (error) {
+    return { ok: false, error: `Invalid JSON for <jsonArgs>: ${error instanceof Error ? error.message : String(error)}` };
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+    return { ok: false, error: "<jsonArgs> must be a JSON object" };
+  return { ok: true, toolName, args: parsed as Record<string, unknown> };
+}
+
+interface McpToolCallResult {
+  isError?: boolean;
+  content?: Array<{ type: string; text?: string }>;
+  structuredContent?: { status?: string; [key: string]: unknown };
+}
+
+/** Join the text content blocks of a tool result, or undefined if none. */
+export function extractToolText(result: McpToolCallResult): string | undefined {
+  const text = (result.content ?? [])
+    .filter((block) => block.type === "text" && typeof block.text === "string")
+    .map((block) => block.text)
+    .join("\n");
+  return text.length > 0 ? text : undefined;
+}
+
+const TOOL_ERROR_STATUSES = new Set(["error", "failed", "not-found"]);
+
+/** Exit code for a tool result: non-zero on a protocol error or an error-status
+ * response (the Dev MCP router reports status in structuredContent). */
+export function toolResultExitCode(result: McpToolCallResult): number {
+  if (result.isError === true) return 1;
+  const status = result.structuredContent?.status;
+  return typeof status === "string" && TOOL_ERROR_STATUSES.has(status) ? 1 : 0;
+}
+
+interface MinimalMcpClient {
+  connect(transport: unknown): Promise<void>;
+  listTools(): Promise<{ tools: Array<{ name: string }> }>;
+  callTool(
+    request: { name: string; arguments: Record<string, unknown> },
+    resultSchema: undefined,
+    options: { timeout: number },
+  ): Promise<McpToolCallResult>;
+  close(): Promise<void>;
+}
+
+/** Single MCP-client construction site, shared by `list` and `call`. Lazily
+ * imports the SDK (an optional peer dependency) and always closes the client. */
+async function withDevMcpClient<T>(fn: (client: MinimalMcpClient) => Promise<T>): Promise<T> {
+  const { Client } = (await import("@modelcontextprotocol/sdk/client/index.js")) as unknown as {
+    Client: new (info: { name: string; version: string }) => MinimalMcpClient;
+  };
+  const { StreamableHTTPClientTransport } = (await import("@modelcontextprotocol/sdk/client/streamableHttp.js")) as unknown as {
+    StreamableHTTPClientTransport: new (url: URL) => unknown;
+  };
+  const url = resolveDevMcpClientUrl();
+  const client = new Client({ name: "agent-e2e-cli", version: "0.0.0" });
+  await client.connect(new StreamableHTTPClientTransport(new URL(url)));
+  try {
+    return await fn(client);
+  } finally {
+    await client.close();
+  }
+}
+
+async function runListCommand(flags: string[]): Promise<number> {
+  if (flags.includes("--help") || flags.includes("-h")) {
+    printListHelp();
+    return 0;
+  }
+  return await withDevMcpClient(async (client) => {
+    const { tools } = await client.listTools();
+    process.stdout.write(`${JSON.stringify(tools.map((tool) => tool.name), null, 2)}\n`);
+    return 0;
+  });
+}
+
+async function runCallCommand(flags: string[]): Promise<number> {
+  if (flags.includes("--help") || flags.includes("-h")) {
+    printCallHelp();
+    return 0;
+  }
+  const invocation = parseCallInvocation(flags);
+  if (!invocation.ok) {
+    process.stderr.write(`${invocation.error}\n`);
+    return 1;
+  }
+  const timeout = devMcpCallTimeoutMs();
+  return await withDevMcpClient(async (client) => {
+    const result = await client.callTool(
+      { name: invocation.toolName, arguments: invocation.args },
+      undefined,
+      { timeout },
+    );
+    const text = extractToolText(result);
+    process.stdout.write(`${text ?? JSON.stringify(result, null, 2)}\n`);
+    return toolResultExitCode(result);
+  });
 }
 
 export const WATCH_REEXEC_ENV = "AGENT_E2E_WATCH_REEXEC";
@@ -322,6 +451,41 @@ Commands:
   dev      Start the Dev MCP server from agent-e2e.config.ts
   attached Start Attached Runtime Mode for an externally owned Runtime Target
   verify   Run configured journeys through the CI verify runner
+  list     List the running Dev MCP server's tool names
+  call     Call a Dev MCP tool and print its result
+`);
+}
+
+function printListHelp(): void {
+  process.stdout.write(`agent-e2e list
+
+Lists the tool names exposed by a running Dev MCP server (start one with
+\`agent-e2e dev\`). Connects an MCP client over Streamable HTTP.
+
+Endpoint:
+  AGENT_E2E_MCP_URL                Full endpoint URL override
+                                   (default derived from AGENT_E2E_MCP_HOST/PORT/PATH
+                                   -> http://127.0.0.1:3766/mcp)
+`);
+}
+
+function printCallHelp(): void {
+  process.stdout.write(`agent-e2e call <toolName> [jsonArgs]
+
+Calls one Dev MCP tool on a running server and prints its text result (falling
+back to pretty-printed JSON). Exits non-zero on a tool error.
+
+Arguments:
+  <toolName>   A tool from \`agent-e2e list\` (e.g. stack.start, run.begin, journey.list)
+  [jsonArgs]   JSON object of arguments, defaults to {}
+
+Environment:
+  AGENT_E2E_MCP_URL                Full endpoint URL override
+  AGENT_E2E_MCP_CALL_TIMEOUT_MS    Per-call timeout in ms (default 300000)
+
+Examples:
+  agent-e2e call stack.list '{}'
+  agent-e2e call run.begin '{"journeyId":"my:journey","stackId":"stack-1"}'
 `);
 }
 
