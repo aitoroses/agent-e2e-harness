@@ -15,6 +15,12 @@ import { runPageCode, runPlaywrightCode, effectiveTimeout, type BrowserCodeRunIn
 import { createBrowserRefStore, descriptorForSelector, locatorFor, type BrowserLocatorDescriptor, type BrowserRefStore, type BrowserRefTarget } from "./refs.js";
 import { createBrowserSignalBuffer, type BrowserConsoleLevel, type BrowserConsoleReadInput, type BrowserNetworkReadInput, type BrowserSignalBuffer } from "./signals.js";
 
+// Re-export the shared browser-action input types so the Dev MCP browser
+// session controller contract can be typed against the same public vocabulary
+// the manager already uses (see DevMcpBrowserWorkbenchController). These are
+// pure data shapes with no Playwright runtime dependency.
+export type { BrowserCodeRunInput, BrowserCodeRunResult } from "./code-runner.js";
+
 export interface AgentE2EPlaywrightMcpApiContract {
   surface: "playwright-backed-mcp-contracts";
 }

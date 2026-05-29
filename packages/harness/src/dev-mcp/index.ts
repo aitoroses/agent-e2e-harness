@@ -43,6 +43,20 @@ import {
   implementedBrowserWorkbenchToolNames,
   type DevMcpBrowserWorkbenchController,
 } from "./browser-workbench-tools.js";
+// Type-only import of the shared public browser-action input shapes. These are
+// pure data interfaces (no Playwright runtime), so referencing them keeps the
+// dev-mcp layer Playwright-package-free; the boundary check forbids the
+// `playwright`/`@playwright/*` packages, not this relative type import.
+import type {
+  BrowserActInput,
+  BrowserCodeRunInput,
+  BrowserFindInput,
+  BrowserGetInput,
+  BrowserOpenInput,
+  BrowserScreenshotInput,
+  BrowserSignalToolInput,
+  BrowserWaitInput,
+} from "../playwright-mcp/index.js";
 import {
   createReloadingHarnessSource,
   type ReloadingHarnessSource,
@@ -165,7 +179,7 @@ export interface DevMcpToolResponse {
 }
 
 export interface DevMcpBrowserSessionController extends DevMcpBrowserWorkbenchController {
-  open: (input?: Record<string, unknown>) => Promise<unknown>;
+  open: (input?: BrowserOpenInput) => Promise<unknown>;
   snapshot: (browserSessionId: string) => Promise<unknown>;
   close: (browserSessionId: string) => Promise<unknown>;
   closeAll?: () => Promise<unknown>;
@@ -748,7 +762,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
         case "browser.open":
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
-          return ok(name, { result: await options.browserSessions.open(args) });
+          return ok(name, { result: await options.browserSessions.open(browserToolInput<BrowserOpenInput>(args)) });
         case "browser.snapshot": {
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
@@ -762,7 +776,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             return missingDependency(name, "browserSessions");
           if (!options.browserSessions.find)
             return blocked(name, "browser-find-not-wired", "The browser session controller does not expose browser.find.");
-          return ok(name, { result: await options.browserSessions.find(args) });
+          return ok(name, { result: await options.browserSessions.find(browserToolInput<BrowserFindInput>(args)) });
         }
         case "browser.close": {
           if (!options.browserSessions)
@@ -786,7 +800,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
               "The browser session controller does not expose browser actions.",
             );
           return ok(name, {
-            result: await options.browserSessions.act(args),
+            result: await options.browserSessions.act(browserToolInput<BrowserActInput>(args)),
           });
         }
         case "browser.wait": {
@@ -794,42 +808,42 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             return missingDependency(name, "browserSessions");
           if (!options.browserSessions.wait)
             return blocked(name, "browser-wait-not-wired", "The browser session controller does not expose conditional browser waits.");
-          return ok(name, { result: await options.browserSessions.wait(args) });
+          return ok(name, { result: await options.browserSessions.wait(browserToolInput<BrowserWaitInput>(args)) });
         }
         case "browser.get": {
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
           if (!options.browserSessions.get)
             return blocked(name, "browser-get-not-wired", "The browser session controller does not expose targeted browser reads.");
-          return ok(name, { result: await options.browserSessions.get(args) });
+          return ok(name, { result: await options.browserSessions.get(browserToolInput<BrowserGetInput>(args)) });
         }
         case "browser.eval": {
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
           if (!options.browserSessions.evaluate)
             return blocked(name, "browser-eval-not-wired", "The browser session controller does not expose page-context code execution.");
-          return ok(name, { result: await options.browserSessions.evaluate(args) });
+          return ok(name, { result: await options.browserSessions.evaluate(browserToolInput<BrowserCodeRunInput>(args)) });
         }
         case "browser.playwright": {
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
           if (!options.browserSessions.playwright)
             return blocked(name, "browser-playwright-not-wired", "The browser session controller does not expose direct Playwright code execution.");
-          return ok(name, { result: await options.browserSessions.playwright(args) });
+          return ok(name, { result: await options.browserSessions.playwright(browserToolInput<BrowserCodeRunInput>(args)) });
         }
         case "browser.console": {
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
           if (!options.browserSessions.console)
             return blocked(name, "browser-console-not-wired", "The browser session controller does not expose browser console signal reads.");
-          return ok(name, { result: await options.browserSessions.console(args) });
+          return ok(name, { result: await options.browserSessions.console(browserToolInput<BrowserSignalToolInput>(args)) });
         }
         case "browser.network": {
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
           if (!options.browserSessions.network)
             return blocked(name, "browser-network-not-wired", "The browser session controller does not expose browser network signal reads.");
-          return ok(name, { result: await options.browserSessions.network(args) });
+          return ok(name, { result: await options.browserSessions.network(browserToolInput<BrowserSignalToolInput>(args)) });
         }
         case "browser.screenshot": {
           if (!options.browserSessions)
@@ -841,7 +855,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
               "The browser session controller does not expose screenshot capture.",
             );
           return ok(name, {
-            result: await options.browserSessions.screenshot(args),
+            result: await options.browserSessions.screenshot(browserToolInput<BrowserScreenshotInput>(args)),
           });
         }
         default:
@@ -1642,6 +1656,19 @@ function stringArg(args: Record<string, unknown>, name: string): string {
   if (typeof value !== "string" || value.length === 0)
     throw new Error(`Missing required string argument: ${name}`);
   return value;
+}
+
+/**
+ * Bridge MCP tool arguments to a typed browser-action input. Arguments arrive
+ * as `Record<string, unknown>` and are validated against each tool's Zod
+ * `inputSchema` (see {@link inputSchemaForTool}) by the MCP SDK before dispatch,
+ * so this assertion narrows already-validated data without changing it. The
+ * controller methods are typed against the shared public input shapes so that
+ * implementations like `createPlaywrightMcpBrowserSessionManager()` are
+ * assignable to the config without a wider `Record<string, unknown>` signature.
+ */
+function browserToolInput<T>(args: Record<string, unknown>): T {
+  return args as unknown as T;
 }
 
 function optionalStringArg(args: Record<string, unknown>, name: string): string | undefined {

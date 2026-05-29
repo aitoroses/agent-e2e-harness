@@ -208,6 +208,23 @@ Then run the Dev MCP server through the package CLI:
 
 The CLI creates the MCP harness, default Playwright browser sessions, `.agents-e2e/artifacts`, and signal handlers. jiti loads `agent-e2e.config.ts` (and the journey files it imports) directly on Node or Bun. Edits to those TypeScript modules hot-reload **in process**: `createReloadingHarnessSource` watches the config directory and re-evaluates the changed graph through jiti, so `journey.list`/`journey.inspect` reflect the edit on the next call behind the same MCP URL — no server restart, no MCP reconnect. (Caveat: jiti owns TypeScript; plain `.mjs`/`.js` journeys go through native ESM, which is globally cached by URL and does not in-process reload — keep journeys in `.ts`. `agent-e2e dev --watch` is an optional hard-restart fallback that disposes the managed stack on each restart.) It uses `127.0.0.1:3766/mcp` by default; set `AGENT_E2E_MCP_PORT` to override it. App URLs come from `stack.start` / `stack.status` service URLs, not from Dev MCP configuration.
 
+### Browser sessions
+
+By default the Dev MCP auto-creates a Playwright-backed Browser Workbench, so you can leave `browserSessions` unset. To customize it (for example, to point sessions at a different artifact root), wire the public factory explicitly — this type-checks under strict mode:
+
+```ts
+import { defineAgentE2EConfig } from '@agent-e2e/harness/dev-mcp';
+import { createPlaywrightMcpBrowserSessionManager } from '@agent-e2e/harness/playwright-mcp';
+
+export default defineAgentE2EConfig({
+  journeys: [checkoutJourney],
+  // Explicit wiring is supported; omit this field to use the same default.
+  browserSessions: createPlaywrightMcpBrowserSessionManager({ artifactRoot: '.agents-e2e/artifacts' })
+});
+```
+
+Pass `browserSessions: false` to disable the Browser Workbench entirely (no Playwright launch). `DevMcpBrowserSessionController` method parameters are typed against the shared public input shapes (`BrowserActInput`, `BrowserFindInput`, …) so a custom controller gets full call-site type-safety too.
+
 ## Proof Loop
 
 Drive the app through a standard MCP client configured with the Dev MCP URL:
