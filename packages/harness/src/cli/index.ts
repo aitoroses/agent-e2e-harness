@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   startAgentE2EAttachedFromConfig,
   startAgentE2EDevMcpFromConfig,
@@ -390,7 +392,35 @@ Options:
 `);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+/**
+ * True when this module is the process entrypoint, comparing *resolved real
+ * paths*. A naive `import.meta.url === file://${process.argv[1]}` check breaks
+ * for symlinked bins: when launched through `node_modules/.bin/agent-e2e` (a
+ * `file:`/workspace dep) or `npx`, Node leaves `process.argv[1]` as the symlink
+ * path while `import.meta.url` is the realpath, so they never match and the CLI
+ * silently no-ops. Resolving both with `realpathSync` makes every invocation —
+ * direct, symlinked, or npx — run.
+ */
+export function isCliEntrypoint(metaUrl: string, argv1: string | undefined): boolean {
+  if (!argv1) return false;
+  let modulePath: string;
+  try {
+    modulePath = fileURLToPath(metaUrl);
+  } catch {
+    return false;
+  }
+  return realpathOrSelf(modulePath) === realpathOrSelf(argv1);
+}
+
+function realpathOrSelf(candidate: string): string {
+  try {
+    return realpathSync(candidate);
+  } catch {
+    return candidate;
+  }
+}
+
+if (isCliEntrypoint(import.meta.url, process.argv[1])) {
   runCli().then((code) => {
     if (isLongLivedCliCommand(process.argv[2])) process.exitCode = code;
     else process.exit(code);
