@@ -75,12 +75,12 @@
     "test": "npm run build && vitest run"
   },
   "peerDependencies": {
-    "playwright": "^1.59.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "zod": "^4.2.1",
     "@testcontainers/postgresql": ">=11.14.0",
     "pg": ">=8",
-    "testcontainers": ">=11.14.0"
+    "playwright": "^1.59.1",
+    "testcontainers": ">=11.14.0",
+    "zod": "^4.2.1"
   },
   "bin": {
     "agent-e2e": "./dist/cli/index.js"
@@ -107,5 +107,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "jiti": "^2.7.0"
   }
 }

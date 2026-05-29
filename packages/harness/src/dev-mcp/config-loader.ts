@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
-import { extname, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { resolve } from "node:path";
+import { createJiti, type Jiti } from "jiti";
 import type { AnyHarnessTypes } from "../core/index.js";
 import type { AgentE2EDevMcpConfig } from "./index.js";
 
@@ -18,6 +18,19 @@ export interface LoadAgentE2EConfigOptions {
   cacheBust?: boolean;
 }
 
+// jiti loads consumer TypeScript (config + imported journeys) on any runtime —
+// Node, Bun, or Deno — so the Dev MCP no longer requires Bun. A shared instance
+// is reused for cached loads; cache-busting reloads get a fresh instance with
+// the in-memory module cache disabled so the whole journey/config graph
+// re-evaluates from disk (real in-process hot reload), while fsCache keeps
+// transpilation fast.
+let sharedJiti: Jiti | undefined;
+
+function getJiti(cacheBust: boolean): Jiti {
+  if (cacheBust) return createJiti(import.meta.url, { fsCache: true, moduleCache: false });
+  return (sharedJiti ??= createJiti(import.meta.url, { fsCache: true, moduleCache: true }));
+}
+
 export async function loadAgentE2EConfig<
   TTypes extends AnyHarnessTypes = AnyHarnessTypes,
   TStackHandle = unknown,
@@ -25,10 +38,8 @@ export async function loadAgentE2EConfig<
   options: LoadAgentE2EConfigOptions = {},
 ): Promise<AgentE2EDevMcpConfig<TTypes, TStackHandle>> {
   const configPath = resolveAgentE2EConfigPath(options);
-  assertSupportedConfigRuntime(configPath);
-
-  const href = pathToFileURL(configPath).href;
-  const imported = await import(options.cacheBust ? `${href}?mtime=${Date.now()}` : href);
+  const jiti = getJiti(options.cacheBust ?? false);
+  const imported = await jiti.import<Record<string, unknown>>(configPath);
   const config = (imported.default ?? imported.config ?? imported) as AgentE2EDevMcpConfig<TTypes, TStackHandle>;
   if (!config || !Array.isArray(config.journeys))
     throw new Error(`Agent E2E config must export { journeys } from ${configPath}`);
@@ -47,13 +58,4 @@ export function resolveAgentE2EConfigPath(options: LoadAgentE2EConfigOptions = {
       `Could not find Agent E2E config. Expected one of: ${DEFAULT_DEV_MCP_CONFIG_FILES.join(", ")}`,
     );
   return configPath;
-}
-
-function assertSupportedConfigRuntime(configPath: string): void {
-  const extension = extname(configPath);
-  if (![".ts", ".mts", ".cts"].includes(extension)) return;
-  if ("Bun" in globalThis) return;
-  throw new Error(
-    `TypeScript Agent E2E config files require Bun as the Dev MCP runtime. Run the Dev MCP entrypoint with Bun: ${configPath}`,
-  );
 }
