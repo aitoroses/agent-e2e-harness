@@ -1758,6 +1758,124 @@ describe("Dev MCP Tool Router", () => {
     expect(attempts).toBe(3);
   });
 
+  it("attaches self-diagnosing per-service diagnostics (redacted) to a failed start", async () => {
+    // A provider whose status reports a `failed` packet: postgres is ready but
+    // vite never compiled. The diagnostics must pin the culprit and carry the
+    // tail of ITS logs — with any secret in those logs redacted.
+    const provider: StackProvider<{ id: string }> = {
+      id: "diag-stack",
+      start: async () => ({ id: "h" }),
+      status: () => ({
+        status: "failed",
+        summary: "vite failed to compile",
+        services: [
+          { id: "postgres", status: "ready", url: "http://127.0.0.1:5432" },
+          { id: "vite", status: "failed" },
+        ],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+      logs: (_handle, input) => ({
+        status: "ok",
+        summary: `logs:${input.serviceId}`,
+        serviceId: input.serviceId,
+        stream: "combined",
+        tail: input.tail,
+        entries:
+          input.serviceId === "vite"
+            ? [
+                { message: "error: Cannot find module './canonicalRoutes'" },
+                { message: "DATABASE_URL=postgres://admin:s3cr3t@db:5432/app" },
+                { message: "auth issued token=abcSECRET123 for worker" },
+              ]
+            : [],
+        truncated: false,
+      }),
+      stop: async (handle) => ({
+        status: "stopped",
+        summary: `stopped:${handle.id}`,
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({
+      stackProvider: provider,
+      stackStart: { maxAttempts: 2, backoffMs: 0 },
+    });
+
+    const result = await router.callTool("stack.start", { stackId: "diag" });
+    expect(result).toMatchObject({
+      status: "failed",
+      tool: "stack.start",
+      code: "stack-start-failed",
+    });
+
+    const diagnostics = result.diagnostics as {
+      attempts: number;
+      services: Array<{ id: string; status: string; logsTail: string[] }>;
+      note?: string;
+    };
+    expect(diagnostics.attempts).toBe(2);
+
+    const postgres = diagnostics.services.find((service) => service.id === "postgres");
+    const vite = diagnostics.services.find((service) => service.id === "vite");
+    // The ready service carries no logs — only the culprit does.
+    expect(postgres).toMatchObject({ status: "ready", logsTail: [] });
+    expect(vite?.status).toBe("failed");
+    expect(vite?.logsTail.length).toBeGreaterThan(0);
+
+    // The data points straight at the cause (external compile failure, not an
+    // internal init-ordering bug).
+    const tail = (vite?.logsTail ?? []).join("\n");
+    expect(tail).toContain("Cannot find module './canonicalRoutes'");
+
+    // Redaction holds: no DSN credential or token leaks through the log tail.
+    expect(tail).not.toContain("s3cr3t");
+    expect(tail).not.toContain("abcSECRET123");
+    expect(tail).toContain("[redacted]");
+  });
+
+  it("surfaces attempts > 1 on the ok envelope when a cold start self-heals", async () => {
+    let attempts = 0;
+    const provider: StackProvider<{ id: string }> = {
+      id: "self-heal-stack",
+      start: async () => {
+        attempts += 1;
+        return { id: `stack-${attempts}` };
+      },
+      status: (handle) => {
+        if (attempts < 2) throw new Error("readiness timeout (cold start)");
+        return {
+          status: "ready",
+          summary: `ready:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        };
+      },
+      stop: async (handle) => ({
+        status: "stopped",
+        summary: `stopped:${handle.id}`,
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({ stackProvider: provider, stackStart: { backoffMs: 0 } });
+
+    // attempts > 1 makes the bounded-retry self-heal visible instead of silent.
+    await expect(router.callTool("stack.start", { stackId: "warm" })).resolves.toMatchObject({
+      status: "ok",
+      tool: "stack.start",
+      attempts: 2,
+    });
+  });
+
   it("disposes all remaining Stack Instances and browser sessions", async () => {
     const events: string[] = [];
     let started = 0;

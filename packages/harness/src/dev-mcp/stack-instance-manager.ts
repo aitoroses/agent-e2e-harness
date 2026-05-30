@@ -7,6 +7,7 @@ import {
   type StackLogsInput,
   type StackLogsOutput,
   type StackProvider,
+  type StackServiceStatus,
   type StackStatusPacket,
 } from "../stack/index.js";
 
@@ -14,6 +15,8 @@ import {
 const DEFAULT_STACK_START_MAX_ATTEMPTS = 2;
 /** Delay between bounded start retries when none is configured. */
 const DEFAULT_STACK_START_RETRY_BACKOFF_MS = 750;
+/** Lines of log tail captured per non-ready service on a failed start. */
+const DIAGNOSTIC_LOG_TAIL = 20;
 
 export class StackInstanceManagerError extends Error {
   constructor(
@@ -25,11 +28,65 @@ export class StackInstanceManagerError extends Error {
   }
 }
 
+/** Per-service startup diagnostic. `logsTail` is raw (the router redacts it). */
+export interface StackStartServiceDiagnostic {
+  id: string;
+  status: StackServiceStatus["status"];
+  /** Tail of the service's startup logs — populated only for non-ready services. */
+  logsTail: string[];
+}
+
+/**
+ * Self-diagnosing context for a failed `stack.start`: how many attempts were
+ * made, and which services were not ready (with a bounded tail of their logs)
+ * so external cold-start (image pull / dev-server compile) vs. an internal
+ * init-ordering bug can be decided from data, not reasoning.
+ */
+export interface StackStartDiagnostics {
+  attempts: number;
+  services: StackStartServiceDiagnostic[];
+  /** Set when the provider status was unavailable, so services could not be enumerated. */
+  note?: string;
+}
+
+/**
+ * Thrown when a managed stack fails to start after exhausting the bounded retry.
+ * Distinct from {@link StackInstanceManagerError} (a deterministic precondition,
+ * mapped to a `blocked` envelope): this is a real start/readiness failure the
+ * router maps to a coherent `failed` envelope, now carrying {@link StackStartDiagnostics}.
+ */
+export class StackStartFailedError extends Error {
+  constructor(
+    message: string,
+    readonly diagnostics: StackStartDiagnostics,
+  ) {
+    super(message);
+    this.name = "StackStartFailedError";
+  }
+}
+
+/**
+ * Internal: a single non-ready start attempt. Carries the per-service
+ * diagnostics captured from the live handle before its teardown, so the bounded
+ * retry loop can surface them if every attempt fails.
+ */
+class StackNotReadyError extends Error {
+  constructor(
+    message: string,
+    readonly services: StackStartServiceDiagnostic[],
+  ) {
+    super(message);
+    this.name = "StackNotReadyError";
+  }
+}
+
 export interface StackInstanceStartResult<TStackHandle> {
   stackId: string;
   handle: TStackHandle;
   stack: StackStatusPacket;
   allocations: readonly StackAllocationRecord[];
+  /** Total attempts the bounded retry made; > 1 means the start self-healed. */
+  attempts: number;
 }
 
 export interface StackInstanceListItem {
@@ -89,29 +146,56 @@ export class StackInstanceManager<TStackHandle> {
     const maxAttempts = Math.max(1, this.options.startMaxAttempts ?? DEFAULT_STACK_START_MAX_ATTEMPTS);
     const backoffMs = Math.max(0, this.options.startRetryBackoffMs ?? DEFAULT_STACK_START_RETRY_BACKOFF_MS);
     let lastError: unknown;
+    // Per-service diagnostics from the most recent attempt. Empty when the
+    // provider's status threw outright (no packet to enumerate services from).
+    let lastServices: StackStartServiceDiagnostic[] = [];
+    let statusUnavailable = false;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        return await this.startOnce(stackId);
+        const result = await this.startOnce(stackId);
+        return { ...result, attempts: attempt };
       } catch (error) {
         if (error instanceof StackInstanceManagerError) throw error;
         lastError = error;
+        if (error instanceof StackNotReadyError) {
+          lastServices = error.services;
+          statusUnavailable = false;
+        } else {
+          // provider.start / provider.status threw outright: there is no status
+          // packet, so we cannot enumerate services or map logs to them.
+          lastServices = [];
+          statusUnavailable = true;
+        }
         if (attempt < maxAttempts && backoffMs > 0) await delay(backoffMs);
       }
     }
 
     const reason = lastError instanceof Error ? lastError.message : String(lastError);
-    // Rethrow as a plain Error (not a StackInstanceManagerError) so the Dev MCP
-    // router maps it to a coherent `failed` envelope rather than a `blocked`
+    const diagnostics: StackStartDiagnostics = {
+      attempts: maxAttempts,
+      services: lastServices,
+      ...(statusUnavailable
+        ? {
+            note: "Provider status was unavailable on the final attempt, so per-service logs could not be captured.",
+          }
+        : {}),
+    };
+    // Throw a dedicated StackStartFailedError (not a StackInstanceManagerError)
+    // so the Dev MCP router maps it to a coherent `failed` envelope — now
+    // carrying self-diagnosing per-service context — rather than a `blocked`
     // precondition envelope.
-    throw new Error(
+    throw new StackStartFailedError(
       maxAttempts > 1
         ? `Managed stack failed to start after ${maxAttempts} attempts. Last error: ${reason}`
         : reason,
+      diagnostics,
     );
   }
 
-  private async startOnce(stackId: string): Promise<StackInstanceStartResult<TStackHandle>> {
+  private async startOnce(
+    stackId: string,
+  ): Promise<Omit<StackInstanceStartResult<TStackHandle>, "attempts">> {
     const context = createStackStartContext({
       mode: "dev",
       stackId,
@@ -119,22 +203,64 @@ export class StackInstanceManager<TStackHandle> {
       artifactRoot: this.options.artifactRoot,
     });
     const handle = await this.provider.start(context);
-    let ready = false;
+    let succeeded = false;
     try {
       const stack = await this.provider.status(handle);
-      ready = true;
+      if (stack.status === "failed") {
+        // A returned `failed` packet is a non-ready attempt, not a successful
+        // start. Capture per-service diagnostics from the LIVE handle before the
+        // finally block tears it down, so the failed envelope can show which
+        // service was not ready and the tail of its startup logs.
+        const services = await this.captureServiceDiagnostics(handle, stack);
+        throw new StackNotReadyError(
+          stack.summary || "Managed stack reported a failed status.",
+          services,
+        );
+      }
+      succeeded = true;
       this.handles.set(stackId, handle);
       const allocations = context.allocations();
       this.allocations.set(stackId, allocations);
       return { stackId, handle, stack, allocations };
     } finally {
-      if (!ready) {
+      if (!succeeded) {
         try {
           await this.provider.stop(handle);
         } catch {
           // Preserve the readiness/status failure that caused startup cleanup.
         }
       }
+    }
+  }
+
+  /**
+   * Build per-service diagnostics from a non-ready status packet. Ready services
+   * get an empty `logsTail` (the locked rule: only the culprits carry logs, so
+   * the payload stays small and points straight at what failed). Logs are pulled
+   * via the same `provider.logs` plumbing `stack.logs` uses — no parallel path.
+   */
+  private async captureServiceDiagnostics(
+    handle: TStackHandle,
+    packet: StackStatusPacket,
+  ): Promise<StackStartServiceDiagnostic[]> {
+    const services: StackStartServiceDiagnostic[] = [];
+    for (const service of packet.services) {
+      const logsTail =
+        service.status === "ready" ? [] : await this.safeServiceLogsTail(handle, service.id);
+      services.push({ id: service.id, status: service.status, logsTail });
+    }
+    return services;
+  }
+
+  private async safeServiceLogsTail(handle: TStackHandle, serviceId: string): Promise<string[]> {
+    if (!this.provider.logs) return [];
+    try {
+      const output = await this.provider.logs(handle, { serviceId, tail: DIAGNOSTIC_LOG_TAIL });
+      return output.entries.map((entry) => entry.message);
+    } catch {
+      // Logs are a best-effort aid; a logs failure must never mask the start
+      // failure, and an unmatched service simply gets an empty tail.
+      return [];
     }
   }
 

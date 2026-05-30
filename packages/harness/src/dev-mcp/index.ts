@@ -68,7 +68,13 @@ export {
   type ReloadingHarnessSource,
   type ReloadingHarnessSourceOptions,
 };
-import { StackInstanceManager, StackInstanceManagerError, stoppedStackStatus } from "./stack-instance-manager.js";
+import {
+  StackInstanceManager,
+  StackInstanceManagerError,
+  StackStartFailedError,
+  type StackStartDiagnostics,
+  stoppedStackStatus,
+} from "./stack-instance-manager.js";
 
 type RuntimeZod = typeof import("zod/v4").z;
 
@@ -616,13 +622,24 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
               handle: serializableHandle(started.handle),
               stack: redactStackStatusPacket(started.stack),
               allocations: started.allocations,
+              // Additive: surfaces a self-heal (attempts > 1) instead of hiding
+              // the bounded retry. Existing consumers ignore the extra field.
+              attempts: started.attempts,
             });
           } catch (error) {
             if (error instanceof StackInstanceManagerError)
               return blocked(name, error.code, error.message);
-            // A provider start/readiness failure (including bounded-retry
-            // exhaustion) must still produce a coherent envelope with code and
-            // message, never the generic {status:"error"} shape that omits them.
+            // A provider start/readiness failure that exhausted the bounded retry
+            // arrives as a StackStartFailedError carrying self-diagnosing context:
+            // attempts made, and a per-service log tail (redacted) so external
+            // cold-start vs. an internal init bug is decided from data.
+            if (error instanceof StackStartFailedError)
+              return failed(name, "stack-start-failed", error.message, {
+                diagnostics: redactStartDiagnostics(error.diagnostics),
+              });
+            // A provider start/readiness failure must still produce a coherent
+            // envelope with code and message, never the generic {status:"error"}
+            // shape that omits them.
             return failed(name, "stack-start-failed", error instanceof Error ? error.message : String(error));
           }
         }
@@ -1674,6 +1691,38 @@ function redactStackStatusPacket(packet: StackStatusPacket): StackStatusPacket {
     return next;
   });
   return { ...packet, services };
+}
+
+// Mirrors the secret-key boundary (SECRET_KEY_PATTERN, commit e32703e): the same
+// secret vocabulary, applied to free-form log TEXT instead of object keys, so a
+// diagnostics log tail can never echo a DSN, password, token, or connection
+// string captured from a non-ready service's startup logs.
+const SECRET_ASSIGNMENT_PATTERN =
+  /(pass(?:word|phrase|wd)?|secret|token|credential|api[-_]?key|access[-_]?key|private[-_]?key|connection[-_]?(?:string|uri|url)|dsn)(["']?\s*[:=]\s*["']?)[^\s"']+/gi;
+// Credentials embedded in a URL authority, e.g. postgres://user:secret@host.
+const URL_USERINFO_PATTERN = /([a-z][a-z0-9+.-]*:\/\/)[^/\s:@]+:[^/\s@]+@/gi;
+
+/** Redact secrets from a single log line before it crosses the MCP boundary. */
+function redactLogLine(line: string): string {
+  return line
+    .replace(URL_USERINFO_PATTERN, `$1${REDACTED_VALUE}@`)
+    .replace(SECRET_ASSIGNMENT_PATTERN, `$1$2${REDACTED_VALUE}`);
+}
+
+/**
+ * Redact a failed-start diagnostics payload at the MCP boundary: each service's
+ * `logsTail` is passed through {@link redactLogLine}. The manager produces raw
+ * logs (it stays infra-agnostic); redaction stays here, alongside the status
+ * packet redaction, so there is a single secret boundary.
+ */
+function redactStartDiagnostics(diagnostics: StackStartDiagnostics): StackStartDiagnostics {
+  return {
+    ...diagnostics,
+    services: diagnostics.services.map((service) => ({
+      ...service,
+      logsTail: service.logsTail.map(redactLogLine),
+    })),
+  };
 }
 
 function stringArg(args: Record<string, unknown>, name: string): string {
