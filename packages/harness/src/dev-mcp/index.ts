@@ -209,9 +209,11 @@ export interface DevMcpToolRouterOptions<TStackHandle = unknown> {
    * first `stack.start` can trip provider readiness (Docker warmup, cold dev-server
    * compile) and fail even though an immediate retry succeeds; a small bounded retry
    * lets the first call self-heal. Defaults to 2 attempts with a 750ms backoff. Set
-   * `maxAttempts: 1` to disable.
+   * `maxAttempts: 1` to disable. `readyTimeoutMs`/`pollIntervalMs` bound how long
+   * each attempt polls `status()` for readiness before it is treated as a
+   * (retryable) non-ready attempt — defaults 90000ms / 500ms.
    */
-  stackStart?: { maxAttempts?: number; backoffMs?: number };
+  stackStart?: { maxAttempts?: number; backoffMs?: number; readyTimeoutMs?: number; pollIntervalMs?: number };
 }
 
 export interface DevMcpToolRouter {
@@ -259,7 +261,7 @@ export interface AgentE2EDevMcpConfig<
   browserSessions?: DevMcpBrowserSessionController | false;
   harness?: DevMcpHarnessProvider;
   artifactRoot?: string;
-  stackStart?: { maxAttempts?: number; backoffMs?: number };
+  stackStart?: { maxAttempts?: number; backoffMs?: number; readyTimeoutMs?: number; pollIntervalMs?: number };
   host?: string;
   port?: number;
   path?: string;
@@ -569,6 +571,12 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           : {}),
         ...(options.stackStart?.backoffMs !== undefined
           ? { startRetryBackoffMs: options.stackStart.backoffMs }
+          : {}),
+        ...(options.stackStart?.readyTimeoutMs !== undefined
+          ? { startReadyTimeoutMs: options.stackStart.readyTimeoutMs }
+          : {}),
+        ...(options.stackStart?.pollIntervalMs !== undefined
+          ? { startReadyPollIntervalMs: options.stackStart.pollIntervalMs }
           : {}),
       })
     : undefined;

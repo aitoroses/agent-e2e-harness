@@ -15,6 +15,10 @@ import {
 const DEFAULT_STACK_START_MAX_ATTEMPTS = 2;
 /** Delay between bounded start retries when none is configured. */
 const DEFAULT_STACK_START_RETRY_BACKOFF_MS = 750;
+/** How long a single attempt polls status() for readiness before giving up. */
+const DEFAULT_STACK_START_READY_TIMEOUT_MS = 90_000;
+/** Interval between readiness status() polls within an attempt. */
+const DEFAULT_STACK_START_READY_POLL_INTERVAL_MS = 500;
 /** Lines of log tail captured per non-ready service on a failed start. */
 const DIAGNOSTIC_LOG_TAIL = 20;
 
@@ -120,6 +124,10 @@ export class StackInstanceManager<TStackHandle> {
       startMaxAttempts?: number;
       /** Delay between bounded start retries, in milliseconds. */
       startRetryBackoffMs?: number;
+      /** How long one attempt polls status() for readiness before giving up. */
+      startReadyTimeoutMs?: number;
+      /** Interval between readiness status() polls within an attempt. */
+      startReadyPollIntervalMs?: number;
     },
   ) {}
 
@@ -202,18 +210,24 @@ export class StackInstanceManager<TStackHandle> {
       workerCount: 1,
       artifactRoot: this.options.artifactRoot,
     });
+    // `provider.start()` is launch-only: it returns a LIVE handle without
+    // blocking on readiness. The manager owns the readiness gate — it polls
+    // `status()` while holding the handle, so on a readiness timeout the handle
+    // is still alive and the failing service's logs are reachable. (A provider
+    // that waits internally and throws would leave no handle to diagnose.)
     const handle = await this.provider.start(context);
     let succeeded = false;
     try {
-      const stack = await this.provider.status(handle);
-      if (stack.status === "failed") {
-        // A returned `failed` packet is a non-ready attempt, not a successful
-        // start. Capture per-service diagnostics from the LIVE handle before the
-        // finally block tears it down, so the failed envelope can show which
-        // service was not ready and the tail of its startup logs.
+      const stack = await this.awaitReady(handle);
+      if (stack.status !== "ready") {
+        // Not ready within the readiness window (a `degraded` service that never
+        // came up, or a terminal `failed`/`stopped`). Capture per-service
+        // diagnostics from the LIVE handle BEFORE the finally block tears it
+        // down, so the failed envelope shows which service was not ready and the
+        // tail of its startup logs.
         const services = await this.captureServiceDiagnostics(handle, stack);
         throw new StackNotReadyError(
-          stack.summary || "Managed stack reported a failed status.",
+          stack.summary || `Managed stack did not become ready (status: ${stack.status}).`,
           services,
         );
       }
@@ -231,6 +245,35 @@ export class StackInstanceManager<TStackHandle> {
         }
       }
     }
+  }
+
+  /**
+   * Poll `provider.status(handle)` until the stack is `ready`, a terminal
+   * `failed`/`stopped` packet arrives, or the readiness window elapses. Returns
+   * the last packet either way (the caller decides ready vs. diagnose). The
+   * single source of readiness truth is `status()`; this is the gate around it.
+   */
+  private async awaitReady(handle: TStackHandle): Promise<StackStatusPacket> {
+    const readyTimeoutMs = Math.max(
+      0,
+      this.options.startReadyTimeoutMs ?? DEFAULT_STACK_START_READY_TIMEOUT_MS,
+    );
+    const pollIntervalMs = Math.max(
+      0,
+      this.options.startReadyPollIntervalMs ?? DEFAULT_STACK_START_READY_POLL_INTERVAL_MS,
+    );
+    const deadline = Date.now() + readyTimeoutMs;
+    let packet = await this.provider.status(handle);
+    while (packet.status !== "ready") {
+      // A terminal packet will not recover by waiting — diagnose it now.
+      if (packet.status === "failed" || packet.status === "stopped") break;
+      // Otherwise the stack is still warming up (`degraded`): keep polling until
+      // the readiness window closes.
+      if (Date.now() >= deadline) break;
+      await delay(pollIntervalMs);
+      packet = await this.provider.status(handle);
+    }
+    return packet;
   }
 
   /**

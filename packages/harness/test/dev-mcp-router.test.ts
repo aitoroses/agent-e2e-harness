@@ -8,6 +8,7 @@ import { defineJourney, type HarnessTypes } from "@agent-e2e/harness/core";
 import { createDevMcpToolRouter } from "@agent-e2e/harness/dev-mcp";
 import { createMcpHarnessServer } from "../src/mcp/index.js";
 import {
+  createProcessStackProvider,
   defineStackExploreTools,
   type StackExecutionSurface,
   type StackStartContext,
@@ -1874,6 +1875,79 @@ describe("Dev MCP Tool Router", () => {
       tool: "stack.start",
       attempts: 2,
     });
+  });
+
+  it("captures diagnostics for the flagship process provider that launches but never becomes ready", async () => {
+    // The real createProcessStackProvider: start() is launch-only and readiness
+    // is status()-driven. This process spawns fine (so a LIVE handle escapes)
+    // but its readyUrl never passes, so status() stays `degraded` until the
+    // manager's readiness window closes. This is the most common real failure
+    // ("the service never came up") and the exact path #6's fake provider never
+    // exercised. On main — where start() blocks on waitForReady and throws —
+    // this yields diagnostics.services:[] + a "status unavailable" note; after
+    // the fix the failing service's log tail is captured from the live handle.
+    const logDir = await mkdtemp(join(tmpdir(), "agent-e2e-process-diag-"));
+    const logPath = join(logDir, "control-plane.log");
+    // The service's startup log already holds its crash reason (with a secret in
+    // it). Pre-seeding the file keeps the test deterministic — what we prove is
+    // that diagnostics READS the live service's real log via the capture path,
+    // not how fast a spawned child flushes stderr under parallel-suite load.
+    await writeFile(
+      logPath,
+      "control-plane FATAL: cannot bind, DATABASE_URL=postgres://admin:s3cr3t@db:5432/app\n",
+      "utf8",
+    );
+    const provider = createProcessStackProvider({
+      id: "control-plane",
+      serviceId: "control-plane",
+      // A real process that launches and stays alive — so a LIVE handle escapes
+      // start() — but whose readiness endpoint never comes up.
+      command: process.execPath,
+      args: ["-e", "setInterval(() => {}, 1000);"],
+      // An address nothing is listening on: readiness never passes.
+      readyUrl: "http://127.0.0.1:1/ready",
+      logPath,
+    });
+
+    const router = createDevMcpToolRouter({
+      stackProvider: provider,
+      // One attempt, a short readiness window: launch, poll status() ~degraded,
+      // give up, diagnose from the live handle.
+      stackStart: { maxAttempts: 1, readyTimeoutMs: 250, pollIntervalMs: 25 },
+    });
+
+    try {
+      const result = await router.callTool("stack.start", { stackId: "cp" });
+      expect(result).toMatchObject({
+        status: "failed",
+        tool: "stack.start",
+        code: "stack-start-failed",
+      });
+
+      const diagnostics = result.diagnostics as {
+        attempts: number;
+        services: Array<{ id: string; status: string; logsTail: string[] }>;
+        note?: string;
+      };
+      // Populated via the start()-returns-then-readiness-times-out path — NOT the
+      // empty status-unavailable fallback.
+      expect(diagnostics.attempts).toBe(1);
+      expect(diagnostics.note).toBeUndefined();
+
+      const service = diagnostics.services.find((entry) => entry.id === "control-plane");
+      expect(service).toBeDefined();
+      expect(service?.status).not.toBe("ready");
+      expect(service?.logsTail.length).toBeGreaterThan(0);
+
+      const tail = (service?.logsTail ?? []).join("\n");
+      // The log HELD the reason; diagnostics now carries it.
+      expect(tail).toContain("control-plane FATAL");
+      // Redaction holds: the DSN credential never leaks through the log tail.
+      expect(tail).not.toContain("s3cr3t");
+      expect(tail).toContain("[redacted]");
+    } finally {
+      await rm(logDir, { recursive: true, force: true });
+    }
   });
 
   it("disposes all remaining Stack Instances and browser sessions", async () => {

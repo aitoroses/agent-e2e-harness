@@ -13,11 +13,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Readiness is now a single authority (`status()`), gated by the caller. `createProcessStackProvider.start()` is **launch-only**: it spawns the process and returns the live handle immediately instead of blocking on `waitForReady` and throwing on timeout. The Dev MCP `StackInstanceManager` now owns the readiness gate — after `start()` it polls `provider.status(handle)` until the stack reports `ready`, a terminal `failed`/`stopped` arrives, or a configurable window elapses (`stackStart.readyTimeoutMs` / `pollIntervalMs`, defaults 90000ms / 500ms) — while holding the live handle. The bounded `stackStart` retry composes: each attempt is start + poll-to-ready, and a readiness timeout is a retryable non-ready attempt. This is the change that makes the failed-start diagnostics actually fire for the flagship process provider (see Fixed). Consumers that called the process provider's `start()` directly and relied on it blocking until ready must now poll `status()` themselves (the showcase e2e harness was updated to do so).
+
 ### Deprecated
+
+- `ProcessStackProviderConfig.readyTimeoutMs` is ignored as of 1.4.0 (the provider no longer blocks on readiness). The readiness timeout is now the Dev MCP `stackStart.readyTimeoutMs`. The field is kept for config compatibility.
 
 ### Removed
 
 ### Fixed
+
+- Failed-`stack.start` diagnostics now fire for the flagship `createProcessStackProvider`, not just providers whose `status()` returns a `failed` packet. Previously the process provider waited for readiness *inside* `start()` and threw on timeout, so no handle escaped to diagnose — the manager hit its fallback and returned `diagnostics.services: []` with a "status unavailable" note. The most common real failure ("the service launched but never became ready") therefore produced **empty** diagnostics — exactly the blind cold-start the diagnostics were meant to cure. With `start()` now launch-only and the manager polling `status()` while holding the live handle, a readiness timeout (or a `degraded` service that never came up) is captured via the existing `captureServiceDiagnostics` path: `diagnostics.services[]` carries the failing service with a redacted, bounded `logsTail` of its startup logs, and no "status unavailable" note. Also fixed: a non-ready `status()` packet that is `degraded` (not just `failed`) is now correctly treated as not-ready by the manager's readiness gate.
 
 ### Security
 
