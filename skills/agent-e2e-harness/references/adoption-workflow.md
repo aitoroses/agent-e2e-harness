@@ -64,10 +64,10 @@ npm install -D @agent-e2e/harness playwright @modelcontextprotocol/sdk zod
 
 Adapt to the app's package manager. Add service-specific dependencies only when the app needs them, for example database clients or Testcontainers.
 
-The CLI expects Bun `>=1.3.0` for direct TypeScript config loading:
+The CLI is runtime-agnostic: TypeScript config/journeys load via jiti on Node `>=22`, Bun, or Deno. Node is the default and recommended runtime:
 
 ```sh
-bun --version
+node --version
 ```
 
 ## Package Scripts

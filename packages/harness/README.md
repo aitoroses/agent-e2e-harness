@@ -28,7 +28,30 @@ Add optional peers for the integrations you use:
 npm install -D @modelcontextprotocol/sdk playwright
 ```
 
-`@modelcontextprotocol/sdk` is needed for the local Dev MCP HTTP server. `playwright` is needed for browser sessions. Dev MCP uses Bun `>=1.3.0` as the TypeScript runtime for the config and entrypoint. Database clients, containers, queues, and other infrastructure dependencies belong in the consumer app that implements a stack provider.
+`@modelcontextprotocol/sdk` is needed for the local Dev MCP HTTP server. `playwright` is needed for browser sessions. The Dev MCP is runtime-agnostic: TypeScript config and journeys load via jiti on Node `>=22`, Bun, or Deno — Bun is no longer required. (If you do run on Bun with the Testcontainers PostgreSQL provider, use Bun `>=1.3.14`; Bun `<=1.3.5` hangs in PostgreSQL startup.) Database clients, containers, queues, and other infrastructure dependencies belong in the consumer app that implements a stack provider.
+
+For the common PostgreSQL case you do not have to hand-write that provider: import `createPostgresTestcontainersProvider` from `@agent-e2e/harness/testcontainers`. Its infra packages (`pg`, `@testcontainers/postgresql`, `testcontainers`) are optional peer dependencies loaded lazily, so they are only required if you actually use this subpath:
+
+```ts
+import { createPostgresTestcontainersProvider } from "@agent-e2e/harness/testcontainers";
+
+const postgres = createPostgresTestcontainersProvider({
+  database: "app",
+  username: "app",
+  password: "app",
+  schemaSql: SCHEMA_SQL,
+});
+```
+
+## Quickstart
+
+Scaffold a minimal, runnable setup instead of copying boilerplate:
+
+```sh
+npx agent-e2e init
+```
+
+This writes `agent-e2e.config.ts` (a `defineAgentE2EConfig` with the sample journey wired in) and `journeys/sample.journey.ts` (one phase = state, one proof-light step = frame), then prints the exact next commands (`agent-e2e dev`, then `agent-e2e list` / `agent-e2e call run.begin …`). It is non-destructive — existing files are skipped, not overwritten, unless you pass `--force` — and takes an optional `agent-e2e init [targetDir]`. The generated config omits `browserSessions` so the Dev MCP auto-creates a Playwright session, and carries commented wiring for an explicit `createPlaywrightMcpBrowserSessionManager()` and a stack provider for when you outgrow the defaults. Point `baseUrl` at your app and grow the journey from there; the sections below show the full shapes.
 
 ## Public Exports
 
@@ -193,7 +216,24 @@ Then run the Dev MCP server through the package CLI:
 }
 ```
 
-The CLI creates the MCP harness, default Playwright browser sessions, `.agents-e2e/artifacts`, signal handlers, and a hot-reloaded journey registry. Bun runs `agent-e2e.config.ts` directly; when the config file changes, new MCP calls see the updated journeys without reconnecting the MCP client. It uses `127.0.0.1:3766/mcp` by default; set `AGENT_E2E_MCP_PORT` to override it. App URLs come from `stack.start` / `stack.status` service URLs, not from Dev MCP configuration.
+The CLI creates the MCP harness, default Playwright browser sessions, `.agents-e2e/artifacts`, and signal handlers. jiti loads `agent-e2e.config.ts` (and the journey files it imports) directly on Node or Bun. Edits to those TypeScript modules hot-reload **in process**: `createReloadingHarnessSource` watches the config directory and re-evaluates the changed graph through jiti, so `journey.list`/`journey.inspect` reflect the edit on the next call behind the same MCP URL — no server restart, no MCP reconnect. (Caveat: jiti owns TypeScript; plain `.mjs`/`.js` journeys go through native ESM, which is globally cached by URL and does not in-process reload — keep journeys in `.ts`. `agent-e2e dev --watch` is an optional hard-restart fallback that disposes the managed stack on each restart.) It uses `127.0.0.1:3766/mcp` by default; set `AGENT_E2E_MCP_PORT` to override it. App URLs come from `stack.start` / `stack.status` service URLs, not from Dev MCP configuration.
+
+### Browser sessions
+
+By default the Dev MCP auto-creates a Playwright-backed Browser Workbench, so you can leave `browserSessions` unset. To customize it (for example, to point sessions at a different artifact root), wire the public factory explicitly — this type-checks under strict mode:
+
+```ts
+import { defineAgentE2EConfig } from '@agent-e2e/harness/dev-mcp';
+import { createPlaywrightMcpBrowserSessionManager } from '@agent-e2e/harness/playwright-mcp';
+
+export default defineAgentE2EConfig({
+  journeys: [checkoutJourney],
+  // Explicit wiring is supported; omit this field to use the same default.
+  browserSessions: createPlaywrightMcpBrowserSessionManager({ artifactRoot: '.agents-e2e/artifacts' })
+});
+```
+
+Pass `browserSessions: false` to disable the Browser Workbench entirely (no Playwright launch). `DevMcpBrowserSessionController` method parameters are typed against the shared public input shapes (`BrowserActInput`, `BrowserFindInput`, …) so a custom controller gets full call-site type-safety too.
 
 ## Proof Loop
 
@@ -231,6 +271,7 @@ browser.eval
 browser.playwright
 browser.screenshot
 journey.step
+journey.untilStep
 journey.phase
 journey.untilPhase
 artifact.read
@@ -239,7 +280,11 @@ run.reseed
 stack.stop
 ```
 
+The journey time-travel grammar is `journey.step` (one step), `journey.untilStep` (a phase up to and including a target step), `journey.phase` / `journey.untilPhase` (a whole phase to its boundary). The UI-validation model treats each step as a distinct visual frame, so `journey.untilStep` makes every frame individually addressable: it runs a phase from its first step up to **and including** the target step and parks the managed state there, mirroring `journey.untilPhase`'s envelope (`results[]`, landed step at `results.at(-1)`). A step is addressed by its stable `stepId` within a `phaseId` (`{ runId, phaseId, stepId }`, the same address `journey.step` uses) — never a positional ordinal — and an unknown journey/phase/step returns the same coherent not-found envelope as the other journey tools.
+
 The fixed stack grammar is intentionally small: `stack.start`, `stack.list`, `stack.status`, `stack.stop`, `stack.logs`, `stack.explore.list`, and `stack.explore.run`. `stack.start` accepts an optional caller-chosen `stackId` and returns the effective id. `stack.list` recovers running Stack Instances. `stack.status`, `stack.logs`, `stack.explore.run`, and `stack.stop` require an explicit `stackId`; there is no public stop-all tool. `run.begin` requires a valid `stackId` when a stack provider exists, creates the run's **Run Stack Binding**, and rejects `stackId` when no provider exists. `stack.status` is the unified stack-state packet: `StackStatusPacket.services` is the journey-facing runtime contract for dynamic URLs, stable service ids, endpoints, checks, warnings, errors, artifacts, and next actions. There are no native `stack.services`, `stack.health`, or `stack.env` tools in v1.
+
+A freshly-started server's very first `stack.start` can trip provider readiness (Docker image pull/daemon warmup, a cold dev-server compile) and fail even though an immediate retry succeeds. `stack.start` therefore retries the provider start/readiness path with a small bounded backoff — **2 attempts, 750ms apart** by default — so the first call self-heals. Each failed attempt fully tears its own handle down before retrying, so retries never leak or stack handles, and a deterministic precondition failure (for example a duplicate `stackId`) is surfaced immediately without retrying. Tune or disable it with `stackStart: { maxAttempts, backoffMs }` in `defineAgentE2EConfig` (`maxAttempts: 1` disables the retry). On a real failure — including retry exhaustion — `stack.start` always returns a coherent envelope (`{ status: "failed", code: "stack-start-failed", message }`), never a partial object missing `code`/`message`, so a client can branch on `status` without tripping over a missing key.
 
 When a provider starts, `start(ctx)` receives a `StackStartContext` with mode, stack id, serial worker identity, suite id when verify supplies one, and a stack artifact scope. Providers should use **Named Stack Allocations** by default: call `ctx.allocatePort(name)` or `ctx.allocateArtifactPath(name, { kind: "file" | "directory" })` for isolated ports, log paths, database paths, queues, and app artifact directories. The harness records those named allocations for stack evidence without requiring duplicate metadata in the provider handle or status packet. Product-specific helpers such as database or queue allocators stay outside the core stack contract.
 
@@ -249,7 +294,17 @@ Stack-specific exploration belongs to the stack provider. Providers declare tool
 
 Use returned artifact refs to inspect failures instead of relying on terminal scrollback.
 
-Starting `agent-e2e dev` only proves the server booted. A proof run requires tool calls. For a fresh or remote agent session without this MCP registered, `mcporter` is the portable dynamic client path:
+Starting `agent-e2e dev` only proves the server booted. A proof run requires tool calls. The CLI ships its own MCP client, so you do not have to hand-write one or register the server first — `agent-e2e list` and `agent-e2e call` are the canonical way to drive the running server:
+
+```sh
+agent-e2e list                                   # tool names exposed by the running server
+agent-e2e call stack.start '{"stackId":"dev"}'   # call a tool with JSON args (defaults to {})
+agent-e2e call run.begin '{"journeyId":"my:journey","stackId":"dev"}'
+```
+
+`list`/`call` resolve the endpoint from the same config as `dev` (`AGENT_E2E_MCP_HOST/PORT/PATH`, or a full `AGENT_E2E_MCP_URL` override). `call` prints the tool's text result (JSON fallback), exits non-zero on a tool error, and uses a 300000ms per-call timeout (`AGENT_E2E_MCP_CALL_TIMEOUT_MS`) since `stack.start` exceeds the MCP SDK's 60s default. This replaces the previous "copy a ~50-line mcp-call.ts client" recipe.
+
+For a fresh or remote agent session that prefers a portable dynamic client, `mcporter` is an alternative:
 
 ```sh
 mcporter list http://127.0.0.1:3766/mcp --schema --json --allow-http

@@ -8,6 +8,7 @@ const harnessPackage = JSON.parse(
 ) as {
   exports: Record<string, unknown>;
   peerDependencies: Record<string, string>;
+  peerDependenciesMeta: Record<string, { optional?: boolean }>;
 };
 const showcasePackage = JSON.parse(
   readFileSync(resolve(repoRoot, 'apps/showcase/package.json'), 'utf8'),
@@ -50,12 +51,17 @@ describe('repository organization contract', () => {
     expect(showcasePackage.scripts['dev:mcp']).toContain('agent-e2e dev');
   });
 
-  it('keeps consumer infrastructure providers out of the published harness package', () => {
-    expect(Object.keys(harnessPackage.exports)).not.toContain('./testcontainers');
-    expect(Object.keys(harnessPackage.peerDependencies)).not.toEqual(
-      expect.arrayContaining(['@testcontainers/postgresql', 'pg']),
+  it('ships the first-class Testcontainers PostgreSQL provider as an optional subpath export', () => {
+    // The provider lives behind its own subpath so the package-root and core
+    // surfaces stay provider-agnostic, and its infra packages stay optional.
+    expect(Object.keys(harnessPackage.exports)).toContain('./testcontainers');
+    expect(Object.keys(harnessPackage.peerDependencies)).toEqual(
+      expect.arrayContaining(['@testcontainers/postgresql', 'pg', 'testcontainers']),
     );
-    expect(existsSync(resolve(repoRoot, 'packages/harness/dist/testcontainers'))).toBe(false);
+    expect(harnessPackage.peerDependenciesMeta['@testcontainers/postgresql']).toEqual({ optional: true });
+    expect(harnessPackage.peerDependenciesMeta['pg']).toEqual({ optional: true });
+    expect(harnessPackage.peerDependenciesMeta['testcontainers']).toEqual({ optional: true });
+    expect(existsSync(resolve(repoRoot, 'packages/harness/dist/testcontainers/index.js'))).toBe(true);
   });
 
   it('keeps showcase docs on the explicit Stack Instance and worker verify path', () => {

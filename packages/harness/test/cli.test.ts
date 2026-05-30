@@ -1,12 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { isLongLivedCliCommand } from "../src/cli/index.js";
+import { defineJourney } from "@agent-e2e/harness/core";
+import { loadAgentE2EConfig, startAgentE2EDevMcp } from "@agent-e2e/harness/dev-mcp";
+import type { StackProvider } from "@agent-e2e/harness/stack";
+import {
+  devMcpCallTimeoutMs,
+  extractToolText,
+  isCliEntrypoint,
+  isLongLivedCliCommand,
+  parseCallInvocation,
+  planDevInvocation,
+  toolResultExitCode,
+  WATCH_REEXEC_ENV,
+} from "../src/cli/index.js";
+import { generateScaffoldFiles, parseInitOptions, runInit } from "../src/cli/init.js";
 
 const execFileAsync = promisify(execFile);
 const cliPath = resolve(process.cwd(), "dist/cli/index.js");
@@ -46,8 +59,35 @@ describe("Agent E2E CLI", () => {
     expect(stdout).toContain("agent-e2e dev");
     expect(stdout).toContain("agent-e2e.config.ts");
     expect(stdout).toContain("--artifact-root");
+    expect(stdout).toContain("--watch");
+    expect(stdout).toContain("in-process hot-reload");
+    expect(stdout).toContain("fallback");
+    expect(stdout).toContain("Node or");
     expect(stdout).not.toContain("--no-reload");
     expect(stdout).not.toContain("--manifest");
+  });
+
+  it("serves dev directly without --watch and strips the flag", () => {
+    const plan = planDevInvocation(["--port", "4000"], {});
+    expect(plan).toEqual({ mode: "serve", flags: ["--port", "4000"] });
+  });
+
+  it("re-execs under the runtime's --watch when --watch is requested fresh", () => {
+    const plan = planDevInvocation(["--watch", "--port", "4000"], {});
+    expect(plan.mode).toBe("reexec");
+    if (plan.mode === "reexec") {
+      expect(plan.argv[0]).toBe("--watch");
+      // --watch is stripped from the child's dev flags to avoid re-exec recursion.
+      expect(plan.argv).toContain("dev");
+      expect(plan.argv.filter((arg) => arg === "--watch")).toHaveLength(1);
+      expect(plan.argv).toContain("--port");
+      expect(plan.argv).toContain("4000");
+    }
+  });
+
+  it("serves directly inside the watch re-exec child (sentinel set) without recursing", () => {
+    const plan = planDevInvocation(["--watch", "--port", "4000"], { [WATCH_REEXEC_ENV]: "1" });
+    expect(plan).toEqual({ mode: "serve", flags: ["--port", "4000"] });
   });
 
   it("documents the config-backed verify command", async () => {
@@ -100,5 +140,195 @@ export default {
 
     expect(stdout).toContain("Agent E2E verify: 1 passed, 0 failed");
     expect(existsSync(join(artifactRoot, "_suites"))).toBe(true);
+  });
+
+  it("treats a symlink to the module as the entrypoint (file:/workspace/npx bins)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-e2e-entry-"));
+    const target = join(dir, "real-module.js");
+    await writeFile(target, "// real module\n", "utf8");
+    const link = join(dir, "agent-e2e");
+    await symlink(target, link);
+
+    const metaUrl = pathToFileURL(target).href;
+    // argv[1] is the symlink path (as Node leaves it for a symlinked bin).
+    expect(isCliEntrypoint(metaUrl, link)).toBe(true);
+    // Direct invocation (argv[1] === module path) still matches.
+    expect(isCliEntrypoint(metaUrl, target)).toBe(true);
+    // Negative cases.
+    expect(isCliEntrypoint(metaUrl, undefined)).toBe(false);
+    expect(isCliEntrypoint(metaUrl, join(dir, "unrelated.js"))).toBe(false);
+  });
+
+  it("runs the CLI when launched through a symlinked bin (regression: silent no-op)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-e2e-binlink-"));
+    const link = join(dir, "agent-e2e");
+    await symlink(cliPath, link); // mirrors node_modules/.bin/agent-e2e -> dist/cli/index.js
+
+    const { stdout } = await execFileAsync("node", [link, "--help"], { cwd: dir });
+    expect(stdout).toContain("agent-e2e");
+    expect(stdout).toContain("Commands:");
+  });
+
+  it("documents list and call as the canonical Dev MCP driver", async () => {
+    const top = await execFileAsync("node", [cliPath, "--help"]);
+    expect(top.stdout).toContain("list ");
+    expect(top.stdout).toContain("call ");
+    const callHelp = await execFileAsync("node", [cliPath, "call", "--help"]);
+    expect(callHelp.stdout).toContain("agent-e2e call <toolName> [jsonArgs]");
+    expect(callHelp.stdout).toContain("AGENT_E2E_MCP_CALL_TIMEOUT_MS");
+  });
+
+  it("resolves the per-call MCP timeout from env with a generous default", () => {
+    expect(devMcpCallTimeoutMs({})).toBe(300_000);
+    expect(devMcpCallTimeoutMs({ AGENT_E2E_MCP_CALL_TIMEOUT_MS: "5000" })).toBe(5000);
+    expect(() => devMcpCallTimeoutMs({ AGENT_E2E_MCP_CALL_TIMEOUT_MS: "nope" })).toThrow();
+  });
+
+  it("parses call invocations: tool required, default {}, JSON object only", () => {
+    expect(parseCallInvocation([])).toMatchObject({ ok: false });
+    expect(parseCallInvocation(["stack.list"])).toEqual({ ok: true, toolName: "stack.list", args: {} });
+    expect(parseCallInvocation(["run.begin", '{"journeyId":"x"}'])).toEqual({
+      ok: true,
+      toolName: "run.begin",
+      args: { journeyId: "x" },
+    });
+    expect(parseCallInvocation(["t", "{bad json"])).toMatchObject({ ok: false });
+    expect(parseCallInvocation(["t", "[1,2]"])).toMatchObject({ ok: false }); // not an object
+  });
+
+  it("extracts text content and maps tool status to an exit code", () => {
+    expect(extractToolText({ content: [{ type: "text", text: "a" }, { type: "text", text: "b" }] })).toBe("a\nb");
+    expect(extractToolText({ content: [{ type: "image" }] as never })).toBeUndefined();
+    expect(extractToolText({})).toBeUndefined();
+    expect(toolResultExitCode({ structuredContent: { status: "ok" } })).toBe(0);
+    expect(toolResultExitCode({ structuredContent: { status: "blocked" } })).toBe(0);
+    expect(toolResultExitCode({ structuredContent: { status: "failed" } })).toBe(1);
+    expect(toolResultExitCode({ structuredContent: { status: "not-found" } })).toBe(1);
+    expect(toolResultExitCode({ isError: true })).toBe(1);
+  });
+
+  it("documents the init quickstart command", async () => {
+    const top = await execFileAsync("node", [cliPath, "--help"]);
+    expect(top.stdout).toContain("init ");
+
+    const initHelp = await execFileAsync("node", [cliPath, "init", "--help"]);
+    expect(initHelp.stdout).toContain("agent-e2e init [targetDir]");
+    expect(initHelp.stdout).toContain("agent-e2e.config.ts");
+    expect(initHelp.stdout).toContain("journeys/sample.journey.ts");
+    expect(initHelp.stdout).toContain("--force");
+  });
+
+  it("parses init options: positional targetDir + --force, rejects junk", () => {
+    expect(parseInitOptions([])).toEqual({ targetDir: ".", force: false });
+    expect(parseInitOptions(["./app"])).toEqual({ targetDir: "./app", force: false });
+    expect(parseInitOptions(["./app", "--force"])).toEqual({ targetDir: "./app", force: true });
+    expect(parseInitOptions(["-f"])).toEqual({ targetDir: ".", force: true });
+    expect(() => parseInitOptions(["--nope"])).toThrow();
+    expect(() => parseInitOptions(["a", "b"])).toThrow();
+  });
+
+  it("scaffolds a config and a sample journey wired to it", () => {
+    const files = generateScaffoldFiles();
+    const byPath = new Map(files.map((file) => [file.relativePath, file.contents]));
+
+    const config = byPath.get("agent-e2e.config.ts");
+    expect(config).toContain("defineAgentE2EConfig");
+    expect(config).toContain('createSampleJourney');
+    expect(config).toContain("./journeys/sample.journey.js");
+
+    const journey = byPath.get("journeys/sample.journey.ts");
+    expect(journey).toContain("definePlaywrightJourney");
+    expect(journey).toContain('id: "sample:home"');
+    expect(journey).toContain('id: "phase:home"');
+    expect(journey).toContain('id: "step:title"');
+  });
+
+  it("writes both files, is non-destructive, and overwrites only with --force", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-e2e-init-"));
+    const collected: string[] = [];
+    const stdout = { write: (chunk: string) => (collected.push(chunk), true) };
+    const configPath = join(dir, "agent-e2e.config.ts");
+    try {
+      const first = await runInit({ targetDir: dir, force: false }, { stdout });
+      expect(first.map((outcome) => outcome.status)).toEqual(["written", "written"]);
+      expect(existsSync(configPath)).toBe(true);
+      expect(existsSync(join(dir, "journeys", "sample.journey.ts"))).toBe(true);
+
+      // A user edit must survive a re-run without --force.
+      await writeFile(configPath, "// my edits\n", "utf8");
+      const second = await runInit({ targetDir: dir, force: false }, { stdout });
+      expect(second.map((outcome) => outcome.status)).toEqual(["skipped", "skipped"]);
+      expect(await readFile(configPath, "utf8")).toBe("// my edits\n");
+
+      // --force regenerates the scaffold over the edit.
+      const third = await runInit({ targetDir: dir, force: true }, { stdout });
+      expect(third.map((outcome) => outcome.status)).toEqual(["overwritten", "overwritten"]);
+      expect(await readFile(configPath, "utf8")).toContain("defineAgentE2EConfig");
+
+      expect(collected.join("")).toContain("Next steps:");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("scaffolds a config that actually loads and satisfies the public types", async () => {
+    // Scaffold inside the package so the generated `@agent-e2e/harness` imports
+    // resolve to this package's own exports (self-reference); then load the real
+    // TypeScript through the same jiti loader the Dev MCP uses. A passing load
+    // proves the template is live code producing a valid ExecutableJourney, not
+    // dead boilerplate.
+    const dir = await mkdtemp(join(process.cwd(), ".agent-e2e-init-load-"));
+    try {
+      await runInit({ targetDir: dir, force: false }, { stdout: { write: () => true } });
+      const config = await loadAgentE2EConfig({ configPath: join(dir, "agent-e2e.config.ts") });
+      expect(config.journeys).toHaveLength(1);
+      const contract = config.journeys[0]!.toInspectableContract();
+      expect(contract.id).toBe("sample:home");
+      expect(contract.defaultProfileId).toBe("local");
+      expect(contract.phases[0]!.id).toBe("phase:home");
+      expect(contract.phases[0]!.steps[0]!.id).toBe("step:title");
+      expect(contract.phases[0]!.steps[0]!.proofs[0]!.id).toBe("proof:title-present");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("drives a live Dev MCP server through `list` and `call` (no hand-written client)", async () => {
+    const journey = defineJourney({
+      id: "cli:demo",
+      title: "CLI demo",
+      profiles: [{ id: "default", data: {}, isDefault: true }],
+      phases: [{ id: "p", title: "P", steps: [{ id: "s", title: "S", execute: async () => ({ status: "passed" as const }) }] }],
+    });
+    const stackProvider: StackProvider<{ id: string }> = {
+      id: "cli-demo-stack",
+      async start() { return { id: "h" }; },
+      status() { return { status: "ready", summary: "ready", services: [], artifacts: [], warnings: [], errors: [] }; },
+      stop() { return { status: "stopped", summary: "stopped", services: [], artifacts: [], warnings: [], errors: [] }; },
+    };
+    const server = await startAgentE2EDevMcp({
+      journeys: [journey],
+      stackProvider,
+      browserSessions: false,
+      port: 0,
+      installSignalHandlers: false,
+      logger: false,
+    });
+    const env = { ...process.env, AGENT_E2E_MCP_URL: server.url };
+    try {
+      const list = await execFileAsync("node", [cliPath, "list"], { env });
+      const names = JSON.parse(list.stdout) as string[];
+      expect(names).toEqual(expect.arrayContaining(["stack.list", "journey.list", "run.begin"]));
+
+      const call = await execFileAsync("node", [cliPath, "call", "stack.list", "{}"], { env });
+      expect(JSON.parse(call.stdout)).toMatchObject({ status: "ok", tool: "stack.list", stacks: [] });
+
+      // Unknown tool -> non-zero exit.
+      await expect(execFileAsync("node", [cliPath, "call", "does.not.exist", "{}"], { env })).rejects.toMatchObject({
+        code: 1,
+      });
+    } finally {
+      await server.close();
+    }
   });
 });

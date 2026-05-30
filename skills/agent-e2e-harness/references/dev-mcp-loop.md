@@ -121,7 +121,7 @@ browser.close
 stack.stop
 ```
 
-For multi-step journeys, use `journey.phase` or `journey.untilPhase` when appropriate.
+For multi-step journeys, use `journey.phase` or `journey.untilPhase` when appropriate, or `journey.untilStep` to land the managed state exactly at a single step (`{ runId, phaseId, stepId }`) when you want to inspect one visual frame.
 
 The call sequence is the development Trajectory. It can include false starts, debugging probes, Browser Workbench reads, and stack exploration. Keep it as evidence while learning the app, then promote only the stable user path into reviewed Journey code before CI depends on it.
 

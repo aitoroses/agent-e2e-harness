@@ -62,16 +62,16 @@ Expected output line:
 added N packages
 ```
 
-**3. Install Bun `>=1.3.0`.** The Dev MCP CLI runs on Bun so `agent-e2e.config.ts` loads directly and the journey registry can hot-reload behind a stable MCP URL.
+**3. Use Node `>=22` (or Bun).** The Dev MCP CLI is runtime-agnostic: `agent-e2e.config.ts` and the journey files it imports load via [jiti](https://github.com/unjs/jiti), so `.ts` configs run directly on Node, Bun, or Deno — no precompile step and no required runtime switch. Node is the default interpreter and the recommended one (real in-process hot-reload, and ~6s vs ~25s Testcontainers PostgreSQL startup). If you do run on Bun with the Testcontainers PostgreSQL provider, use Bun `>=1.3.14` — Bun `<=1.3.5` hangs in `PostgreSqlContainer.start()`.
 
 ```sh
-bun --version
+node --version
 ```
 
 Expected:
 
 ```text
-1.3.0
+v22.0.0   # or newer
 ```
 
 **4. Add the `dev:mcp` script** to the app's `package.json`:
@@ -98,7 +98,20 @@ Expected:
 "agent-e2e dev"
 ```
 
-**5. Drop an `agent-e2e.config.ts` at the app root** with at least one journey, a stack provider, and a typed resource registry. The examples below show the shapes.
+**5. Scaffold a starting point with `agent-e2e init`.** From the app root:
+
+```sh
+npx agent-e2e init
+```
+
+This writes a minimal, runnable starting point and prints the exact next commands:
+
+```text
+agent-e2e.config.ts          defineAgentE2EConfig with the sample journey wired in
+journeys/sample.journey.ts   one phase (state) + one proof-light step (frame)
+```
+
+`init` is non-destructive: it never overwrites an existing file — it skips it and tells you, so re-running is safe. Pass `--force` to regenerate over your edits, or `agent-e2e init ./some/dir` to scaffold elsewhere. The generated config omits `browserSessions` (the Dev MCP auto-creates a Playwright session) and includes commented wiring for an explicit session manager and a stack provider when you outgrow the defaults. Edit `baseUrl`, then grow the journey toward your real app — the examples below show the full shapes (stack provider, typed resource registry, richer proofs).
 
 **6. Start Dev MCP.** Run:
 
@@ -329,12 +342,15 @@ browser.eval
 browser.playwright
 browser.screenshot
 journey.step
+journey.untilStep
 journey.phase
 journey.untilPhase
 artifact.read
 cleanup.plan
 run.reseed
 ```
+
+`journey.untilStep` is step-granular time travel: it runs a phase from its first step up to **and including** a target step, then parks the managed state exactly at that step's visual frame. It mirrors `journey.untilPhase`'s contract and envelope (`results[]`, with the landed step at `results.at(-1)`) but lands at a single step instead of the phase boundary, so each step is individually addressable by its stable `stepId` (`{ runId, phaseId, stepId }`, the same address `journey.step` uses). An unknown journey, phase, or step returns the same coherent not-found envelope as the other journey tools.
 
 Use `stack.logs` for live service logs after the stack is active. It requires a `stackId`, one `serviceId`, a required `tail`, and optional `stream`. Use `stack.explore.list` to discover provider-declared tools and `stack.explore.run` with `stackId` to run one of them with Zod-validated input/output. `stack.logs` and `stack.explore.run` accept optional `runId` only to capture artifacts, and reject capture when the run is bound to a different `stackId`.
 
@@ -346,7 +362,16 @@ The Browser Workbench is the browser-side exploration surface. Use `browser.snap
 
 `journey.inspect` returns the full contract for one journey: phases, steps, proofs, profiles, and descriptions. Agents use it to plan, humans use it to read, and CI uses it to diff.
 
-For a fresh or remote agent session that does not already have this MCP server registered, use `mcporter` as a portable dynamic client. Local HTTP endpoints require `--allow-http`:
+The CLI ships its own MCP client, so driving the running server is a one-liner — no hand-written client, no registration step:
+
+```sh
+agent-e2e list                                   # tool names exposed by the running server
+agent-e2e call stack.start '{"stackId":"dev"}'   # JSON args optional (defaults to {})
+```
+
+`list`/`call` use the same endpoint config as `dev` (`AGENT_E2E_MCP_HOST/PORT/PATH`, or `AGENT_E2E_MCP_URL`); `call` prints the tool's text result, exits non-zero on a tool error, and allows a generous per-call timeout (`AGENT_E2E_MCP_CALL_TIMEOUT_MS`, default 300000) for slow tools like `stack.start`.
+
+For a fresh or remote agent session that prefers a portable dynamic client, `mcporter` also works. Local HTTP endpoints require `--allow-http`:
 
 ```sh
 mcporter list http://127.0.0.1:3766/mcp --schema --json --allow-http
@@ -439,7 +464,7 @@ Most E2E tools are built around human-authored tests. This harness is built arou
 | Primary user                           | Human author           | Human author              | Human author               | Coding agent in dev mode                             |
 | Seeded environment as a gate           | Ad-hoc fixtures        | None                      | None                       | **Environment Seed** + **Seed Gate** + warnings      |
 | Discovery surface for the agent        | Read the test file     | Read the recorded file    | Read the recording         | **Inspectable Journey Contract** via `journey.inspect` |
-| Step-by-step debug from one MCP call   | Rerun the whole spec   | Rerun the whole recording | Rerun the whole recording  | `journey.step`, `journey.phase`, `journey.untilPhase` |
+| Step-by-step debug from one MCP call   | Rerun the whole spec   | Rerun the whole recording | Rerun the whole recording  | `journey.step`, `journey.untilStep`, `journey.phase`, `journey.untilPhase` |
 | Time-travel app state while debugging  | Manual reset scripts   | Rerun from the start      | Rerun from the start       | Seed, inspect, cleanup, reseed, and rerun            |
 | Bounded teardown of agent-created data | Cleanup blocks (best-effort) | None              | None                       | **Ownership Ledger** + **Resource Adapter** + reseed |
 | Same artifact in dev and CI            | Maybe                  | Maybe                     | Recordings drift           | `agent-e2e verify` runs the same journey suite       |
@@ -448,7 +473,7 @@ Most E2E tools are built around human-authored tests. This harness is built arou
 Three honest trade-offs:
 
 - **You write more upfront.** A journey defines profiles, seed, phases, steps, proofs, and a resource registry. That is more than a Playwright spec or a codegen capture. The payoff is the agent can debug, reseed, and rerun without rewriting any of it, and there is no second test artifact when the proof becomes CI.
-- **You take a runtime dependency on Bun for the CLI.** The CLI loads `agent-e2e.config.ts` directly so Dev MCP can hot-reload behind a stable URL and verify can run from the same config in CI.
+- **The CLI is runtime-agnostic (Node or Bun).** jiti loads `agent-e2e.config.ts` and the journey files it imports directly, and verify runs from the same config in CI. Journey/config edits hot-reload in process behind a stable MCP URL — no restart, no MCP reconnect. (`agent-e2e dev --watch` remains as an optional hard-restart fallback.)
 - **You commit to the harness's domain model.** Journeys, profiles, owned resources, feedback envelopes, and observed payloads are opinionated shapes. If you only need to record a happy path once, codegen is shorter. If you need an agent to discover, debug, fix, and promote a flow without re-explaining it every time, the model pays for itself.
 
 ## Public package surfaces
@@ -463,7 +488,7 @@ The v1.0 package exports six entries. All are stable.
 - `@agent-e2e/harness/stack` - stack provider contract, `StackStartContext`, `StackStatusPacket`, `StackLifecyclePhase`, `createStackStartContext`, `createProcessStackProvider`, `allocateTcpPort`.
 - `@agent-e2e/harness/artifacts` - artifact recorder and reader helpers: `createRunArtifacts`, `createRunArtifactRecorder`, `readArtifact`, `resolveArtifactPath`, canonical filenames, and `DEFAULT_AGENT_E2E_ARTIFACT_ROOT`.
 
-The reference CLI is `agent-e2e`. It exposes `agent-e2e dev` for Dev MCP and `agent-e2e verify` for CI. Both accept `--config`, `--cwd`, and `--artifact-root`; `dev` also accepts `--host`, `--port`, and `--path`, while `verify` adds selectors, profiles, workers, reporters, cleanup mode, fail-fast, and warning strictness.
+The reference CLI is `agent-e2e`. `agent-e2e init [targetDir]` scaffolds a minimal, runnable `agent-e2e.config.ts` plus a sample journey to start from (non-destructive; `--force` to overwrite). `agent-e2e dev` runs the Dev MCP server and `agent-e2e verify` runs the CI suite; both accept `--config`, `--cwd`, and `--artifact-root`, `dev` also accepts `--host`, `--port`, and `--path`, while `verify` adds selectors, profiles, workers, reporters, cleanup mode, fail-fast, and warning strictness. `agent-e2e list` and `agent-e2e call <toolName> [jsonArgs]` drive a running Dev MCP server without a hand-written client.
 
 ## Showcase app
 

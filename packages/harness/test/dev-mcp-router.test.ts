@@ -8,6 +8,7 @@ import { defineJourney, type HarnessTypes } from "@agent-e2e/harness/core";
 import { createDevMcpToolRouter } from "@agent-e2e/harness/dev-mcp";
 import { createMcpHarnessServer } from "../src/mcp/index.js";
 import {
+  createProcessStackProvider,
   defineStackExploreTools,
   type StackExecutionSurface,
   type StackStartContext,
@@ -264,6 +265,86 @@ describe("Dev MCP Tool Router", () => {
         },
       },
     });
+    await rm(artifactRoot, { recursive: true, force: true });
+  });
+
+  it("journey.untilStep lands the managed state at a target step and is deterministic", async () => {
+    const artifactRoot = await mkdtemp(join(tmpdir(), "agent-e2e-router-until-step-"));
+    const journey = defineJourney<RouterHarness>({
+      id: "journey:frames",
+      title: "Frames journey",
+      seed: () => ({ environment: { created: [] } }),
+      profiles: [{ id: "profile:frames", data: {}, isDefault: true }],
+      phases: [
+        {
+          id: "phase:frames",
+          title: "Frames phase",
+          steps: [
+            { id: "step:a", title: "Frame A", execute: async () => ({ status: "passed", observed: { message: "a" } }) },
+            { id: "step:b", title: "Frame B", execute: async () => ({ status: "passed", observed: { message: "b" } }) },
+            { id: "step:c", title: "Frame C", execute: async () => ({ status: "passed", observed: { message: "c" } }) },
+          ],
+        },
+      ],
+    });
+    const harness = createMcpHarnessServer({ journeys: [journey], artifactRoot });
+    const router = createDevMcpToolRouter({ harness });
+
+    await router.callTool("run.begin", {
+      journeyId: "journey:frames",
+      execution: { runId: "frames-run" },
+    });
+
+    // Lands at step:b: runs the phase from its first step up to AND INCLUDING the
+    // target step, and parks the managed state at that frame (results.at(-1)).
+    const landed = await router.callTool("journey.untilStep", {
+      runId: "frames-run",
+      phaseId: "phase:frames",
+      stepId: "step:b",
+    });
+    expect(landed).toMatchObject({
+      status: "ok",
+      tool: "journey.untilStep",
+      results: [
+        expect.objectContaining({ stepId: "step:a", status: "passed" }),
+        expect.objectContaining({ stepId: "step:b", status: "passed", observed: { message: "b" } }),
+      ],
+    });
+    const landedResults = landed.results as Array<{ stepId: string }>;
+    expect(landedResults).toHaveLength(2);
+    expect(landedResults.at(-1)?.stepId).toBe("step:b");
+    // step:c is past the target frame and must not have run.
+    expect(landedResults.some((result) => result.stepId === "step:c")).toBe(false);
+
+    // Deterministic / idempotent: a second identical call lands at the same frame.
+    const again = await router.callTool("journey.untilStep", {
+      runId: "frames-run",
+      phaseId: "phase:frames",
+      stepId: "step:b",
+    });
+    expect((again.results as Array<{ stepId: string }>).map((result) => result.stepId)).toEqual([
+      "step:a",
+      "step:b",
+    ]);
+
+    // Unknown step → coherent not-found envelope (same shape as the other journey tools).
+    await expect(
+      router.callTool("journey.untilStep", {
+        runId: "frames-run",
+        phaseId: "phase:frames",
+        stepId: "step:missing",
+      }),
+    ).resolves.toMatchObject({ status: "not-found", tool: "journey.untilStep", subject: "step" });
+
+    // Unknown phase → coherent not-found envelope.
+    await expect(
+      router.callTool("journey.untilStep", {
+        runId: "frames-run",
+        phaseId: "phase:missing",
+        stepId: "step:a",
+      }),
+    ).resolves.toMatchObject({ status: "not-found", tool: "journey.untilStep", subject: "phase" });
+
     await rm(artifactRoot, { recursive: true, force: true });
   });
 
@@ -1539,12 +1620,14 @@ describe("Dev MCP Tool Router", () => {
         };
       },
     };
-    const router = createDevMcpToolRouter({ stackProvider: provider });
+    // maxAttempts: 1 isolates this cleanup test from the bounded-retry default.
+    const router = createDevMcpToolRouter({ stackProvider: provider, stackStart: { maxAttempts: 1 } });
 
     await expect(router.callTool("stack.start")).resolves.toMatchObject({
-      status: "error",
+      status: "failed",
       tool: "stack.start",
-      error: "readiness timeout",
+      code: "stack-start-failed",
+      message: "readiness timeout",
     });
     await expect(router.callTool("stack.list")).resolves.toMatchObject({
       status: "ok",
@@ -1570,14 +1653,301 @@ describe("Dev MCP Tool Router", () => {
         throw new Error("cleanup stop failed");
       },
     };
-    const router = createDevMcpToolRouter({ stackProvider: provider });
+    const router = createDevMcpToolRouter({ stackProvider: provider, stackStart: { maxAttempts: 1 } });
 
     await expect(router.callTool("stack.start")).resolves.toMatchObject({
-      status: "error",
+      status: "failed",
       tool: "stack.start",
-      error: expect.stringContaining("readiness timeout"),
+      code: "stack-start-failed",
+      message: expect.stringContaining("readiness timeout"),
     });
     expect(events).toEqual(["start", "status", "stop:stack-1"]);
+  });
+
+  it("retries a cold-start readiness failure and self-heals on a later attempt", async () => {
+    const events: string[] = [];
+    let attempts = 0;
+    const provider: StackProvider<{ id: string }> = {
+      id: "cold-start-stack",
+      start: async () => {
+        attempts += 1;
+        events.push(`start:${attempts}`);
+        return { id: `stack-${attempts}` };
+      },
+      // First readiness probe trips the cold-start deadline; the warm retry passes.
+      status: (handle) => {
+        events.push(`status:${handle.id}`);
+        if (attempts < 2) throw new Error("readiness timeout (cold start)");
+        return {
+          status: "ready",
+          summary: `ready:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        };
+      },
+      stop: async (handle) => {
+        events.push(`stop:${handle.id}`);
+        return {
+          status: "stopped",
+          summary: `stopped:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        };
+      },
+    };
+    // backoffMs: 0 keeps the test fast; maxAttempts defaults to 2.
+    const router = createDevMcpToolRouter({ stackProvider: provider, stackStart: { backoffMs: 0 } });
+
+    await expect(router.callTool("stack.start", { stackId: "warm" })).resolves.toMatchObject({
+      status: "ok",
+      tool: "stack.start",
+      stackId: "warm",
+      stack: { status: "ready" },
+    });
+    expect(attempts).toBe(2);
+    // The failed first attempt tore its own handle down before the retry.
+    expect(events).toEqual([
+      "start:1",
+      "status:stack-1",
+      "stop:stack-1",
+      "start:2",
+      "status:stack-2",
+    ]);
+  });
+
+  it("returns a coherent failed envelope after exhausting bounded start retries", async () => {
+    let attempts = 0;
+    const provider: StackProvider<{ id: string }> = {
+      id: "always-failing-stack",
+      start: async () => {
+        attempts += 1;
+        return { id: `stack-${attempts}` };
+      },
+      status: () => {
+        throw new Error("readiness timeout");
+      },
+      stop: async (handle) => ({
+        status: "stopped",
+        summary: `stopped:${handle.id}`,
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({
+      stackProvider: provider,
+      stackStart: { maxAttempts: 3, backoffMs: 0 },
+    });
+
+    const result = await router.callTool("stack.start", { stackId: "doomed" });
+    // Coherent envelope: a stable discriminator plus code+message, never the
+    // generic {status:"error"} shape that omits them and trips clients reading
+    // result.stack.
+    expect(result).toMatchObject({
+      status: "failed",
+      tool: "stack.start",
+      code: "stack-start-failed",
+      message: expect.stringContaining("after 3 attempts"),
+    });
+    expect(result.message).toContain("readiness timeout");
+    expect("stack" in result).toBe(false);
+    expect(attempts).toBe(3);
+  });
+
+  it("attaches self-diagnosing per-service diagnostics (redacted) to a failed start", async () => {
+    // A provider whose status reports a `failed` packet: postgres is ready but
+    // vite never compiled. The diagnostics must pin the culprit and carry the
+    // tail of ITS logs — with any secret in those logs redacted.
+    const provider: StackProvider<{ id: string }> = {
+      id: "diag-stack",
+      start: async () => ({ id: "h" }),
+      status: () => ({
+        status: "failed",
+        summary: "vite failed to compile",
+        services: [
+          { id: "postgres", status: "ready", url: "http://127.0.0.1:5432" },
+          { id: "vite", status: "failed" },
+        ],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+      logs: (_handle, input) => ({
+        status: "ok",
+        summary: `logs:${input.serviceId}`,
+        serviceId: input.serviceId,
+        stream: "combined",
+        tail: input.tail,
+        entries:
+          input.serviceId === "vite"
+            ? [
+                { message: "error: Cannot find module './canonicalRoutes'" },
+                { message: "DATABASE_URL=postgres://admin:s3cr3t@db:5432/app" },
+                { message: "auth issued token=abcSECRET123 for worker" },
+              ]
+            : [],
+        truncated: false,
+      }),
+      stop: async (handle) => ({
+        status: "stopped",
+        summary: `stopped:${handle.id}`,
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({
+      stackProvider: provider,
+      stackStart: { maxAttempts: 2, backoffMs: 0 },
+    });
+
+    const result = await router.callTool("stack.start", { stackId: "diag" });
+    expect(result).toMatchObject({
+      status: "failed",
+      tool: "stack.start",
+      code: "stack-start-failed",
+    });
+
+    const diagnostics = result.diagnostics as {
+      attempts: number;
+      services: Array<{ id: string; status: string; logsTail: string[] }>;
+      note?: string;
+    };
+    expect(diagnostics.attempts).toBe(2);
+
+    const postgres = diagnostics.services.find((service) => service.id === "postgres");
+    const vite = diagnostics.services.find((service) => service.id === "vite");
+    // The ready service carries no logs — only the culprit does.
+    expect(postgres).toMatchObject({ status: "ready", logsTail: [] });
+    expect(vite?.status).toBe("failed");
+    expect(vite?.logsTail.length).toBeGreaterThan(0);
+
+    // The data points straight at the cause (external compile failure, not an
+    // internal init-ordering bug).
+    const tail = (vite?.logsTail ?? []).join("\n");
+    expect(tail).toContain("Cannot find module './canonicalRoutes'");
+
+    // Redaction holds: no DSN credential or token leaks through the log tail.
+    expect(tail).not.toContain("s3cr3t");
+    expect(tail).not.toContain("abcSECRET123");
+    expect(tail).toContain("[redacted]");
+  });
+
+  it("surfaces attempts > 1 on the ok envelope when a cold start self-heals", async () => {
+    let attempts = 0;
+    const provider: StackProvider<{ id: string }> = {
+      id: "self-heal-stack",
+      start: async () => {
+        attempts += 1;
+        return { id: `stack-${attempts}` };
+      },
+      status: (handle) => {
+        if (attempts < 2) throw new Error("readiness timeout (cold start)");
+        return {
+          status: "ready",
+          summary: `ready:${handle.id}`,
+          services: [],
+          artifacts: [],
+          warnings: [],
+          errors: [],
+        };
+      },
+      stop: async (handle) => ({
+        status: "stopped",
+        summary: `stopped:${handle.id}`,
+        services: [],
+        artifacts: [],
+        warnings: [],
+        errors: [],
+      }),
+    };
+    const router = createDevMcpToolRouter({ stackProvider: provider, stackStart: { backoffMs: 0 } });
+
+    // attempts > 1 makes the bounded-retry self-heal visible instead of silent.
+    await expect(router.callTool("stack.start", { stackId: "warm" })).resolves.toMatchObject({
+      status: "ok",
+      tool: "stack.start",
+      attempts: 2,
+    });
+  });
+
+  it("captures diagnostics for the flagship process provider that launches but never becomes ready", async () => {
+    // The real createProcessStackProvider: start() is launch-only and readiness
+    // is status()-driven. This process spawns fine (so a LIVE handle escapes)
+    // but its readyUrl never passes, so status() stays `degraded` until the
+    // manager's readiness window closes. This is the most common real failure
+    // ("the service never came up") and the exact path #6's fake provider never
+    // exercised. On main — where start() blocks on waitForReady and throws —
+    // this yields diagnostics.services:[] + a "status unavailable" note; after
+    // the fix the failing service's log tail is captured from the live handle.
+    const logDir = await mkdtemp(join(tmpdir(), "agent-e2e-process-diag-"));
+    const logPath = join(logDir, "control-plane.log");
+    // The service's startup log already holds its crash reason (with a secret in
+    // it). Pre-seeding the file keeps the test deterministic — what we prove is
+    // that diagnostics READS the live service's real log via the capture path,
+    // not how fast a spawned child flushes stderr under parallel-suite load.
+    await writeFile(
+      logPath,
+      "control-plane FATAL: cannot bind, DATABASE_URL=postgres://admin:s3cr3t@db:5432/app\n",
+      "utf8",
+    );
+    const provider = createProcessStackProvider({
+      id: "control-plane",
+      serviceId: "control-plane",
+      // A real process that launches and stays alive — so a LIVE handle escapes
+      // start() — but whose readiness endpoint never comes up.
+      command: process.execPath,
+      args: ["-e", "setInterval(() => {}, 1000);"],
+      // An address nothing is listening on: readiness never passes.
+      readyUrl: "http://127.0.0.1:1/ready",
+      logPath,
+    });
+
+    const router = createDevMcpToolRouter({
+      stackProvider: provider,
+      // One attempt, a short readiness window: launch, poll status() ~degraded,
+      // give up, diagnose from the live handle.
+      stackStart: { maxAttempts: 1, readyTimeoutMs: 250, pollIntervalMs: 25 },
+    });
+
+    try {
+      const result = await router.callTool("stack.start", { stackId: "cp" });
+      expect(result).toMatchObject({
+        status: "failed",
+        tool: "stack.start",
+        code: "stack-start-failed",
+      });
+
+      const diagnostics = result.diagnostics as {
+        attempts: number;
+        services: Array<{ id: string; status: string; logsTail: string[] }>;
+        note?: string;
+      };
+      // Populated via the start()-returns-then-readiness-times-out path — NOT the
+      // empty status-unavailable fallback.
+      expect(diagnostics.attempts).toBe(1);
+      expect(diagnostics.note).toBeUndefined();
+
+      const service = diagnostics.services.find((entry) => entry.id === "control-plane");
+      expect(service).toBeDefined();
+      expect(service?.status).not.toBe("ready");
+      expect(service?.logsTail.length).toBeGreaterThan(0);
+
+      const tail = (service?.logsTail ?? []).join("\n");
+      // The log HELD the reason; diagnostics now carries it.
+      expect(tail).toContain("control-plane FATAL");
+      // Redaction holds: the DSN credential never leaks through the log tail.
+      expect(tail).not.toContain("s3cr3t");
+      expect(tail).toContain("[redacted]");
+    } finally {
+      await rm(logDir, { recursive: true, force: true });
+    }
   });
 
   it("disposes all remaining Stack Instances and browser sessions", async () => {

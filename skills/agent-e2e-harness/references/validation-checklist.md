@@ -21,7 +21,7 @@ Verify:
 ```sh
 npm pkg get scripts.dev:mcp
 npm pkg get scripts.e2e:verify
-bun --version
+node --version
 agent-e2e --help
 agent-e2e dev --help
 agent-e2e attached --help

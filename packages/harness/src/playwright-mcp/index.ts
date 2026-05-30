@@ -4,7 +4,6 @@ import {
   createRunArtifacts,
   forensicsRelativePath,
   safePathSegment,
-  timestampSegment,
   writeBinaryArtifact,
   writeJsonArtifact,
   type RunArtifacts,
@@ -14,6 +13,12 @@ import { runBrowserAction } from "./actions.js";
 import { runPageCode, runPlaywrightCode, effectiveTimeout, type BrowserCodeRunInput, type BrowserCodeRunResult } from "./code-runner.js";
 import { createBrowserRefStore, descriptorForSelector, locatorFor, type BrowserLocatorDescriptor, type BrowserRefStore, type BrowserRefTarget } from "./refs.js";
 import { createBrowserSignalBuffer, type BrowserConsoleLevel, type BrowserConsoleReadInput, type BrowserNetworkReadInput, type BrowserSignalBuffer } from "./signals.js";
+
+// Re-export the shared browser-action input types so the Dev MCP browser
+// session controller contract can be typed against the same public vocabulary
+// the manager already uses (see DevMcpBrowserWorkbenchController). These are
+// pure data shapes with no Playwright runtime dependency.
+export type { BrowserCodeRunInput, BrowserCodeRunResult } from "./code-runner.js";
 
 export interface AgentE2EPlaywrightMcpApiContract {
   surface: "playwright-backed-mcp-contracts";
@@ -170,6 +175,11 @@ interface BrowserSession {
   refs: BrowserRefStore;
   signals: BrowserSignalBuffer;
   run: RunArtifacts;
+  // Monotonic capture counter for this session's forensics files. Forensics
+  // captures are session-scoped exploration (not bound to a phase/step), so the
+  // sequence tags each file with its capture ORDER and the action that produced
+  // it — replacing the old timestamp-only names that sorted as noise.
+  forensicsSeq: number;
 }
 
 export const PLAYWRIGHT_MCP_DEFAULT_BROWSER_MODE: BrowserSessionMode = {
@@ -217,6 +227,7 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
       refs: createBrowserRefStore(),
       signals,
       run,
+      forensicsSeq: 0,
     });
     return {
       status: "open",
@@ -382,7 +393,7 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
     } satisfies BrowserSnapshotPacket;
     const artifact = await writeJsonArtifact(
       session.run,
-      forensicsRelativePath(`browser-snapshot-${timestampSegment()}.json`),
+      forensicsRelativePath(`${nextForensicsName(session, "browser-snapshot")}.json`),
       packet,
       {
         name: "browser-snapshot",
@@ -401,9 +412,10 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
     if (!session)
       return { status: "not-found", browserSessionId: input.browserSessionId };
     session.lastUsedAt = new Date().toISOString();
-    const filename = screenshotFilename(
-      input.path ?? `screenshot-${timestampSegment()}.png`,
-    );
+    const customLabel = input.path
+      ? (input.path.split(/[\\/]/).filter(Boolean).at(-1) ?? input.path).replace(/\.png$/i, "")
+      : undefined;
+    const filename = `${nextForensicsName(session, "browser-screenshot", customLabel)}.png`;
     const buffer = await session.page.screenshot({
       fullPage: input.fullPage ?? true,
     });
@@ -818,9 +830,19 @@ async function closeBrowserBounded(browser: Browser): Promise<void> {
   void close.catch(() => undefined);
 }
 
-function screenshotFilename(value: string): string {
-  const leaf = value.split(/[\\/]/).filter(Boolean).at(-1) ?? value;
-  return `${safePathSegment(leaf.replace(/\.png$/i, ""))}.png`;
+/**
+ * Build a forensics filename stem tagged with this session's capture sequence
+ * and the action that produced it (e.g. `0001-browser-snapshot`,
+ * `0002-browser-screenshot-login-form`). The sequence makes captures sort in
+ * capture order and disambiguates repeats; the action and optional label make
+ * each file self-identifying instead of timestamp-only noise. Any caller-
+ * supplied label is sanitized, so path traversal cannot escape the forensics
+ * directory.
+ */
+function nextForensicsName(session: BrowserSession, action: string, label?: string): string {
+  const seq = String((session.forensicsSeq += 1)).padStart(4, "0");
+  const labelSegment = label ? safePathSegment(label) : "";
+  return [seq, action, labelSegment].filter(Boolean).join("-");
 }
 
 function resolveActTarget(

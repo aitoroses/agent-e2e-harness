@@ -626,7 +626,7 @@ export async function reseedJourneyRun<TTypes extends AnyHarnessTypes = HarnessT
   options: ReseedJourneyRunOptions<TTypes>
 ): Promise<ReseedJourneyRunResult<TTypes>> {
   const cleanup = await teardownOwnedResources(
-    options.previousLedger ?? createOwnershipLedger<TTypes>(options.runId ?? deriveRunId(options.execution, journey, journey.getProfile(options.profileId))),
+    options.previousLedger ?? createOwnershipLedger<TTypes>(options.runId ?? deriveRunId(options.execution)),
     options.resourceAdapters ?? [],
     compactObject({ requestedResources: options.requestedResources }) as { requestedResources?: readonly OwnedResource<TTypes>[] }
   );
@@ -687,7 +687,7 @@ export async function beginJourneyRun<TTypes extends AnyHarnessTypes = HarnessTy
   }
 
   const profile = journey.getProfile(options.profileId);
-  const runId = options.runId ?? deriveRunId(options.execution, journey, profile);
+  const runId = options.runId ?? deriveRunId(options.execution);
   const run: JourneyRun<TTypes> = {
     id: runId,
     journey,
@@ -908,16 +908,32 @@ function stableStringify(value: unknown): string {
 }
 
 function deriveRunId<TTypes extends AnyHarnessTypes>(
-  execution: ExecutionSurface<TTypes>,
-  journey: ExecutableJourney<TTypes>,
-  profile: JourneyProfile<TTypes>
+  execution: ExecutionSurface<TTypes>
 ): string {
   if (typeof execution === 'object' && execution !== null && 'runId' in execution) {
     const runId = (execution as { runId?: unknown }).runId;
     if (typeof runId === 'string' && runId.length > 0) return runId;
   }
 
-  return `run:${journey.id}:${profile.id}`;
+  // No caller-supplied run id: mint a UNIQUE one per invocation. Earlier this
+  // returned the static `run:<journey>:<profile>`, so two interactive runs of
+  // the same journey/profile collided into one artifact directory and the
+  // second overwrote the first. A sortable timestamp + short random suffix
+  // keeps each interactive run in its own `<journey>/<runId>/` directory while
+  // staying human-scannable (newest sorts last).
+  return generateRunId();
+}
+
+/**
+ * Mint a unique, lexicographically sortable run id for an interactive run that
+ * the caller did not name explicitly. Shape: `run-<utc-timestamp>-<suffix>`,
+ * e.g. `run-2026-05-30t12-00-00-000z-a1b2c`. The timestamp orders runs by start
+ * time; the suffix disambiguates runs that begin within the same millisecond.
+ */
+export function generateRunId(date: Date = new Date()): string {
+  const timestamp = date.toISOString().toLowerCase().replace(/[:.]/g, '-');
+  const suffix = Math.random().toString(36).slice(2, 7).padEnd(5, '0');
+  return `run-${timestamp}-${suffix}`;
 }
 
 function findJourneyStep<TTypes extends AnyHarnessTypes>(
@@ -1013,6 +1029,44 @@ function nextProgress(progress: RunProgress, stepId: string, failed: boolean): R
         completedStepIds: [...progress.completedStepIds, stepId],
         failedStepIds: progress.failedStepIds
       };
+}
+
+/**
+ * A whole-run verdict, distinct from `RunProgress.status` (which `nextProgress`
+ * flips to `passed`/`failed` after EACH step and therefore reflects only the
+ * most recent step). Operators reading a run's `result.json` need to know
+ * whether the JOURNEY is done, not whether the last step happened to pass:
+ *
+ * - `failed`  — at least one step failed.
+ * - `passed`  — every step across every phase completed (the run is finished).
+ * - `running` — no failures yet, but steps remain.
+ */
+export interface RunProgressSummary {
+  status: RunProgressStatus;
+  totalSteps: number;
+  completedSteps: number;
+  failedSteps: number;
+  remainingSteps: number;
+  summary: string;
+}
+
+export function summarizeRunProgress<TTypes extends AnyHarnessTypes>(
+  run: JourneyRun<TTypes>
+): RunProgressSummary {
+  const allStepIds = run.journey.phases.flatMap((phase) => phase.steps.map((step) => step.id));
+  const totalSteps = allStepIds.length;
+  const completedSteps = allStepIds.filter((id) => run.progress.completedStepIds.includes(id)).length;
+  const failedSteps = run.progress.failedStepIds.length;
+  const remainingSteps = Math.max(0, totalSteps - completedSteps - failedSteps);
+  const status: RunProgressStatus =
+    failedSteps > 0 ? 'failed' : totalSteps > 0 && completedSteps >= totalSteps ? 'passed' : 'running';
+  const summary =
+    status === 'failed'
+      ? `${failedSteps} step${failedSteps === 1 ? '' : 's'} failed (${completedSteps}/${totalSteps} passed).`
+      : status === 'passed'
+        ? `All ${totalSteps} step${totalSteps === 1 ? '' : 's'} passed.`
+        : `${completedSteps}/${totalSteps} steps passed, ${remainingSteps} remaining.`;
+  return { status, totalSteps, completedSteps, failedSteps, remainingSteps, summary };
 }
 
 function selectJourneyProfile<TTypes extends AnyHarnessTypes>(

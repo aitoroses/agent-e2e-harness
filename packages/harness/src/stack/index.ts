@@ -177,6 +177,11 @@ export interface ProcessStackProviderConfig {
   serviceId?: string;
   serviceUrl?: string;
   readyUrl?: string;
+  /**
+   * @deprecated Ignored as of 1.4.0. `start()` is launch-only and readiness is
+   * gated by the caller (the Dev MCP `stackStart.readyTimeoutMs`), so the
+   * provider no longer blocks on readiness. Kept for config compatibility.
+   */
   readyTimeoutMs?: number;
   logPath?: string;
   stopSignal?: NodeJS.Signals;
@@ -290,14 +295,13 @@ export function createProcessStackProvider(
       if (config.readyUrl) handle.readyUrl = config.readyUrl;
       if (config.logPath) handle.logPath = config.logPath;
 
-      try {
-        if (config.readyUrl)
-          await waitForReady(config.readyUrl, config.readyTimeoutMs ?? 90_000);
-        return handle;
-      } catch (error) {
-        await handle.stop();
-        throw error;
-      }
+      // Launch-only: spawn and hand back the LIVE handle immediately. Readiness
+      // is a single authority — `status()` (canFetch(readyUrl)) — and the gate
+      // (how long to wait, when to give up and diagnose) is owned by the caller
+      // (StackInstanceManager), which holds this handle while it polls. Waiting
+      // here instead would tear the child down on timeout before any handle
+      // escaped, so the failing service's logs could never be captured.
+      return handle;
     },
     async status(handle) {
       const ready = handle.readyUrl ? await canFetch(handle.readyUrl) : isAlive(handle);
@@ -416,15 +420,6 @@ function openLogFile(path: string): number {
   const fd = openSync(path, "a");
   writeSync(fd, `\n--- managed process start ${new Date().toISOString()} ---\n`);
   return fd;
-}
-
-async function waitForReady(url: string, timeoutMs: number): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (await canFetch(url)) return;
-    await delay(500);
-  }
-  throw new Error(`Timed out waiting for ${url}`);
 }
 
 async function canFetch(url: string): Promise<boolean> {

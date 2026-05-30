@@ -1,6 +1,6 @@
 {
   "name": "agent-e2e-harness",
-  "version": "0.0.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Reusable E2E harness for agent-driven proof loops, MCP tooling, artifacts, and CI verification.",
   "keywords": [
@@ -22,7 +22,6 @@
   "author": "Aitor Roses",
   "license": "MIT",
   "engines": {
-    "bun": ">=1.3.0",
     "node": ">=22.0.0"
   },
   "type": "module",

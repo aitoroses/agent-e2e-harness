@@ -24,6 +24,7 @@ const requiredTools = [
   'cleanup.plan',
   'artifact.read',
   'journey.step',
+  'journey.untilStep',
   'journey.untilPhase',
   'journey.phase',
   'browser.open',

@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import {
   createStackExecutionSurface,
   createStackStartContext,
@@ -6,6 +7,31 @@ import {
   type StackProvider,
   type StackStatusPacket,
 } from "../stack/index.js";
+
+// Verify worker stacks are caller-gated for readiness, exactly like the Dev MCP
+// StackInstanceManager: `provider.start()` is launch-only (1.4.0), so the
+// scheduler must poll `provider.status()` until the stack reports `ready`,
+// reaches a terminal `failed`/`stopped`, or this window elapses. A single
+// status() check right after start() would see a still-compiling dev server as
+// `degraded` and abort the whole suite. The window is generous because verify
+// stacks include a cold dev-server build.
+const DEFAULT_VERIFY_STACK_READY_TIMEOUT_MS = 120_000;
+const DEFAULT_VERIFY_STACK_READY_POLL_INTERVAL_MS = 500;
+
+async function awaitStackReady<TStackHandle>(
+  provider: StackProvider<TStackHandle>,
+  handle: TStackHandle,
+): Promise<StackStatusPacket> {
+  const deadline = Date.now() + DEFAULT_VERIFY_STACK_READY_TIMEOUT_MS;
+  let packet = await provider.status(handle);
+  while (packet.status !== "ready") {
+    if (packet.status === "failed" || packet.status === "stopped") break;
+    if (Date.now() >= deadline) break;
+    await delay(DEFAULT_VERIFY_STACK_READY_POLL_INTERVAL_MS);
+    packet = await provider.status(handle);
+  }
+  return packet;
+}
 
 export interface VerifyWorkerRunContext {
   workerIndex: number;
@@ -149,7 +175,7 @@ async function startWorkerStack<TStackHandle>(input: {
   let handle: TStackHandle | undefined;
   try {
     handle = await input.provider.start(context);
-    const status = await input.provider.status(handle);
+    const status = await awaitStackReady(input.provider, handle);
     input.snapshots.push(snapshotFor({
       stackId,
       workerIndex: input.workerIndex,

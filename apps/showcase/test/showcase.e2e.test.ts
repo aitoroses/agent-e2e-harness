@@ -26,6 +26,10 @@ beforeAll(async () => {
     artifactRoot: ".agents-e2e/artifacts",
   });
   stackHandle = await stackProvider.start(stackContext);
+  // `start()` is launch-only as of 1.4.0 (readiness is `status()`-driven and
+  // gated by the caller). Poll status until the app reports ready before
+  // asserting — mirrors what StackInstanceManager does in production.
+  await waitForStackReady(stackProvider, stackHandle, 120_000);
   const portAllocation = stackContext.allocations().find(
     (allocation) => allocation.kind === "port" && allocation.name === "showcase next dev",
   );
@@ -96,6 +100,20 @@ afterAll(async () => {
     });
   }
 });
+
+async function waitForStackReady(
+  provider: ReturnType<typeof createShowcaseDevStackProvider>,
+  handle: Awaited<ReturnType<ReturnType<typeof createShowcaseDevStackProvider>["start"]>>,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const status = await provider.status(handle);
+    if (status.status === "ready") return;
+    if (Date.now() >= deadline) throw new Error(`showcase stack never became ready: ${status.summary}`);
+    await new Promise((settle) => setTimeout(settle, 500));
+  }
+}
 
 describe("Next.js showcase app", () => {
   it("crystallizes the showcase journey through the public core closure path", async () => {

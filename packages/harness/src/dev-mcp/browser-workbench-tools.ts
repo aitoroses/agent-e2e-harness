@@ -1,3 +1,13 @@
+import type {
+  BrowserActInput,
+  BrowserCodeRunInput,
+  BrowserFindInput,
+  BrowserGetInput,
+  BrowserScreenshotInput,
+  BrowserSignalToolInput,
+  BrowserWaitInput,
+} from "../playwright-mcp/index.js";
+
 type RuntimeZod = typeof import("zod/v4").z;
 
 export const DEV_MCP_BROWSER_WORKBENCH_TOOLS = [
@@ -18,16 +28,24 @@ export const DEV_MCP_BROWSER_WORKBENCH_TOOLS = [
 
 export type DevMcpBrowserWorkbenchToolName = (typeof DEV_MCP_BROWSER_WORKBENCH_TOOLS)[number];
 
+// Method params are typed against the shared public browser-action input types
+// (the same ones the Playwright manager already uses) rather than
+// `Record<string, unknown>`. Under strictFunctionTypes a manager method whose
+// parameter is narrower than `Record<string, unknown>` is not assignable to a
+// wider-parameter field, so the public factory failed to satisfy this contract
+// when wired explicitly. Aligning the params makes
+// `createPlaywrightMcpBrowserSessionManager()` assignable here, and tightens
+// call-site safety for any other controller implementation.
 export interface DevMcpBrowserWorkbenchController {
-  find?: (input: Record<string, unknown>) => Promise<unknown>;
-  act?: (input: Record<string, unknown>) => Promise<unknown>;
-  wait?: (input: Record<string, unknown>) => Promise<unknown>;
-  get?: (input: Record<string, unknown>) => Promise<unknown>;
-  evaluate?: (input: Record<string, unknown>) => Promise<unknown>;
-  playwright?: (input: Record<string, unknown>) => Promise<unknown>;
-  console?: (input: Record<string, unknown>) => Promise<unknown>;
-  network?: (input: Record<string, unknown>) => Promise<unknown>;
-  screenshot?: (input: Record<string, unknown>) => Promise<unknown>;
+  find?: (input: BrowserFindInput) => Promise<unknown>;
+  act?: (input: BrowserActInput) => Promise<unknown>;
+  wait?: (input: BrowserWaitInput) => Promise<unknown>;
+  get?: (input: BrowserGetInput) => Promise<unknown>;
+  evaluate?: (input: BrowserCodeRunInput) => Promise<unknown>;
+  playwright?: (input: BrowserCodeRunInput) => Promise<unknown>;
+  console?: (input: BrowserSignalToolInput) => Promise<unknown>;
+  network?: (input: BrowserSignalToolInput) => Promise<unknown>;
+  screenshot?: (input: BrowserScreenshotInput) => Promise<unknown>;
 }
 
 export function implementedBrowserWorkbenchToolNames(

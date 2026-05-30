@@ -43,8 +43,38 @@ import {
   implementedBrowserWorkbenchToolNames,
   type DevMcpBrowserWorkbenchController,
 } from "./browser-workbench-tools.js";
-import { createReloadingHarnessSource, type ReloadingHarnessSourceOptions } from "./reloading-harness.js";
-import { StackInstanceManager, StackInstanceManagerError, stoppedStackStatus } from "./stack-instance-manager.js";
+// Type-only import of the shared public browser-action input shapes. These are
+// pure data interfaces (no Playwright runtime), so referencing them keeps the
+// dev-mcp layer Playwright-package-free; the boundary check forbids the
+// `playwright`/`@playwright/*` packages, not this relative type import.
+import type {
+  BrowserActInput,
+  BrowserCodeRunInput,
+  BrowserFindInput,
+  BrowserGetInput,
+  BrowserOpenInput,
+  BrowserScreenshotInput,
+  BrowserSignalToolInput,
+  BrowserWaitInput,
+} from "../playwright-mcp/index.js";
+import {
+  createReloadingHarnessSource,
+  type ReloadingHarnessSource,
+  type ReloadingHarnessSourceOptions,
+} from "./reloading-harness.js";
+
+export {
+  createReloadingHarnessSource,
+  type ReloadingHarnessSource,
+  type ReloadingHarnessSourceOptions,
+};
+import {
+  StackInstanceManager,
+  StackInstanceManagerError,
+  StackStartFailedError,
+  type StackStartDiagnostics,
+  stoppedStackStatus,
+} from "./stack-instance-manager.js";
 
 type RuntimeZod = typeof import("zod/v4").z;
 
@@ -96,6 +126,7 @@ export const DEV_MCP_TOOL_GRAMMAR = [
   "cleanup.plan",
   "artifact.read",
   "journey.step",
+  "journey.untilStep",
   "journey.untilPhase",
   "journey.phase",
   ...DEV_MCP_BROWSER_WORKBENCH_TOOLS,
@@ -109,6 +140,44 @@ export const DEFAULT_DEV_MCP_HOST = "127.0.0.1";
 export const DEFAULT_DEV_MCP_PORT = 3766;
 export const DEFAULT_DEV_MCP_PATH = "/mcp";
 export const DEFAULT_AGENT_E2E_DIR = ".agents-e2e";
+
+export interface DevMcpEndpoint {
+  host: string;
+  port: number;
+  path: string;
+  url: string;
+}
+
+export interface DevMcpEndpointOverrides {
+  host?: string | undefined;
+  port?: number | undefined;
+  path?: string | undefined;
+}
+
+/**
+ * Single source of truth for the Dev MCP endpoint. Precedence: explicit
+ * overrides (e.g. config) -> AGENT_E2E_MCP_HOST/PORT/PATH -> built-in defaults.
+ * Both the `dev` server and the `list`/`call` client resolve through here so a
+ * server and a client launched with the same environment agree on the URL.
+ */
+export function resolveDevMcpEndpoint(
+  overrides: DevMcpEndpointOverrides = {},
+  env: NodeJS.ProcessEnv = process.env,
+): DevMcpEndpoint {
+  const host = overrides.host ?? env.AGENT_E2E_MCP_HOST ?? DEFAULT_DEV_MCP_HOST;
+  const port = overrides.port ?? optionalPort(env.AGENT_E2E_MCP_PORT) ?? DEFAULT_DEV_MCP_PORT;
+  const path = overrides.path ?? env.AGENT_E2E_MCP_PATH ?? DEFAULT_DEV_MCP_PATH;
+  return { host, port, path, url: `http://${host}:${port}${path}` };
+}
+
+/**
+ * URL an MCP client should connect to. `AGENT_E2E_MCP_URL` wins as a full
+ * override; otherwise it is derived from the same endpoint config as the server.
+ */
+export function resolveDevMcpClientUrl(env: NodeJS.ProcessEnv = process.env): string {
+  return env.AGENT_E2E_MCP_URL ?? resolveDevMcpEndpoint({}, env).url;
+}
+
 export const DEFAULT_AGENT_E2E_ARTIFACT_ROOT = ".agents-e2e/artifacts";
 export interface DevMcpToolResponse {
   status: DevMcpToolStatus;
@@ -117,7 +186,7 @@ export interface DevMcpToolResponse {
 }
 
 export interface DevMcpBrowserSessionController extends DevMcpBrowserWorkbenchController {
-  open: (input?: Record<string, unknown>) => Promise<unknown>;
+  open: (input?: BrowserOpenInput) => Promise<unknown>;
   snapshot: (browserSessionId: string) => Promise<unknown>;
   close: (browserSessionId: string) => Promise<unknown>;
   closeAll?: () => Promise<unknown>;
@@ -135,6 +204,16 @@ export interface DevMcpToolRouterOptions<TStackHandle = unknown> {
   runtimeTargets?: readonly RuntimeTarget[];
   runtimeTargetId?: string;
   artifactRoot?: string;
+  /**
+   * Bounded retry for `stack.start` cold-start timing. A freshly-started server's
+   * first `stack.start` can trip provider readiness (Docker warmup, cold dev-server
+   * compile) and fail even though an immediate retry succeeds; a small bounded retry
+   * lets the first call self-heal. Defaults to 2 attempts with a 750ms backoff. Set
+   * `maxAttempts: 1` to disable. `readyTimeoutMs`/`pollIntervalMs` bound how long
+   * each attempt polls `status()` for readiness before it is treated as a
+   * (retryable) non-ready attempt — defaults 90000ms / 500ms.
+   */
+  stackStart?: { maxAttempts?: number; backoffMs?: number; readyTimeoutMs?: number; pollIntervalMs?: number };
 }
 
 export interface DevMcpToolRouter {
@@ -182,6 +261,7 @@ export interface AgentE2EDevMcpConfig<
   browserSessions?: DevMcpBrowserSessionController | false;
   harness?: DevMcpHarnessProvider;
   artifactRoot?: string;
+  stackStart?: { maxAttempts?: number; backoffMs?: number; readyTimeoutMs?: number; pollIntervalMs?: number };
   host?: string;
   port?: number;
   path?: string;
@@ -317,9 +397,11 @@ export async function startAgentE2EDevMcp<
 ): Promise<AgentE2EDevMcpServerHandle> {
   const resolvedConfig = config ?? await loadAgentE2EConfig<TTypes, TStackHandle>();
   const artifactRoot = resolvedConfig.artifactRoot ?? process.env.AGENT_E2E_ARTIFACT_ROOT ?? DEFAULT_AGENT_E2E_ARTIFACT_ROOT;
-  const host = resolvedConfig.host ?? process.env.AGENT_E2E_MCP_HOST ?? DEFAULT_DEV_MCP_HOST;
-  const port = resolvedConfig.port ?? optionalPort(process.env.AGENT_E2E_MCP_PORT) ?? DEFAULT_DEV_MCP_PORT;
-  const path = resolvedConfig.path ?? process.env.AGENT_E2E_MCP_PATH ?? DEFAULT_DEV_MCP_PATH;
+  const { host, port, path } = resolveDevMcpEndpoint({
+    host: resolvedConfig.host,
+    port: resolvedConfig.port,
+    path: resolvedConfig.path,
+  });
   const resourceAdapters = resourceAdaptersFromConfig(resolvedConfig);
   const harness = resolvedConfig.harness ?? createMcpHarnessServer<TTypes>({
     journeys: resolvedConfig.journeys,
@@ -340,6 +422,7 @@ export async function startAgentE2EDevMcp<
     allowedOrigins: resolvedConfig.allowedOrigins ?? localDevOrigins(host),
   };
   if (resolvedConfig.stackProvider) serverOptions.stackProvider = resolvedConfig.stackProvider;
+  if (resolvedConfig.stackStart) serverOptions.stackStart = resolvedConfig.stackStart;
   if (resolvedConfig.runtimeTargets) serverOptions.runtimeTargets = resolvedConfig.runtimeTargets;
   if (resolvedConfig.runtimeTargetId) serverOptions.runtimeTargetId = resolvedConfig.runtimeTargetId;
   if (browserSessions) serverOptions.browserSessions = browserSessions;
@@ -483,6 +566,18 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
   const stackInstances = options.stackProvider
     ? new StackInstanceManager(options.stackProvider, {
         artifactRoot: options.artifactRoot ?? DEFAULT_AGENT_E2E_ARTIFACT_ROOT,
+        ...(options.stackStart?.maxAttempts !== undefined
+          ? { startMaxAttempts: options.stackStart.maxAttempts }
+          : {}),
+        ...(options.stackStart?.backoffMs !== undefined
+          ? { startRetryBackoffMs: options.stackStart.backoffMs }
+          : {}),
+        ...(options.stackStart?.readyTimeoutMs !== undefined
+          ? { startReadyTimeoutMs: options.stackStart.readyTimeoutMs }
+          : {}),
+        ...(options.stackStart?.pollIntervalMs !== undefined
+          ? { startReadyPollIntervalMs: options.stackStart.pollIntervalMs }
+          : {}),
       })
     : undefined;
   const runStackBindings = new Map<string, {
@@ -520,6 +615,8 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           return fromHarness(name, await resolveHarness(options.harness), "readArtifact", args);
         case "journey.step":
           return fromHarnessWithRunStackBinding(name, "runStep", args);
+        case "journey.untilStep":
+          return fromHarnessWithRunStackBinding(name, "runUntilStep", args);
         case "journey.phase":
         case "journey.untilPhase":
           return fromHarnessWithRunStackBinding(name, "runPhase", args);
@@ -531,29 +628,46 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             return ok(name, {
               stackId: started.stackId,
               handle: serializableHandle(started.handle),
-              stack: started.stack,
+              stack: redactStackStatusPacket(started.stack),
               allocations: started.allocations,
+              // Additive: surfaces a self-heal (attempts > 1) instead of hiding
+              // the bounded retry. Existing consumers ignore the extra field.
+              attempts: started.attempts,
             });
           } catch (error) {
             if (error instanceof StackInstanceManagerError)
               return blocked(name, error.code, error.message);
-            throw error;
+            // A provider start/readiness failure that exhausted the bounded retry
+            // arrives as a StackStartFailedError carrying self-diagnosing context:
+            // attempts made, and a per-service log tail (redacted) so external
+            // cold-start vs. an internal init bug is decided from data.
+            if (error instanceof StackStartFailedError)
+              return failed(name, "stack-start-failed", error.message, {
+                diagnostics: redactStartDiagnostics(error.diagnostics),
+              });
+            // A provider start/readiness failure must still produce a coherent
+            // envelope with code and message, never the generic {status:"error"}
+            // shape that omits them.
+            return failed(name, "stack-start-failed", error instanceof Error ? error.message : String(error));
           }
         }
         case "stack.list": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
-          return ok(name, { stacks: await stackInstances!.list() });
+          const listed = await stackInstances!.list();
+          return ok(name, {
+            stacks: listed.map((item) => ({ ...item, stack: redactStackStatusPacket(item.stack) })),
+          });
         }
         case "stack.status": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
           try {
-            return ok(name, { stack: await stackInstances!.status(optionalStackId(args)) });
+            return ok(name, { stack: redactStackStatusPacket(await stackInstances!.status(optionalStackId(args))) });
           } catch (error) {
             if (error instanceof StackInstanceManagerError)
               return blocked(name, error.code, error.message);
-            throw error;
+            return failed(name, "stack-status-failed", error instanceof Error ? error.message : String(error));
           }
         }
         case "stack.logs": {
@@ -629,11 +743,11 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
           try {
-            return ok(name, { stack: await stackInstances!.stop(optionalStackId(args)) });
+            return ok(name, { stack: redactStackStatusPacket(await stackInstances!.stop(optionalStackId(args))) });
           } catch (error) {
             if (error instanceof StackInstanceManagerError)
               return blocked(name, error.code, error.message);
-            throw error;
+            return failed(name, "stack-stop-failed", error instanceof Error ? error.message : String(error));
           }
         }
         case "runtime.list": {
@@ -695,7 +809,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
         case "browser.open":
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
-          return ok(name, { result: await options.browserSessions.open(args) });
+          return ok(name, { result: await options.browserSessions.open(browserToolInput<BrowserOpenInput>(args)) });
         case "browser.snapshot": {
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
@@ -709,7 +823,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             return missingDependency(name, "browserSessions");
           if (!options.browserSessions.find)
             return blocked(name, "browser-find-not-wired", "The browser session controller does not expose browser.find.");
-          return ok(name, { result: await options.browserSessions.find(args) });
+          return ok(name, { result: await options.browserSessions.find(browserToolInput<BrowserFindInput>(args)) });
         }
         case "browser.close": {
           if (!options.browserSessions)
@@ -733,7 +847,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
               "The browser session controller does not expose browser actions.",
             );
           return ok(name, {
-            result: await options.browserSessions.act(args),
+            result: await options.browserSessions.act(browserToolInput<BrowserActInput>(args)),
           });
         }
         case "browser.wait": {
@@ -741,42 +855,42 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             return missingDependency(name, "browserSessions");
           if (!options.browserSessions.wait)
             return blocked(name, "browser-wait-not-wired", "The browser session controller does not expose conditional browser waits.");
-          return ok(name, { result: await options.browserSessions.wait(args) });
+          return ok(name, { result: await options.browserSessions.wait(browserToolInput<BrowserWaitInput>(args)) });
         }
         case "browser.get": {
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
           if (!options.browserSessions.get)
             return blocked(name, "browser-get-not-wired", "The browser session controller does not expose targeted browser reads.");
-          return ok(name, { result: await options.browserSessions.get(args) });
+          return ok(name, { result: await options.browserSessions.get(browserToolInput<BrowserGetInput>(args)) });
         }
         case "browser.eval": {
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
           if (!options.browserSessions.evaluate)
             return blocked(name, "browser-eval-not-wired", "The browser session controller does not expose page-context code execution.");
-          return ok(name, { result: await options.browserSessions.evaluate(args) });
+          return ok(name, { result: await options.browserSessions.evaluate(browserToolInput<BrowserCodeRunInput>(args)) });
         }
         case "browser.playwright": {
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
           if (!options.browserSessions.playwright)
             return blocked(name, "browser-playwright-not-wired", "The browser session controller does not expose direct Playwright code execution.");
-          return ok(name, { result: await options.browserSessions.playwright(args) });
+          return ok(name, { result: await options.browserSessions.playwright(browserToolInput<BrowserCodeRunInput>(args)) });
         }
         case "browser.console": {
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
           if (!options.browserSessions.console)
             return blocked(name, "browser-console-not-wired", "The browser session controller does not expose browser console signal reads.");
-          return ok(name, { result: await options.browserSessions.console(args) });
+          return ok(name, { result: await options.browserSessions.console(browserToolInput<BrowserSignalToolInput>(args)) });
         }
         case "browser.network": {
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
           if (!options.browserSessions.network)
             return blocked(name, "browser-network-not-wired", "The browser session controller does not expose browser network signal reads.");
-          return ok(name, { result: await options.browserSessions.network(args) });
+          return ok(name, { result: await options.browserSessions.network(browserToolInput<BrowserSignalToolInput>(args)) });
         }
         case "browser.screenshot": {
           if (!options.browserSessions)
@@ -788,7 +902,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
               "The browser session controller does not expose screenshot capture.",
             );
           return ok(name, {
-            result: await options.browserSessions.screenshot(args),
+            result: await options.browserSessions.screenshot(browserToolInput<BrowserScreenshotInput>(args)),
           });
         }
         default:
@@ -1207,6 +1321,7 @@ function implementedToolNames(
       "cleanup.plan",
       "artifact.read",
       "journey.step",
+      "journey.untilStep",
       "journey.phase",
       "journey.untilPhase",
     );
@@ -1260,6 +1375,7 @@ function summaryFor(name: DevMcpToolName): string {
     "browser.screenshot": browserWorkbenchSummary("browser.screenshot"),
     "browser.close": browserWorkbenchSummary("browser.close"),
     "journey.step": "Run one journey step.",
+    "journey.untilStep": "Run journey steps up to and including a target step (visual frame).",
     "journey.untilPhase": "Run journey steps until a phase boundary.",
     "journey.phase": "Run a journey phase.",
     "artifact.read": "Read a safe emitted artifact.",
@@ -1365,6 +1481,7 @@ function inputSchemaForTool(
         path: stringId().optional(),
       };
     case "journey.step":
+    case "journey.untilStep":
       return {
         runId: stringId(),
         phaseId: stringId(),
@@ -1510,31 +1627,110 @@ function missingDependency(
   );
 }
 
+export const REDACTED_VALUE = "[redacted]";
+
+const SECRET_KEY_PATTERN =
+  /(pass(word|phrase|wd)?|secret|token|credential|api[-_]?key|access[-_]?key|private[-_]?key|connection[-_]?(string|uri|url)|\bdsn\b)/i;
+
+const DROP_HANDLE_FIELD = Symbol("drop-handle-field");
+
+/**
+ * Project a provider handle into a transcript-safe summary before it crosses
+ * the MCP tool boundary. Only top-level scalar fields (and arrays of scalars)
+ * survive; nested provider objects — docker modems, sockets, the full
+ * Testcontainers `inspectResult` with env, mounts, and overlay paths — are
+ * dropped wholesale, and any field whose key looks like a secret (passwords,
+ * tokens, DSNs, connection strings) is redacted. This stops `stack.start` from
+ * echoing the entire handle (tens of KB, potential secret leak) into the tool
+ * transcript while keeping the declared-safe `stack` status packet as the
+ * primary, structured view of the running stack.
+ */
 function serializableHandle(handle: unknown): unknown {
   if (!isRecord(handle)) return handle;
-  return Object.fromEntries(
-    Object.entries(handle)
-      .filter(([, value]) => isSerializableHandleField(value))
-      .map(([key, value]) => [key, serializableHandleValue(value)]),
-  );
+  const projection: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(handle)) {
+    if (SECRET_KEY_PATTERN.test(key)) {
+      projection[key] = REDACTED_VALUE;
+      continue;
+    }
+    const scalar = scalarHandleField(value);
+    if (scalar !== DROP_HANDLE_FIELD) projection[key] = scalar;
+  }
+  return projection;
 }
 
-function serializableHandleValue(value: unknown): unknown {
+function scalarHandleField(value: unknown): unknown {
+  if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean")
+    return value;
   if (Array.isArray(value))
-    return value.filter(isSerializableHandleField).map(serializableHandleValue);
-  if (isRecord(value)) return serializableHandle(value);
-  return value;
+    return value.filter(
+      (item) =>
+        item === null ||
+        typeof item === "string" ||
+        typeof item === "number" ||
+        typeof item === "boolean",
+    );
+  // Drop nested objects, functions, and other provider internals entirely.
+  return DROP_HANDLE_FIELD;
 }
 
-function isSerializableHandleField(value: unknown): boolean {
-  return (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean" ||
-    Array.isArray(value) ||
-    (isRecord(value) && !("pid" in value || "stdin" in value || "stdout" in value))
-  );
+/**
+ * Redact secret-bearing endpoints from a stack status packet before it is
+ * returned in a tool response or written to an artifact. Endpoints declared
+ * `sensitive: true` (e.g. a PostgreSQL DSN) have their URL masked, and any
+ * service URL that matches a sensitive endpoint URL is masked too. In-process
+ * journey handlers receive the unredacted execution surface separately, so this
+ * only affects what the agent and artifacts see.
+ */
+function redactStackStatusPacket(packet: StackStatusPacket): StackStatusPacket {
+  const sensitiveUrls = new Set<string>();
+  const services = packet.services.map((service) => {
+    const next = { ...service };
+    if (service.endpoints) {
+      next.endpoints = service.endpoints.map((endpoint) => {
+        if (endpoint.sensitive && typeof endpoint.url === "string") {
+          sensitiveUrls.add(endpoint.url);
+          return { ...endpoint, url: REDACTED_VALUE };
+        }
+        return endpoint;
+      });
+    }
+    if (typeof next.url === "string" && sensitiveUrls.has(next.url)) next.url = REDACTED_VALUE;
+    return next;
+  });
+  return { ...packet, services };
+}
+
+// Mirrors the secret-key boundary (SECRET_KEY_PATTERN, commit e32703e): the same
+// secret vocabulary, applied to free-form log TEXT instead of object keys, so a
+// diagnostics log tail can never echo a DSN, password, token, or connection
+// string captured from a non-ready service's startup logs.
+const SECRET_ASSIGNMENT_PATTERN =
+  /(pass(?:word|phrase|wd)?|secret|token|credential|api[-_]?key|access[-_]?key|private[-_]?key|connection[-_]?(?:string|uri|url)|dsn)(["']?\s*[:=]\s*["']?)[^\s"']+/gi;
+// Credentials embedded in a URL authority, e.g. postgres://user:secret@host.
+const URL_USERINFO_PATTERN = /([a-z][a-z0-9+.-]*:\/\/)[^/\s:@]+:[^/\s@]+@/gi;
+
+/** Redact secrets from a single log line before it crosses the MCP boundary. */
+function redactLogLine(line: string): string {
+  return line
+    .replace(URL_USERINFO_PATTERN, `$1${REDACTED_VALUE}@`)
+    .replace(SECRET_ASSIGNMENT_PATTERN, `$1$2${REDACTED_VALUE}`);
+}
+
+/**
+ * Redact a failed-start diagnostics payload at the MCP boundary: each service's
+ * `logsTail` is passed through {@link redactLogLine}. The manager produces raw
+ * logs (it stays infra-agnostic); redaction stays here, alongside the status
+ * packet redaction, so there is a single secret boundary.
+ */
+function redactStartDiagnostics(diagnostics: StackStartDiagnostics): StackStartDiagnostics {
+  return {
+    ...diagnostics,
+    services: diagnostics.services.map((service) => ({
+      ...service,
+      logsTail: service.logsTail.map(redactLogLine),
+    })),
+  };
 }
 
 function stringArg(args: Record<string, unknown>, name: string): string {
@@ -1542,6 +1738,19 @@ function stringArg(args: Record<string, unknown>, name: string): string {
   if (typeof value !== "string" || value.length === 0)
     throw new Error(`Missing required string argument: ${name}`);
   return value;
+}
+
+/**
+ * Bridge MCP tool arguments to a typed browser-action input. Arguments arrive
+ * as `Record<string, unknown>` and are validated against each tool's Zod
+ * `inputSchema` (see {@link inputSchemaForTool}) by the MCP SDK before dispatch,
+ * so this assertion narrows already-validated data without changing it. The
+ * controller methods are typed against the shared public input shapes so that
+ * implementations like `createPlaywrightMcpBrowserSessionManager()` are
+ * assignable to the config without a wider `Record<string, unknown>` signature.
+ */
+function browserToolInput<T>(args: Record<string, unknown>): T {
+  return args as unknown as T;
 }
 
 function optionalStringArg(args: Record<string, unknown>, name: string): string | undefined {

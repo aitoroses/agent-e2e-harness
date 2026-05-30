@@ -46,3 +46,6 @@ test-results/
 .agents-e2e/
 apps/*/.agents-e2e/
 packages/*/.agents-e2e/
+
+# Claude Code scheduled task lock (transient)
+.claude/scheduled_tasks.lock

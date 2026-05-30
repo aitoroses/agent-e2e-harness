@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -362,20 +363,22 @@ describe("Dev MCP Streamable HTTP server", () => {
     await rm(tmpRoot, { recursive: true, force: true });
   });
 
-  it("requires Bun for TypeScript Agent E2E config modules", async () => {
-    if ("Bun" in globalThis) return;
+  it("loads TypeScript Agent E2E config modules on any runtime (no Bun required)", async () => {
     const tmpRoot = await mkdtemp(join(tmpdir(), "agent-e2e-ts-config-"));
     const configPath = join(tmpRoot, "agent-e2e.config.ts");
+    // A .ts config loads via jiti under Node, Bun, or Deno — no runtime gate.
     await writeFile(configPath, "export default { journeys: [] };\n");
 
-    await expect(loadAgentE2EConfig({ cwd: tmpRoot })).rejects.toThrow("require Bun");
+    await expect(loadAgentE2EConfig({ cwd: tmpRoot })).resolves.toMatchObject({ journeys: [] });
 
     await rm(tmpRoot, { recursive: true, force: true });
   });
 
   it("reloads journey config without restarting the Dev MCP endpoint", async () => {
     const tmpRoot = await mkdtemp(join(tmpdir(), "agent-e2e-reload-"));
-    const configPath = join(tmpRoot, "agent-e2e.config.mjs");
+    // .ts so jiti owns the module graph and can re-evaluate it in process;
+    // native ESM (.mjs/.js) is globally cached by URL and cannot hot-reload.
+    const configPath = join(tmpRoot, "agent-e2e.config.ts");
     await writeConfig(configPath, "journey:one");
 
     const server = await startAgentE2EDevMcpFromConfig({
@@ -453,10 +456,17 @@ async function listJourneyIds(client: Client): Promise<string[]> {
   return payload.journeys.map((journey) => journey.id);
 }
 
+const CORE_URL = pathToFileURL(resolve(process.cwd(), "dist/core/index.js")).href;
+const DEV_MCP_URL = pathToFileURL(resolve(process.cwd(), "dist/dev-mcp/index.js")).href;
+const RUNTIME_URL = pathToFileURL(resolve(process.cwd(), "dist/runtime/index.js")).href;
+
 async function writeConfig(path: string, journeyId: string): Promise<void> {
+  // Temp configs live outside any node_modules, so import the built package by
+  // file URL (a real consumer resolves '@agent-e2e/harness/*' from its own
+  // node_modules; jiti uses Node resolution, exercised by the showcase config).
   await writeFile(
     path,
-    `import { defineJourney } from '@agent-e2e/harness/core';
+    `import { defineJourney } from ${JSON.stringify(CORE_URL)};
 export default {
   browserSessions: false,
   journeys: [
@@ -475,9 +485,9 @@ export default {
 async function writeAttachedConfig(path: string): Promise<void> {
   await writeFile(
     path,
-    `import { defineJourney } from '@agent-e2e/harness/core';
-import { defineAgentE2EConfig } from '@agent-e2e/harness/dev-mcp';
-import { attachedRuntime } from '@agent-e2e/harness/runtime';
+    `import { defineJourney } from ${JSON.stringify(CORE_URL)};
+import { defineAgentE2EConfig } from ${JSON.stringify(DEV_MCP_URL)};
+import { attachedRuntime } from ${JSON.stringify(RUNTIME_URL)};
 
 export default defineAgentE2EConfig({
   browserSessions: false,

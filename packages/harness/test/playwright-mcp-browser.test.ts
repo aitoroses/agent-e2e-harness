@@ -70,9 +70,11 @@ describe('Playwright MCP browser session manager', () => {
       expect.objectContaining({
         kind: 'browser-snapshot',
         name: 'browser-snapshot',
-        path: expect.stringContaining('.agents-e2e/artifacts/journey-browser-proof/browser-run-2/forensics/browser-snapshot-'),
+        // Sequence-tagged forensics name (capture order + action), not timestamp noise.
+        path: expect.stringMatching(/forensics\/0001-browser-snapshot\.json$/),
       }),
     ]);
+    expect(snapshot.artifacts[0]?.path).toContain('.agents-e2e/artifacts/journey-browser-proof/browser-run-2/forensics/');
     expect(existsSync(snapshot.artifacts[0]?.path ?? '')).toBe(true);
     expect(snapshot.artifacts[0]?.path).not.toContain('.scratch');
     await rm(tmpRoot, { recursive: true, force: true });
@@ -389,7 +391,11 @@ describe('Playwright MCP browser session manager', () => {
     expect(screenshot).toMatchObject({
       status: 'ok',
       artifact: expect.objectContaining({
-        path: expect.stringContaining('.agents-e2e/artifacts/journey-screenshot/run-screenshot/forensics/outside.png'),
+        // Custom path is kept as a sanitized label and prefixed with the capture
+        // sequence + action; traversal cannot escape the forensics directory.
+        path: expect.stringMatching(
+          /\.agents-e2e\/artifacts\/journey-screenshot\/run-screenshot\/forensics\/0001-browser-screenshot-outside\.png$/,
+        ),
       }),
     });
     expect(screenshot.artifact?.path).not.toContain('../../outside.png');
