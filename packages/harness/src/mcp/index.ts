@@ -4,6 +4,7 @@ import {
   reseedJourneyRun,
   runEnvironmentSeed,
   runJourneyStep,
+  summarizeRunProgress,
   teardownOwnedResources,
   type AnyHarnessTypes,
   type ArtifactRef,
@@ -67,6 +68,98 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
   const runMetadata = new Map<string, RunMetadata>();
   const resourceAdapters = options.resourceAdapters ?? [];
   const artifactContents = options.artifactContents ?? {};
+
+  // Single per-step recording path shared by `runStep` and the phase-level
+  // sequences (`runPhase`/`runUntilStep`). It runs the step, captures
+  // forensics, writes step artifacts, then finalizes the run-level
+  // result.json/timeline/metrics/index. Previously only `runStep` recorded, so
+  // a journey driven through `journey.phase` left result.json frozen at the
+  // begin-time `running`/pending state with no per-step evidence.
+  async function executeStep(
+    run: JourneyRun<TTypes>,
+    executableRun: JourneyRun<TTypes>,
+    phaseId: string,
+    stepId: string,
+    signals: RunSignalRecorder | undefined
+  ): Promise<StepRunResult<TTypes> & { stepFeedbackArtifact?: ArtifactRef }> {
+    const artifacts = runArtifacts.get(run.id);
+    const mark = signals?.mark();
+    const beforeArtifact = artifacts
+      ? await captureStepScreenshot(artifacts.run, executableRun.journey, executableRun.execution, phaseId, stepId, 'before')
+      : undefined;
+    const result = await runJourneyStep(executableRun, { phaseId, stepId });
+    const terminalScreenshot = artifacts
+      ? await captureStepScreenshot(
+          artifacts.run,
+          executableRun.journey,
+          executableRun.execution,
+          result.phaseId,
+          result.stepId,
+          result.status === 'passed' ? 'after' : 'failure'
+        )
+      : undefined;
+    const signalSlice = signals && mark ? signals.slice(mark) : emptySignalSlice();
+    const generatedArtifacts = artifacts
+      ? await writeStepArtifacts({ artifacts, run: executableRun, result, beforeArtifact, terminalScreenshot, signalSlice })
+      : [];
+    const enhancedResult = {
+      ...result,
+      artifacts: uniqueArtifacts([...result.artifacts, ...generatedArtifacts]),
+      stepFeedbackArtifact: generatedArtifacts.find((artifact) => artifact.name === 'step-feedback')
+    } as StepRunResult<TTypes> & { stepFeedbackArtifact?: ArtifactRef };
+    rememberStepArtifacts(emittedArtifacts, enhancedResult);
+    if (artifacts) {
+      for (const artifact of generatedArtifacts) emittedArtifacts.set(artifact.id, artifact);
+      await artifacts.writeOwnedResources(executableRun);
+      const timeline = runTimelines.get(run.id) ?? [];
+      timeline.push({
+        phaseId: result.phaseId,
+        stepId: result.stepId,
+        status: result.status,
+        startedAt: result.startedAt,
+        endedAt: result.endedAt,
+        durationMs: result.durationMs
+      });
+      runTimelines.set(run.id, timeline);
+      const timelineArtifact = await writeJsonArtifact(artifacts.run, 'timeline.json', timeline, { name: 'timeline' });
+      const metricsArtifact = await writeJsonArtifact(artifacts.run, 'metrics.json', runMetrics(executableRun, timeline, runMetadata.get(run.id)), { name: 'metrics' });
+      const runResultPayload = runProgress(executableRun, timeline, artifacts.run.relDir, [
+        ...generatedArtifacts,
+        timelineArtifact,
+        metricsArtifact
+      ], runMetadata.get(run.id));
+      const resultArtifact = await artifacts.writeResult(runResultPayload);
+      const runIndex = await artifacts.writeRunIndex(runResultPayload);
+      for (const artifact of [timelineArtifact, metricsArtifact, resultArtifact, runIndex.index, runIndex.humanIndex, runIndex.latest]) emittedArtifacts.set(artifact.id, artifact);
+    }
+    return enhancedResult;
+  }
+
+  // Shared runner for runPhase and runUntilStep: executes an ordered slice of a
+  // phase's steps through executeStep (so each step records full artifacts and
+  // the run finalizes), stopping early on the first failed/error step.
+  async function runPhaseStepSequence(
+    run: JourneyRun<TTypes>,
+    executableRun: JourneyRun<TTypes>,
+    phaseId: string,
+    steps: readonly { id: string }[],
+    signals: RunSignalRecorder | undefined
+  ): Promise<McpToolResponse> {
+    const results: Array<StepRunResult<TTypes> & { stepFeedbackArtifact?: ArtifactRef }> = [];
+    for (const step of steps) {
+      const result = await executeStep(run, executableRun, phaseId, step.id, signals);
+      results.push(result);
+      if (result.status === 'failed' || result.status === 'error') break;
+    }
+    const artifacts = runArtifacts.get(run.id);
+    return { status: 'ok', artifactDir: artifacts?.run.relDir, results, guidance: results.at(-1)?.guidance ?? [] };
+  }
+
+  function resolveStepSignals(run: JourneyRun<TTypes>, injectedExecution: TTypes['executionSurface'] | undefined): RunSignalRecorder | undefined {
+    const signals = injectedExecution ? attachRunSignals(injectedExecution) : runSignals.get(run.id);
+    if (injectedExecution && signals) runSignals.set(run.id, signals);
+    return signals;
+  }
 
   async function callTool(name: string, args: Record<string, unknown>): Promise<McpToolResponse> {
     try {
@@ -133,17 +226,19 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           runTimelines.set(result.run.id, []);
           runSignals.set(result.run.id, attachRunSignals(result.run.execution));
           const seedArtifact = await artifacts.writeSeed(result.seedGate);
-          const resultArtifact = await artifacts.writeResult(runProgress(result.run, [], 'running', artifacts.run.relDir, [seedArtifact], metadata));
+          const runResultPayload = runProgress(result.run, [], artifacts.run.relDir, [seedArtifact], metadata);
+          const resultArtifact = await artifacts.writeResult(runResultPayload);
+          const runIndex = await artifacts.writeRunIndex(runResultPayload);
           for (const artifact of result.seedGate.manifest.artifacts) emittedArtifacts.set(artifact.id, artifact);
-          emittedArtifacts.set(seedArtifact.id, seedArtifact);
-          emittedArtifacts.set(resultArtifact.id, resultArtifact);
+          for (const artifact of [seedArtifact, resultArtifact, runIndex.index, runIndex.humanIndex, runIndex.latest]) emittedArtifacts.set(artifact.id, artifact);
           return {
             status: 'ok',
             runId: result.run.id,
             ...runMetadataResponse(metadata),
             artifactDir: artifacts.run.relDir,
+            index: runIndex.humanIndex.path,
             seedGate: result.seedGate,
-            artifacts: [seedArtifact, resultArtifact],
+            artifacts: [seedArtifact, resultArtifact, runIndex.index, runIndex.humanIndex],
             guidance: result.seedGate.guidance
           };
         }
@@ -154,65 +249,10 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           const injectedExecution = args.execution as TTypes['executionSurface'] | undefined;
           const executableRun = injectedExecution ? { ...run, execution: injectedExecution } : run;
           if (injectedExecution) runs.set(run.id, executableRun);
+          const signals = resolveStepSignals(run, injectedExecution);
+          const enhancedResult = await executeStep(run, executableRun, stringArg(args, 'phaseId'), stringArg(args, 'stepId'), signals);
           const artifacts = runArtifacts.get(run.id);
-          const signals = injectedExecution ? attachRunSignals(injectedExecution) : runSignals.get(run.id);
-          if (injectedExecution && signals) runSignals.set(run.id, signals);
-          const mark = signals?.mark();
-          const beforeArtifact = artifacts ? await captureStepScreenshot(artifacts.run, executableRun.journey, executableRun.execution, stringArg(args, 'phaseId'), stringArg(args, 'stepId'), 'before') : undefined;
-          const result = await runJourneyStep(executableRun, {
-            phaseId: stringArg(args, 'phaseId'),
-            stepId: stringArg(args, 'stepId')
-          });
-          const terminalScreenshot = artifacts ? await captureStepScreenshot(
-            artifacts.run,
-            executableRun.journey,
-            executableRun.execution,
-            result.phaseId,
-            result.stepId,
-            result.status === 'passed' ? 'after' : 'failure'
-          ) : undefined;
-          const signalSlice = signals && mark ? signals.slice(mark) : emptySignalSlice();
-          const generatedArtifacts = artifacts
-            ? await writeStepArtifacts({
-                artifacts,
-                run: executableRun,
-                result,
-                beforeArtifact,
-                terminalScreenshot,
-                signalSlice
-              })
-            : [];
-          const enhancedResult = {
-            ...result,
-            artifacts: uniqueArtifacts([...result.artifacts, ...generatedArtifacts]),
-            stepFeedbackArtifact: generatedArtifacts.find((artifact) => artifact.name === 'step-feedback')
-          } as StepRunResult<TTypes> & { stepFeedbackArtifact?: ArtifactRef };
-          rememberStepArtifacts(emittedArtifacts, enhancedResult);
-          if (artifacts) {
-            for (const artifact of generatedArtifacts) emittedArtifacts.set(artifact.id, artifact);
-            await artifacts.writeOwnedResources(executableRun);
-            const timeline = runTimelines.get(run.id) ?? [];
-            timeline.push({
-              phaseId: result.phaseId,
-              stepId: result.stepId,
-              status: result.status,
-              startedAt: result.startedAt,
-              endedAt: result.endedAt,
-              durationMs: result.durationMs
-            });
-            runTimelines.set(run.id, timeline);
-            const timelineArtifact = await writeJsonArtifact(artifacts.run, 'timeline.json', timeline, { name: 'timeline' });
-            const metricsArtifact = await writeJsonArtifact(artifacts.run, 'metrics.json', runMetrics(executableRun, timeline, runMetadata.get(run.id)), { name: 'metrics' });
-            const resultArtifact = await artifacts.writeResult(
-              runProgress(executableRun, timeline, executableRun.progress.status, artifacts.run.relDir, [
-                ...generatedArtifacts,
-                timelineArtifact,
-                metricsArtifact
-              ], runMetadata.get(run.id))
-            );
-            for (const artifact of [timelineArtifact, metricsArtifact, resultArtifact]) emittedArtifacts.set(artifact.id, artifact);
-          }
-          return { status: 'ok', artifactDir: artifacts?.run.relDir, result: enhancedResult, guidance: result.guidance };
+          return { status: 'ok', artifactDir: artifacts?.run.relDir, result: enhancedResult, guidance: enhancedResult.guidance };
         }
 
         case 'reseedRun': {
@@ -253,15 +293,22 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           const cleanupArtifact = await artifacts.writeTeardown(result.cleanup, 'cleanup');
           const seedArtifact = await artifacts.writeSeed(result.seedGate);
           const ownedArtifact = await artifacts.writeOwnedResources(result.run);
+          // The reseeded run starts fresh: reset its timeline, then write a
+          // result.json + index so its status path links cleanup/seed/owned from
+          // the first call rather than only after the next step.
+          runTimelines.set(result.run.id, []);
+          const reseedResultPayload = runProgress(result.run, [], artifacts.run.relDir, [cleanupArtifact, seedArtifact, ownedArtifact], runMetadata.get(result.run.id));
+          const reseedResultArtifact = await artifacts.writeResult(reseedResultPayload);
+          const reseedIndex = await artifacts.writeRunIndex(reseedResultPayload);
           for (const artifact of result.seedGate.manifest.artifacts) emittedArtifacts.set(artifact.id, artifact);
-          for (const artifact of [cleanupArtifact, seedArtifact, ownedArtifact]) emittedArtifacts.set(artifact.id, artifact);
+          for (const artifact of [cleanupArtifact, seedArtifact, ownedArtifact, reseedResultArtifact, reseedIndex.index, reseedIndex.humanIndex, reseedIndex.latest]) emittedArtifacts.set(artifact.id, artifact);
           return {
             status: 'ok',
             runId: result.run.id,
             artifactDir: artifacts.run.relDir,
             cleanup: result.cleanup,
             seedGate: result.seedGate,
-            artifacts: [cleanupArtifact, seedArtifact, ownedArtifact],
+            artifacts: [cleanupArtifact, seedArtifact, ownedArtifact, reseedResultArtifact, reseedIndex.index, reseedIndex.humanIndex],
             guidance: result.guidance
           };
         }
@@ -274,7 +321,7 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           if (injectedExecution) runs.set(run.id, executableRun);
           const phase = executableRun.journey.phases.find((candidate) => candidate.id === stringArg(args, 'phaseId'));
           if (!phase) return notFound('phase');
-          return runPhaseStepSequence(executableRun, phase.id, phase.steps, emittedArtifacts);
+          return runPhaseStepSequence(run, executableRun, phase.id, phase.steps, resolveStepSignals(run, injectedExecution));
         }
 
         case 'runUntilStep': {
@@ -292,7 +339,7 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           const targetStepId = stringArg(args, 'stepId');
           const targetIndex = phase.steps.findIndex((step) => step.id === targetStepId);
           if (targetIndex < 0) return notFound('step');
-          return runPhaseStepSequence(executableRun, phase.id, phase.steps.slice(0, targetIndex + 1), emittedArtifacts);
+          return runPhaseStepSequence(run, executableRun, phase.id, phase.steps.slice(0, targetIndex + 1), resolveStepSignals(run, injectedExecution));
         }
 
         case 'readArtifact': {
@@ -331,6 +378,14 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           const artifacts = runArtifacts.get(run.id);
           const artifact = artifacts ? await artifacts.writeTeardown(result, 'cleanup') : undefined;
           if (artifact) emittedArtifacts.set(artifact.id, artifact);
+          // Refresh result.json + index so the just-written cleanup.json is
+          // linked from the run's status path (teardown is often the last call).
+          if (artifacts) {
+            const teardownPayload = runProgress(run, runTimelines.get(run.id) ?? [], artifacts.run.relDir, artifact ? [artifact] : [], runMetadata.get(run.id));
+            const resultArtifact = await artifacts.writeResult(teardownPayload);
+            const teardownIndex = await artifacts.writeRunIndex(teardownPayload);
+            for (const ref of [resultArtifact, teardownIndex.index, teardownIndex.humanIndex, teardownIndex.latest]) emittedArtifacts.set(ref.id, ref);
+          }
           return { status: 'ok', artifactDir: artifacts?.run.relDir, result, artifact };
         }
 
@@ -348,14 +403,34 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
 function runProgress<TTypes extends AnyHarnessTypes>(
   run: JourneyRun<TTypes>,
   timeline: readonly Record<string, unknown>[],
-  status: string,
   artifactDir: string | undefined,
   artifacts: readonly ArtifactRef[],
   metadata: RunMetadata | undefined = undefined
 ): Record<string, unknown> {
+  // The run-level status is the WHOLE-run verdict (summarizeRunProgress), not
+  // `run.progress.status` (the last step's status). A passed run that still has
+  // steps remaining reads `running`; only a fully-completed run reads `passed`.
+  const completion = summarizeRunProgress(run);
   return {
-    status,
+    status: completion.status,
     runId: run.id,
+    summary: completion.summary,
+    completion: {
+      totalSteps: completion.totalSteps,
+      completedSteps: completion.completedSteps,
+      failedSteps: completion.failedSteps,
+      remainingSteps: completion.remainingSteps,
+    },
+    // Interactive runs produce development evidence; only the non-interactive
+    // Closure Command crystallizes proof. Keep that distinction honest so an
+    // operator never mistakes a passed dev run for a Crystallized Proof.
+    crystallized: false,
+    ...(completion.status === 'running' ? {} : { completedAt: new Date().toISOString() }),
+    startedAt: run.startedAt,
+    // Self-describing pointers to the operator entry points written alongside
+    // this result by writeRunIndex (relative to artifactDir).
+    index: 'index.json',
+    humanIndex: 'index.md',
     ...runMetadataResponse(metadata),
     journeyId: run.journey.id,
     profileId: run.profile.id,
@@ -429,25 +504,6 @@ function rememberStepArtifacts<TTypes extends AnyHarnessTypes>(
   result: StepRunResult<TTypes>
 ): void {
   for (const artifact of result.artifacts) emittedArtifacts.set(artifact.id, artifact);
-}
-
-// Shared runner for runPhase and runUntilStep: executes an ordered slice of a
-// phase's steps, stopping early on the first failed/error step, and returns the
-// proof-light envelope both tools expose ({ status, results, guidance }).
-async function runPhaseStepSequence<TTypes extends AnyHarnessTypes>(
-  executableRun: JourneyRun<TTypes>,
-  phaseId: string,
-  steps: readonly { id: string }[],
-  emittedArtifacts: Map<string, ArtifactRef>
-): Promise<{ status: 'ok'; results: StepRunResult<TTypes>[]; guidance: StepRunResult<TTypes>['guidance'] }> {
-  const results: StepRunResult<TTypes>[] = [];
-  for (const step of steps) {
-    const result = await runJourneyStep(executableRun, { phaseId, stepId: step.id });
-    rememberStepArtifacts(emittedArtifacts, result);
-    results.push(result);
-    if (result.status === 'failed' || result.status === 'error') break;
-  }
-  return { status: 'ok', results, guidance: results.at(-1)?.guidance ?? [] };
 }
 
 function notFound(subject: string): McpToolResponse {

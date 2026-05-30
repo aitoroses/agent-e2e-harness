@@ -1,6 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { existsSync, mkdirSync } from "node:fs";
-import { dirname, extname, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import type {
   AnyHarnessTypes,
   ArtifactRef,
@@ -45,7 +45,22 @@ export interface RunArtifactRecorder<TTypes extends AnyHarnessTypes = AnyHarness
   writeTeardown(result: TeardownResult<TTypes>, name?: string): Promise<ArtifactRef>;
   writeOwnedResources(run: JourneyRun<TTypes>): Promise<ArtifactRef>;
   writeResult(result: Record<string, unknown>): Promise<ArtifactRef>;
+  /**
+   * Build the operator-facing run index by SCANNING the run directory, so every
+   * file produced for this run (including forensics written by other modules)
+   * is linked even if it never passed through this recorder. Writes machine
+   * `index.json` + human `index.md`, and refreshes the journey-level
+   * `latest.json` pointer so an operator can open the newest run without
+   * knowing its run id. Returns the refs it wrote.
+   */
+  writeRunIndex(runResult: Record<string, unknown>): Promise<RunIndexArtifacts>;
   forensicsDir(): string;
+}
+
+export interface RunIndexArtifacts {
+  index: ArtifactRef;
+  humanIndex: ArtifactRef;
+  latest: ArtifactRef;
 }
 
 export const DEFAULT_AGENT_E2E_ARTIFACT_ROOT = ".agents-e2e/artifacts";
@@ -116,7 +131,198 @@ export function createRunArtifactRecorder<TTypes extends AnyHarnessTypes>(
         description:
           "Run progress summary: current status, phase/step progress, artifact directory, and next actions.",
       }),
+    writeRunIndex: (runResult) => writeRunIndex(run, runResult),
     forensicsDir: () => resolve(run.absDir, "forensics"),
+  };
+}
+
+const RUN_INDEX_FILENAMES = new Set(["index.json", "index.md"]);
+
+/**
+ * Scan the run directory and emit the operator entry points: `index.json`
+ * (machine), `index.md` (human), and a journey-level `latest.json` pointer.
+ * The scan is the source of truth, so artifacts written by any module (e.g.
+ * `forensics/` screenshots from the Playwright MCP) are linked without this
+ * recorder having to know about them.
+ */
+export async function writeRunIndex(
+  run: RunArtifacts,
+  runResult: Record<string, unknown>,
+): Promise<RunIndexArtifacts> {
+  await mkdir(run.absDir, { recursive: true });
+  const files = await scanRunFiles(run.absDir);
+  const grouped = groupRunFiles(files);
+  const status = typeof runResult.status === "string" ? runResult.status : "running";
+  const summary = typeof runResult.summary === "string" ? runResult.summary : undefined;
+
+  const index = {
+    runId: run.runId,
+    journeyId: run.journeyId,
+    profileId: runResult.profileId,
+    status,
+    summary,
+    completion: runResult.completion,
+    crystallized: runResult.crystallized ?? false,
+    startedAt: runResult.startedAt,
+    completedAt: runResult.completedAt,
+    artifactDir: run.relDir,
+    headline: grouped.headline,
+    phases: runResult.phases ?? [],
+    steps: grouped.steps,
+    forensics: grouped.forensics,
+    files: files.map((file) => ({ path: file, ...classifyRunFile(file) })),
+  };
+
+  const indexRef = await writeJsonArtifact(run, "index.json", index, {
+    name: "index",
+    kind: "json",
+    description:
+      "Run index: headline proof, per-step artifacts, and forensics for this run. Open index.md for the human view.",
+  });
+  const humanRef = await writeTextArtifact(run, "index.md", renderRunIndexMarkdown(index, grouped), {
+    name: "index",
+    kind: "markdown",
+    description: "Human-readable run index. Open this first to discover headline proof and artifacts.",
+  });
+  const latestRef = await writeLatestPointer(run, index);
+  return { index: indexRef, humanIndex: humanRef, latest: latestRef };
+}
+
+interface GroupedRunFiles {
+  headline: Record<string, string | null>;
+  steps: Array<{ dir: string; artifacts: Record<string, string> }>;
+  forensics: Array<{ path: string; kind: string; name: string }>;
+}
+
+async function scanRunFiles(absDir: string): Promise<string[]> {
+  const entries = await readdir(absDir, { recursive: true, withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const parent = (entry as unknown as { parentPath?: string; path?: string }).parentPath
+      ?? (entry as unknown as { path?: string }).path
+      ?? absDir;
+    files.push(toPortablePath(relative(absDir, join(parent, entry.name))));
+  }
+  return files.filter((file) => !RUN_INDEX_FILENAMES.has(file)).sort();
+}
+
+function groupRunFiles(files: readonly string[]): GroupedRunFiles {
+  const has = (name: string) => (files.includes(name) ? name : null);
+  const headline: Record<string, string | null> = {
+    result: has("result.json"),
+    timeline: has("timeline.json"),
+    metrics: has("metrics.json"),
+    seed: has("seed-manifest.json"),
+    ownedResources: has("owned-resources.json"),
+    cleanup: has("cleanup.json"),
+    cleanupPlan: has("cleanup-plan.json"),
+  };
+  const stepDirs = new Map<string, Record<string, string>>();
+  const forensics: Array<{ path: string; kind: string; name: string }> = [];
+  for (const file of files) {
+    const segments = file.split("/");
+    if (segments[0] === "forensics" && segments.length === 2) {
+      const meta = classifyRunFile(file);
+      forensics.push({ path: file, kind: meta.kind, name: meta.name });
+      continue;
+    }
+    const phaseSeg = segments[0];
+    const stepSeg = segments[1];
+    if (segments.length >= 3 && phaseSeg && stepSeg && /^\d\d-phase-/.test(phaseSeg) && /^\d\d-step-/.test(stepSeg)) {
+      const dir = `${phaseSeg}/${stepSeg}`;
+      const bucket = stepDirs.get(dir) ?? {};
+      bucket[classifyRunFile(file).name] = file;
+      stepDirs.set(dir, bucket);
+    }
+  }
+  return {
+    headline,
+    steps: [...stepDirs.entries()].map(([dir, artifacts]) => ({ dir, artifacts })),
+    forensics,
+  };
+}
+
+function classifyRunFile(file: string): { kind: string; name: string } {
+  const leaf = file.split("/").at(-1) ?? file;
+  const ext = extname(leaf).replace(/^\./, "").toLowerCase();
+  const name = leaf.replace(/\.[^.]+$/, "");
+  if (ext === "png") return { kind: "screenshot", name };
+  if (file.startsWith("forensics/") && name.includes("snapshot")) return { kind: "browser-snapshot", name };
+  if (name === "console") return { kind: "console-log", name };
+  if (name === "network") return { kind: "network-log", name };
+  if (ext === "md") return { kind: "markdown", name };
+  if (ext === "json") return { kind: "json", name };
+  return { kind: ext || "text", name };
+}
+
+function renderRunIndexMarkdown(index: Record<string, unknown>, grouped: GroupedRunFiles): string {
+  const lines: string[] = [];
+  const status = String(index.status ?? "running");
+  lines.push(`# Run ${index.runId}`);
+  lines.push("");
+  lines.push(`- **Journey:** ${index.journeyId}`);
+  if (index.profileId) lines.push(`- **Profile:** ${index.profileId}`);
+  lines.push(`- **Status:** ${status}${index.summary ? ` — ${index.summary}` : ""}`);
+  lines.push(`- **Crystallized:** ${index.crystallized ? "yes" : "no (interactive dev run)"}`);
+  if (index.startedAt) lines.push(`- **Started:** ${index.startedAt}`);
+  if (index.completedAt) lines.push(`- **Completed:** ${index.completedAt}`);
+  lines.push("");
+  lines.push("## Headline proof");
+  lines.push("");
+  for (const [label, file] of Object.entries(grouped.headline)) {
+    if (file) lines.push(`- [${label}](${file})`);
+  }
+  lines.push("");
+  if (grouped.steps.length > 0) {
+    lines.push("## Steps");
+    lines.push("");
+    for (const step of grouped.steps) {
+      lines.push(`### ${step.dir}`);
+      for (const [name, file] of Object.entries(step.artifacts)) {
+        lines.push(`- [${name}](${file})`);
+      }
+      lines.push("");
+    }
+  }
+  if (grouped.forensics.length > 0) {
+    lines.push("## Forensics");
+    lines.push("");
+    for (const item of grouped.forensics) lines.push(`- [${item.name}](${item.path}) (${item.kind})`);
+    lines.push("");
+  }
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
+async function writeLatestPointer(run: RunArtifacts, index: Record<string, unknown>): Promise<ArtifactRef> {
+  // The journey directory is the parent of the run directory for interactive
+  // runs (`<root>/<journey>/<run>/`). A `latest.json` there lets an operator
+  // jump to the newest run without scanning timestamps.
+  const journeyDir = dirname(run.absDir);
+  const runSegment = basename(run.absDir);
+  const pointer = {
+    runId: run.runId,
+    journeyId: run.journeyId,
+    profileId: index.profileId,
+    status: index.status,
+    summary: index.summary,
+    completedAt: index.completedAt,
+    updatedAt: new Date().toISOString(),
+    runDir: runSegment,
+    index: `${runSegment}/index.md`,
+    indexJson: `${runSegment}/index.json`,
+    result: `${runSegment}/result.json`,
+  };
+  const absPath = resolve(journeyDir, "latest.json");
+  await mkdir(journeyDir, { recursive: true });
+  await writeFile(absPath, `${JSON.stringify(pointer, null, 2)}\n`, "utf8");
+  return {
+    id: `artifact:${safePathSegment(run.journeyId)}:latest`,
+    kind: "json",
+    name: "latest",
+    uri: `file://${absPath}`,
+    path: toPortablePath(relative(process.cwd(), absPath)),
+    description: "Pointer to the newest run for this journey: status, summary, and index links.",
   };
 }
 
