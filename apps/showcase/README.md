@@ -35,12 +35,12 @@ In another terminal, discover the tools:
 mcporter list http://127.0.0.1:3766/mcp --allow-http --schema --json
 ```
 
-Expected checkpoint: `"status": "ok"` and 30 tools, including `stack.start`, `stack.list`, `stack.logs`, `stack.explore.list`, `stack.explore.run`, `run.begin`, `browser.open`, `browser.find`, `browser.wait`, `browser.get`, `browser.console`, `browser.network`, `browser.eval`, `browser.playwright`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.teardown`, and `stack.stop`.
+Expected checkpoint: `"status": "ok"` and the Dev MCP tools, including `stack.start`, `stack.list`, `stack.logs`, `stack.capability.list`, `stack.capability.run`, `run.begin`, `browser.open`, `browser.find`, `browser.wait`, `browser.get`, `browser.console`, `browser.network`, `browser.eval`, `browser.playwright`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.teardown`, and `stack.stop`.
 
-Discover the provider-owned stack exploration surface:
+Discover the provider-owned stack capability surface:
 
 ```sh
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.explore.list --args '{}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.capability.list --args '{}' --output json
 ```
 
 Expected checkpoint: `notes.list` is available in `dev` and `verify` with `risk: "none"`; `postgres.query` is `dev`-only with `risk: "local-mutation"`.
@@ -120,10 +120,10 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool journey.s
 
 Expected checkpoint: `"status": "passed"` with both proofs passed and a `step_feedback_artifact.path`.
 
-Inspect the created note through the verify-safe stack exploration tool:
+Inspect the created note through the verify-safe stack capability:
 
 ```sh
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.explore.run --args "{\"stackId\":\"${STACK_ID}\",\"toolId\":\"notes.list\",\"input\":{\"limit\":10}}" --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.capability.run --args "{\"stackId\":\"${STACK_ID}\",\"toolId\":\"notes.list\",\"input\":{\"limit\":10}}" --output json
 ```
 
 Expected checkpoint: `"toolId": "notes.list"` and `"output"` includes the browser-created proof note.
@@ -177,7 +177,7 @@ npm run attached:mcp --workspace @agent-e2e/showcase
 
 `compose:up` builds the showcase service from `apps/showcase/Dockerfile` instead of mounting host `node_modules` into a Linux container. The image installs workspaces with `npm ci --ignore-scripts` and skips Playwright browser downloads because Compose only serves the app; browser sessions still run from the MCP host.
 
-`attached:mcp` runs `agent-e2e attached --target showcase-compose`. The attached target is declared with `attachedRuntime(...)` in `agent-e2e.config.ts`, and the attached Journey Profile selects it through `runtimeTargetId: "showcase-compose"`. Use `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.explore.list`, and `runtime.explore.run` to inspect the already-running Compose app. Access Context status is reported without exposing secret material; browser.open authentication wiring is not automatic in this v1 path and must be supplied by product code when a runtime needs authenticated browser state. The product-owned diagnostic `compose.services` is an `observation` Runtime Exploration Tool; Docker-specific behavior stays in `apps/showcase`, not harness core.
+`attached:mcp` runs `agent-e2e attached --target showcase-compose`. The attached target is declared with `attachedRuntime(...)` in `agent-e2e.config.ts`, and the attached Journey Profile selects it through `runtimeTargetId: "showcase-compose"`. Use `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.capability.list`, and `runtime.capability.run` to inspect the already-running Compose app. Access Context status is reported without exposing secret material; browser.open authentication wiring is not automatic in this v1 path and must be supplied by product code when a runtime needs authenticated browser state. The product-owned diagnostic `compose.services` is an `observation` Runtime Capability; Docker-specific behavior stays in `apps/showcase`, not harness core.
 
 `agent-e2e attached` shares the default MCP port with `agent-e2e dev` (`127.0.0.1:3766/mcp`); in short, attached shares the default MCP port. Pass `--port` when Dev MCP is already running, for example `agent-e2e attached --target showcase-compose --port 3777`. The attached target resolves `compose.yaml` relative to the showcase package; set `AGENT_E2E_SHOWCASE_ROOT=/absolute/path/to/apps/showcase` only when running from a nonstandard copied or compiled location.
 

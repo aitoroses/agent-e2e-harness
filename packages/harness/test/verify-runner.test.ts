@@ -7,7 +7,7 @@ import { z } from "zod/v4";
 import { defineJourney, type HarnessTypes } from "@agent-e2e/harness/core";
 import { runVerifySuite, type VerifyBrowser } from "@agent-e2e/harness/verify";
 import {
-  defineStackExploreTools,
+  defineStackCapabilities,
   type StackExecutionSurface,
   type StackStartContext,
 } from "@agent-e2e/harness/stack";
@@ -1064,10 +1064,10 @@ describe("verify runner", () => {
     expect(markdown).toContain("| notes:markdown-stack | default | worker-0 | passed |");
   });
 
-  it("injects verify-safe stack exploration into journey execution", async () => {
+  it("injects verify-safe stack capability into journey execution", async () => {
     const artifactRoot = await tempRoot();
     const events: string[] = [];
-    const explore = defineStackExploreTools<{ multiplier: number }>()([
+    const capability = defineStackCapabilities<{ multiplier: number }>()([
       {
         id: "notes.count",
         title: "Count notes",
@@ -1095,20 +1095,20 @@ describe("verify runner", () => {
         },
       },
     ]);
-    type VerifyExploreHarness = HarnessTypes<
+    type VerifyCapabilityHarness = HarnessTypes<
       {
         browser: VerifyBrowser;
         context: unknown;
         page: { screenshot: (options: { path: string }) => Promise<void> };
-        stack: StackExecutionSurface<typeof explore>;
+        stack: StackExecutionSurface<typeof capability>;
       },
       Record<string, never>,
       { ok: true; count: number; devOnlyHidden: true },
       { kind: "record"; id: string }
     >;
-    const journey = defineJourney<VerifyExploreHarness>({
-      id: "notes:verify-explore",
-      title: "Verify explore",
+    const journey = defineJourney<VerifyCapabilityHarness>({
+      id: "notes:verify-capability",
+      title: "Verify capability",
       profiles: [{ id: "default", data: {}, isDefault: true }],
       phases: [
         {
@@ -1119,10 +1119,10 @@ describe("verify runner", () => {
               id: "step:observe",
               title: "Observe",
               execute: async ({ execution }) => {
-                const output = await execution.stack.explore.run("notes.count", { limit: 3 });
+                const output = await execution.stack.capability.run("notes.count", { limit: 3 });
                 let devOnlyHidden = false;
                 try {
-                  await execution.stack.explore.run("postgres.query", { sql: "select 1" });
+                  await execution.stack.capability.run("postgres.query", { sql: "select 1" });
                 } catch {
                   devOnlyHidden = true;
                 }
@@ -1137,11 +1137,11 @@ describe("verify runner", () => {
       ],
     });
 
-    const report = await runVerifySuite<VerifyExploreHarness, { multiplier: number }>({
+    const report = await runVerifySuite<VerifyCapabilityHarness, { multiplier: number }>({
       journeys: [journey],
       stackProvider: {
-        id: "verify-explore-stack",
-        explore,
+        id: "verify-capability-stack",
+        capabilities: capability,
         start: async () => ({ multiplier: 4 }),
         status: () => ({
           status: "ready",

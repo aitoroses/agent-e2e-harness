@@ -135,11 +135,11 @@ stack.list
 stack.status
 stack.stop
 stack.logs
-stack.explore.list
-stack.explore.run
+stack.capability.list
+stack.capability.run
 ```
 
-`stack.start` returns a `stackId`; pass that id to `stack.status`, `run.begin`, `stack.logs`, `stack.explore.run`, and `stack.stop`. `stack.list` recovers currently running Stack Instances. `run.begin` requires a valid `stackId` when a stack provider exists, creates a **Run Stack Binding** for that run, and rejects `stackId` when no provider exists. `stack.status` is the unified stack-state packet: `StackStatusPacket.services` is the journey-facing runtime contract for dynamic URLs, readiness, health checks, stable service ids, endpoints, warnings, errors, artifacts, and next actions. There are no native `stack.services`, `stack.health`, or `stack.env` tools in v1. Runtime-specific inspection is provider-owned through `stack.explore.*`.
+`stack.start` returns a `stackId`; pass that id to `stack.status`, `run.begin`, `stack.logs`, `stack.capability.run`, and `stack.stop`. `stack.list` recovers currently running Stack Instances. `run.begin` requires a valid `stackId` when a stack provider exists, creates a **Run Stack Binding** for that run, and rejects `stackId` when no provider exists. `stack.status` is the unified stack-state packet: `StackStatusPacket.services` is the journey-facing runtime contract for dynamic URLs, readiness, health checks, stable service ids, endpoints, warnings, errors, artifacts, and next actions. There are no native `stack.services`, `stack.health`, or `stack.env` tools in v1. Product-specific stack tools are provider-owned through `stack.capability.*`.
 
 For staging, production, preview, or Docker Compose systems that are already running, declare a **Runtime Target** instead of hiding it under `stack.*`. Use `managedRuntime(...)` for harness-owned local stacks and `attachedRuntime(...)` for an **Attached Runtime Target** whose lifecycle is externally owned. Start the long-lived attached MCP surface with:
 
@@ -147,7 +147,7 @@ For staging, production, preview, or Docker Compose systems that are already run
 agent-e2e attached --target <id>
 ```
 
-Attached Runtime Mode does not own infrastructure lifecycle. It exposes target diagnostics through `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.explore.list`, and `runtime.explore.run`. Runtime exploration risk is declared as `observation`, `runMutation`, or `runtimeMutation`; observation runs by default, runMutation requires Journey Profile opt-in, and runtimeMutation is blocked by default. `run.begin` resolves the Runtime Target from the selected profile and does not accept a free `targetId` override. Access Context status is secret-safe; automatic `browser.open` authentication wiring is product-owned in this v1 path.
+Attached Runtime Mode does not own infrastructure lifecycle. It exposes target diagnostics through `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.capability.list`, and `runtime.capability.run`. Runtime capability risk is declared as `observation`, `runMutation`, or `runtimeMutation`; observation runs by default, runMutation requires Journey Profile opt-in, and runtimeMutation is blocked by default. `run.begin` resolves the Runtime Target from the selected profile and does not accept a free `targetId` override. Access Context status is secret-safe; automatic `browser.open` authentication wiring is product-owned in this v1 path.
 
 ## Build the proof loop
 
@@ -327,8 +327,8 @@ stack.start
 stack.list
 stack.status
 stack.logs
-stack.explore.list
-stack.explore.run
+stack.capability.list
+stack.capability.run
 run.begin
 browser.open
 browser.snapshot
@@ -352,7 +352,7 @@ run.reseed
 
 `journey.untilStep` is step-granular time travel: it runs a phase from its first step up to **and including** a target step, then parks the managed state exactly at that step's visual frame. It mirrors `journey.untilPhase`'s contract and envelope (`results[]`, with the landed step at `results.at(-1)`) but lands at a single step instead of the phase boundary, so each step is individually addressable by its stable `stepId` (`{ runId, phaseId, stepId }`, the same address `journey.step` uses). An unknown journey, phase, or step returns the same coherent not-found envelope as the other journey tools.
 
-Use `stack.logs` for live service logs after the stack is active. It requires a `stackId`, one `serviceId`, a required `tail`, and optional `stream`. Use `stack.explore.list` to discover provider-declared tools and `stack.explore.run` with `stackId` to run one of them with Zod-validated input/output. `stack.logs` and `stack.explore.run` accept optional `runId` only to capture artifacts, and reject capture when the run is bound to a different `stackId`.
+Use `stack.logs` for live service logs after the stack is active. It requires a `stackId`, one `serviceId`, a required `tail`, and optional `stream`. Use `stack.capability.list` to discover provider-declared stack capabilities and `stack.capability.run` with `stackId` to run one of them with Zod-validated input/output. `stack.logs` and `stack.capability.run` accept optional `runId` only to capture artifacts, and reject capture when the run is bound to a different `stackId`.
 
 Stack providers should use **StackStartContext** as the default allocation pattern. `start(ctx)` receives the Stack Instance id, mode, worker identity, suite id when verify supplies one, and a stack artifact scope.
 
@@ -379,7 +379,7 @@ mcporter list http://127.0.0.1:3766/mcp --schema --json --allow-http
 mcporter call \
   --http-url http://127.0.0.1:3766/mcp \
   --allow-http \
-  --tool stack.explore.list \
+  --tool stack.capability.list \
   --args '{}' \
   --output json
 ```
@@ -426,7 +426,7 @@ Together with seed, cleanup, and reseed, these artifacts let the agent move thro
 
 A development run becomes CI proof when `agent-e2e verify` reruns the configured journeys from clean seed, non-interactively, with no agent in the loop. The command uses the same `agent-e2e.config.ts` and starts worker-scoped Stack Instances lazily: `--workers 4` means at most four active Verify Worker Stacks, with selected runs executing serially inside each worker stack. Every stack-backed run records its `stackId`, and the suite report includes a first-class Stack Instances section with services, Named Stack Allocations, timing, warnings, errors, and run-to-stack correlation.
 
-Verify runs the crystallized journey. It does not expose arbitrary Dev MCP exploration or generic shell execution. Journey code can use only Verify Observation Tools through `execution.stack.explore.run(...)`: provider-declared tools with `availableIn: ["dev", "verify"]` and `risk: "none"`. Product-visible mutations must still come from the app path, seed, journey steps, reseed, or cleanup.
+Verify runs the crystallized journey. It does not expose arbitrary Dev MCP exploration or generic shell execution. Journey code can use only Verify Observation Tools through `execution.stack.capability.run(...)`: provider-declared tools with `availableIn: ["dev", "verify"]` and `risk: "none"`. Product-visible mutations must still come from the app path, seed, journey steps, reseed, or cleanup.
 
 ```sh
 agent-e2e verify

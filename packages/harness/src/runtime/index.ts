@@ -11,6 +11,7 @@ export type RuntimeTargetKind = "managed" | "attached";
 export type RuntimeLifecycleOwner = "harness" | "external";
 export type RuntimeStatus = "ready" | "degraded" | "stopped" | "failed" | "unknown";
 export type RuntimeToolRisk = "observation" | "runMutation" | "runtimeMutation";
+export type RuntimeCapabilityRisk = RuntimeToolRisk;
 export type RuntimeAccessState = "available" | "missing" | "blocked" | "requires-bootstrap";
 export type RuntimeAccessKind =
   | "browserStorageState"
@@ -101,7 +102,7 @@ export interface RuntimeAccessStatus {
   guidance: readonly string[];
 }
 
-export interface RuntimeExploreToolDefinition<
+export interface RuntimeCapabilityDefinition<
   TInputSchema extends RuntimeZodSchema = RuntimeZodSchema,
   TOutputSchema extends RuntimeZodSchema = RuntimeZodSchema,
 > {
@@ -118,7 +119,7 @@ export interface RuntimeExploreToolDefinition<
   }): MaybePromise<z.infer<TOutputSchema>>;
 }
 
-export interface RuntimeExploreToolDescriptor {
+export interface RuntimeCapabilityDescriptor {
   id: string;
   title: string;
   description: string;
@@ -135,7 +136,7 @@ export interface RuntimeTargetConfig {
   status?: () => MaybePromise<RuntimeStatusPacket>;
   logs?: (input: RuntimeLogsInput) => MaybePromise<RuntimeLogsOutput>;
   access?: readonly RuntimeAccessContextDefinition[];
-  explore?: readonly RuntimeExploreToolDefinition<any, any>[];
+  capabilities?: readonly RuntimeCapabilityDefinition<any, any>[];
 }
 
 export interface RuntimeTarget extends RuntimeTargetConfig {
@@ -160,13 +161,21 @@ export function attachedRuntime(config: RuntimeTargetConfig): RuntimeTarget {
   return { ...config, kind: "attached", lifecycleOwner: "external" };
 }
 
-export function defineRuntimeExploreTool<
+export function defineRuntimeCapability<
   const TInputSchema extends RuntimeZodSchema,
   const TOutputSchema extends RuntimeZodSchema,
 >(
-  tool: RuntimeExploreToolDefinition<TInputSchema, TOutputSchema>,
-): RuntimeExploreToolDefinition<TInputSchema, TOutputSchema> {
-  return tool;
+  capability: RuntimeCapabilityDefinition<TInputSchema, TOutputSchema>,
+): RuntimeCapabilityDefinition<TInputSchema, TOutputSchema> {
+  return capability;
+}
+
+export function defineRuntimeCapabilities<
+  const TCapabilities extends readonly RuntimeCapabilityDefinition<any, any>[],
+>(
+  capabilities: TCapabilities,
+): TCapabilities {
+  return capabilities;
 }
 
 export interface RuntimeTargetRegistry {
@@ -218,7 +227,7 @@ export function summarizeRuntimeTarget(target: RuntimeTarget): RuntimeTargetSumm
   const capabilities = ["status"];
   if (target.logs) capabilities.push("logs");
   if ((target.access ?? []).length > 0) capabilities.push("access");
-  if ((target.explore ?? []).length > 0) capabilities.push("explore");
+  if (runtimeCapabilityDefinitions(target).length > 0) capabilities.push("capability");
   return compactObject({
     id: target.id,
     kind: target.kind,
@@ -261,11 +270,11 @@ export async function runtimeAccessStatus(target: RuntimeTarget): Promise<Runtim
   return results;
 }
 
-export async function runtimeExploreDescriptors(
+export async function runtimeCapabilityDescriptors(
   target: RuntimeTarget,
-): Promise<readonly RuntimeExploreToolDescriptor[]> {
+): Promise<readonly RuntimeCapabilityDescriptor[]> {
   const { z } = await import("zod/v4");
-  return (target.explore ?? []).map((tool) => ({
+  return runtimeCapabilityDefinitions(target).map((tool) => ({
     id: tool.id,
     title: tool.title,
     description: tool.description,
@@ -276,21 +285,27 @@ export async function runtimeExploreDescriptors(
   }));
 }
 
-export async function runRuntimeExploreTool(
+export async function runRuntimeCapability(
   target: RuntimeTarget,
   toolId: string,
   input: unknown,
 ): Promise<unknown> {
-  const tool = (target.explore ?? []).find((candidate) => candidate.id === toolId);
-  if (!tool) throw new Error(`Unknown Runtime Exploration Tool: ${toolId}`);
+  const tool = runtimeCapabilityDefinitions(target).find((candidate) => candidate.id === toolId);
+  if (!tool) throw new Error(`Unknown Runtime Capability: ${toolId}`);
   const parsedInput = tool.input.safeParse(input);
   if (!parsedInput.success)
-    throw new Error(`Invalid runtime exploration input for ${toolId}: ${parsedInput.error.message}`);
+    throw new Error(`Invalid runtime capability input for ${toolId}: ${parsedInput.error.message}`);
   const output = await tool.run({ input: parsedInput.data, target });
   const parsedOutput = tool.output.safeParse(output);
   if (!parsedOutput.success)
-    throw new Error(`Invalid runtime exploration output for ${toolId}: ${parsedOutput.error.message}`);
+    throw new Error(`Invalid runtime capability output for ${toolId}: ${parsedOutput.error.message}`);
   return parsedOutput.data;
+}
+
+export function runtimeCapabilityDefinitions(
+  target: RuntimeTarget,
+): readonly RuntimeCapabilityDefinition<any, any>[] {
+  return target.capabilities ?? [];
 }
 
 export async function writeRuntimeLogsArtifact(input: {

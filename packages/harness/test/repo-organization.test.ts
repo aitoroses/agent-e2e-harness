@@ -74,7 +74,7 @@ describe('repository organization contract', () => {
       expect(source).toContain('"stackId":"showcase-dev-stack"');
       expect(source).toContain('--tool run.begin');
       expect(source).toContain('--tool stack.logs');
-      expect(source).toContain('--tool stack.explore.run');
+      expect(source).toContain('--tool stack.capability.run');
       expect(source).toContain('npm run e2e:verify --workspace @agent-e2e/showcase -- --workers 2');
     }
   });
@@ -147,8 +147,8 @@ describe('repository organization contract', () => {
     expect(docs).toContain('runtime.status');
     expect(docs).toContain('runtime.logs');
     expect(docs).toContain('runtime.access.status');
-    expect(docs).toContain('runtime.explore.list');
-    expect(docs).toContain('runtime.explore.run');
+    expect(docs).toContain('runtime.capability.list');
+    expect(docs).toContain('runtime.capability.run');
     expect(docs).toContain('observation');
     expect(docs).toContain('runMutation');
     expect(docs).toContain('runtimeMutation');

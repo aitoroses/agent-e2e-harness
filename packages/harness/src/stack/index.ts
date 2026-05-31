@@ -82,21 +82,21 @@ export interface StackLogsOutput {
 
 type MaybePromise<T> = T | Promise<T>;
 
-type StackExploreSchema = z.ZodType<unknown>;
+type StackCapabilitySchema = z.ZodType<unknown>;
 
-export type StackExploreAvailability = "dev" | "verify";
-export type StackExploreRisk = "none" | "local-mutation" | "destructive" | "external-side-effect";
+export type StackCapabilityAvailability = "dev" | "verify";
+export type StackCapabilityRisk = "none" | "local-mutation" | "destructive" | "external-side-effect";
 
-export interface StackExploreToolDefinition<
+export interface StackCapabilityDefinition<
   THandle = unknown,
-  TInputSchema extends StackExploreSchema = StackExploreSchema,
-  TOutputSchema extends StackExploreSchema = StackExploreSchema,
+  TInputSchema extends StackCapabilitySchema = StackCapabilitySchema,
+  TOutputSchema extends StackCapabilitySchema = StackCapabilitySchema,
 > {
   id: string;
   title: string;
   description: string;
-  availableIn: readonly StackExploreAvailability[];
-  risk: StackExploreRisk;
+  availableIn: readonly StackCapabilityAvailability[];
+  risk: StackCapabilityRisk;
   input: TInputSchema;
   output: TOutputSchema;
   run(args: {
@@ -105,62 +105,69 @@ export interface StackExploreToolDefinition<
   }): MaybePromise<z.infer<TOutputSchema>>;
 }
 
-export interface StackExploreToolDescriptor {
+export interface StackCapabilityDescriptor {
   id: string;
   title: string;
   description: string;
-  availableIn: readonly StackExploreAvailability[];
-  risk: StackExploreRisk;
+  availableIn: readonly StackCapabilityAvailability[];
+  risk: StackCapabilityRisk;
   inputSchema: unknown;
   outputSchema: unknown;
 }
 
-export type StackExploreToolById<
-  TTools extends readonly StackExploreToolDefinition<any, any, any>[],
+export type StackCapabilityById<
+  TTools extends readonly StackCapabilityDefinition<any, any, any>[],
   TId extends TTools[number]["id"],
 > = Extract<TTools[number], { id: TId }>;
 
-export type StackExploreInputFor<
-  TTools extends readonly StackExploreToolDefinition<any, any, any>[],
+export type StackCapabilityInputFor<
+  TTools extends readonly StackCapabilityDefinition<any, any, any>[],
   TId extends TTools[number]["id"],
-> = z.infer<StackExploreToolById<TTools, TId>["input"]>;
+> = z.infer<StackCapabilityById<TTools, TId>["input"]>;
 
-export type StackExploreOutputFor<
-  TTools extends readonly StackExploreToolDefinition<any, any, any>[],
+export type StackCapabilityOutputFor<
+  TTools extends readonly StackCapabilityDefinition<any, any, any>[],
   TId extends TTools[number]["id"],
-> = z.infer<StackExploreToolById<TTools, TId>["output"]>;
+> = z.infer<StackCapabilityById<TTools, TId>["output"]>;
 
-export type VerifySafeStackExploreTool<TTool> =
-  TTool extends StackExploreToolDefinition<any, any, any>
-    ? "verify" extends TTool["availableIn"][number]
-      ? "none" extends TTool["risk"]
-        ? TTool
+export type VerifySafeStackCapability<TCapability> =
+  TCapability extends StackCapabilityDefinition<any, any, any>
+    ? "verify" extends TCapability["availableIn"][number]
+      ? "none" extends TCapability["risk"]
+        ? TCapability
         : never
       : never
     : never;
 
-export type VerifySafeStackExploreTools<
-  TTools extends readonly StackExploreToolDefinition<any, any, any>[],
-> = readonly VerifySafeStackExploreTool<TTools[number]>[];
+export type VerifySafeStackCapabilities<
+  TCapabilities extends readonly StackCapabilityDefinition<any, any, any>[],
+> = readonly VerifySafeStackCapability<TCapabilities[number]>[];
 
-export interface StackExploreExecutionClient<
-  TTools extends readonly StackExploreToolDefinition<any, any, any>[] = readonly StackExploreToolDefinition<any, any, any>[],
+export interface StackCapabilityExecutionClient<
+  TCapabilities extends readonly StackCapabilityDefinition<any, any, any>[] = readonly StackCapabilityDefinition<any, any, any>[],
 > {
-  run<TId extends TTools[number]["id"]>(
+  run<TId extends TCapabilities[number]["id"]>(
     toolId: TId,
-    input: StackExploreInputFor<TTools, TId>,
-  ): Promise<StackExploreOutputFor<TTools, TId>>;
+    input: StackCapabilityInputFor<TCapabilities, TId>,
+  ): Promise<StackCapabilityOutputFor<TCapabilities, TId>>;
 }
 
 export type StackExecutionSurface<
-  TTools extends readonly StackExploreToolDefinition<any, any, any>[] = readonly StackExploreToolDefinition<any, any, any>[],
+  TCapabilities extends readonly StackCapabilityDefinition<any, any, any>[] = readonly StackCapabilityDefinition<any, any, any>[],
 > = StackStatusPacket & {
-  explore: StackExploreExecutionClient<VerifySafeStackExploreTools<TTools>>;
+  capability: StackCapabilityExecutionClient<VerifySafeStackCapabilities<TCapabilities>>;
 };
 
 export interface StackProvider<THandle = unknown> {
   readonly id: string;
-  readonly explore?: readonly StackExploreToolDefinition<THandle, any, any>[];
+  /**
+   * Provider-declared stack capabilities.
+   *
+   * Capabilities are product/runtime-specific operations used by agents to inspect,
+   * prepare, or locally mutate a managed stack when a universal `stack.*`,
+   * `journey.*`, or `browser.*` operation is not expressive enough.
+   */
+  readonly capabilities?: readonly StackCapabilityDefinition<THandle, any, any>[];
   prepare?(): Promise<StackStatusPacket> | StackStatusPacket;
   start(context: StackStartContext): Promise<THandle>;
   status(handle: THandle): Promise<StackStatusPacket> | StackStatusPacket;
@@ -201,68 +208,77 @@ export interface ProcessStackHandle {
 export const stackApiContract: AgentE2EStackApiContract = { surface: 'stack-provider-contracts' };
 
 
-export function defineStackExploreTool<
+export function defineStackCapability<
   THandle,
-  const TInputSchema extends StackExploreSchema,
-  const TOutputSchema extends StackExploreSchema,
+  const TInputSchema extends StackCapabilitySchema,
+  const TOutputSchema extends StackCapabilitySchema,
 >(
-  tool: StackExploreToolDefinition<THandle, TInputSchema, TOutputSchema>,
-): StackExploreToolDefinition<THandle, TInputSchema, TOutputSchema> {
-  assertValidExploreTool(tool);
-  return tool;
+  capability: StackCapabilityDefinition<THandle, TInputSchema, TOutputSchema>,
+): StackCapabilityDefinition<THandle, TInputSchema, TOutputSchema> {
+  assertValidCapability(capability);
+  return capability;
 }
 
-export function defineStackExploreTools<THandle>() {
+export function defineStackCapabilities<THandle>() {
   return <
-    const TTools extends readonly StackExploreToolDefinition<THandle, any, any>[],
+    const TTools extends readonly StackCapabilityDefinition<THandle, any, any>[],
   >(
-    tools: TTools,
+    capabilities: TTools,
   ): TTools => {
-    for (const tool of tools) assertValidExploreTool(tool);
-    return tools;
+    for (const capability of capabilities) assertValidCapability(capability);
+    return capabilities;
   };
 }
 
 export function createStackExecutionSurface<
   THandle,
-  const TTools extends readonly StackExploreToolDefinition<THandle, any, any>[],
+  const TCapabilities extends readonly StackCapabilityDefinition<THandle, any, any>[],
 >(
   status: StackStatusPacket,
-  provider: { readonly explore?: TTools },
+  provider: { readonly capabilities?: TCapabilities },
   handle: THandle,
-): StackExecutionSurface<TTools> {
+): StackExecutionSurface<TCapabilities> {
+  const capability = createStackCapabilityExecutionClient(provider, handle);
   return {
     ...status,
-    explore: createStackExploreExecutionClient(provider, handle),
+    capability,
   };
 }
 
-export function createStackExploreExecutionClient<
+export function createStackCapabilityExecutionClient<
   THandle,
-  const TTools extends readonly StackExploreToolDefinition<THandle, any, any>[],
+  const TCapabilities extends readonly StackCapabilityDefinition<THandle, any, any>[],
 >(
-  provider: { readonly explore?: TTools },
+  provider: { readonly capabilities?: TCapabilities },
   handle: THandle,
-): StackExploreExecutionClient<VerifySafeStackExploreTools<TTools>> {
+): StackCapabilityExecutionClient<VerifySafeStackCapabilities<TCapabilities>> {
   return {
     async run(toolId, input) {
-      const tool = (provider.explore ?? []).find((candidate) =>
+      const tool = stackCapabilityDefinitions(provider).find((candidate) =>
         candidate.id === toolId &&
         candidate.availableIn.includes("verify") &&
         candidate.risk === "none"
       );
       if (!tool)
-        throw new Error(`Verify-safe stack exploration tool not found: ${String(toolId)}`);
+        throw new Error(`Verify-safe stack capability not found: ${String(toolId)}`);
       const inputResult = tool.input.safeParse(input);
       if (!inputResult.success)
-        throw new Error(`Invalid stack exploration input for ${String(toolId)}: ${inputResult.error.message}`);
+        throw new Error(`Invalid stack capability input for ${String(toolId)}: ${inputResult.error.message}`);
       const output = await tool.run({ input: inputResult.data, handle });
       const outputResult = tool.output.safeParse(output);
       if (!outputResult.success)
-        throw new Error(`Invalid stack exploration output for ${String(toolId)}: ${outputResult.error.message}`);
+        throw new Error(`Invalid stack capability output for ${String(toolId)}: ${outputResult.error.message}`);
       return outputResult.data;
     },
   };
+}
+
+export function stackCapabilityDefinitions<THandle>(
+  provider: {
+    readonly capabilities?: readonly StackCapabilityDefinition<THandle, any, any>[];
+  },
+): readonly StackCapabilityDefinition<THandle, any, any>[] {
+  return provider.capabilities ?? [];
 }
 
 export function createProcessStackProvider(
@@ -475,15 +491,15 @@ function withoutUndefined(
   );
 }
 
-function assertValidExploreTool(tool: StackExploreToolDefinition): void {
-  if (!tool.id) throw new Error("Stack exploration tool requires id.");
-  if (!tool.title) throw new Error(`Stack exploration tool ${tool.id} requires title.`);
-  if (!tool.description) throw new Error(`Stack exploration tool ${tool.id} requires description.`);
-  if (tool.availableIn.length === 0)
-    throw new Error(`Stack exploration tool ${tool.id} requires at least one availability target.`);
-  if (tool.availableIn.includes("verify") && tool.risk !== "none") {
+function assertValidCapability(capability: StackCapabilityDefinition): void {
+  if (!capability.id) throw new Error("Stack capability requires id.");
+  if (!capability.title) throw new Error(`Stack capability ${capability.id} requires title.`);
+  if (!capability.description) throw new Error(`Stack capability ${capability.id} requires description.`);
+  if (capability.availableIn.length === 0)
+    throw new Error(`Stack capability ${capability.id} requires at least one availability target.`);
+  if (capability.availableIn.includes("verify") && capability.risk !== "none") {
     throw new Error(
-      `Stack exploration tool ${tool.id} cannot be available in verify unless risk is none.`,
+      `Stack capability ${capability.id} cannot be available in verify unless risk is none.`,
     );
   }
 }

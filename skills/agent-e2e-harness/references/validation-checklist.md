@@ -45,13 +45,13 @@ When the task includes interactive setup, capture:
 - agent MCP client setup command or config
 - `tools/list`, `mcporter list`, or equivalent tool discovery evidence
 - `journey.inspect` result summary
-- `stack.explore.list` result showing concrete provider tools
+- `stack.capability.list` result showing concrete provider tools
 - `stack.start` returned a `stackId` and ready services
 - `stack.list` can recover the running Stack Instance
 - `stack.status` with `stackId` unified packet summary
 - multi-stack Dev MCP evidence when supported: two named Stack Instances, both visible in `stack.list`, with explicit `stack.status` calls for each id
 - `stack.logs` with `stackId` result for one service with required `tail`
-- `stack.explore.run` with `stackId` result for one concrete provider tool
+- `stack.capability.run` with `stackId` result for one concrete provider tool
 - `run.begin` seed status and Run Stack Binding for the selected `stackId`
 - `StackStatusPacket.services` evidence for the dynamic app URL used by the journey
 - StackStartContext / Named Stack Allocations evidence when a stack provider allocates ports, logs, or artifact paths
@@ -87,8 +87,8 @@ When validating an Attached Runtime Target, capture:
 - `runtime.status` readiness and services
 - `runtime.logs` with required `tail` and artifact path
 - `runtime.access.status` without secret material
-- `runtime.explore.list` schemas and risk values
-- one `runtime.explore.run` observation result
+- `runtime.capability.list` schemas and risk values
+- one `runtime.capability.run` observation result
 - selected journey/profile where `runtimeTargetId` resolves the target
 - proof that `run.begin` did not use a free `targetId` override
 - seed/cleanup evidence if the profile opts into run lifecycle
@@ -125,7 +125,7 @@ Final evidence must include:
 - `report.json` and `report.md` existence
 - cleanup status
 - exit code
-- evidence that verify used only Verify Observation Tools if journey code uses `execution.stack.explore.run(...)`
+- evidence that verify used only Verify Observation Tools if journey code uses `execution.stack.capability.run(...)`
 - worker-scoped verify evidence when `--workers > 1` is configured: stack ids such as `worker-0`, per-run `stackId`, report `stacks[]`, and Named Stack Allocations
 
 ## Stop Conditions

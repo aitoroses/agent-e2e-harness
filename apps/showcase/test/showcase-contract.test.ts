@@ -22,10 +22,10 @@ afterEach(() => {
 });
 
 describe("showcase journey contracts", () => {
-  it("declares concrete stack exploration tools for Dev MCP discovery", () => {
+  it("declares concrete stack capabilities for Dev MCP discovery", () => {
     const provider = createShowcaseDevStackProvider();
 
-    expect(provider.explore).toEqual([
+    expect(provider.capabilities).toEqual([
       expect.objectContaining({
         id: "notes.list",
         availableIn: ["dev", "verify"],
@@ -79,7 +79,7 @@ describe("showcase journey contracts", () => {
         kind: "runtimeLogs",
       }),
     ]);
-    expect(target.explore).toEqual([
+    expect(target.capabilities).toEqual([
       expect.objectContaining({
         id: "compose.services",
         risk: "observation",
@@ -206,7 +206,7 @@ function showcaseStackExecution(
       artifacts: [],
       warnings: [],
       errors: [],
-      explore: {
+      capability: {
         run: async () => ({
           notes: notes.map((note) => ({
             ...note,
@@ -221,9 +221,9 @@ function showcaseStackExecution(
 }
 
 function assertVerifyClientTypes(stack: ShowcaseStackExecution) {
-  const notes = stack.explore.run("notes.list", { limit: 1 });
-  // @ts-expect-error dev-only tools must not be present in verify-time stack exploration.
-  void stack.explore.run("postgres.query", { sql: "select 1" });
+  const notes = stack.capability.run("notes.list", { limit: 1 });
+  // @ts-expect-error dev-only tools must not be present in verify-time stack capabilities.
+  void stack.capability.run("postgres.query", { sql: "select 1" });
   return notes;
 }
 

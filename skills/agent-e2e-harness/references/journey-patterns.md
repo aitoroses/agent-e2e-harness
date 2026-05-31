@@ -117,10 +117,10 @@ Prefer `resourceRegistry` for typed cleanup. Use `resourceAdapters` only for one
 ## Stack Provider Template
 
 ```ts
-import { createProcessStackProvider, defineStackExploreTools, type StackProvider } from "@agent-e2e/harness/stack";
+import { createProcessStackProvider, defineStackCapabilities, type StackProvider } from "@agent-e2e/harness/stack";
 import { z } from "zod/v4";
 
-const explore = defineStackExploreTools<{ serviceId: string }>()([
+const capabilities = defineStackCapabilities<{ serviceId: string }>()([
   {
     id: "app.health",
     title: "Read app health",
@@ -146,7 +146,7 @@ export const appStackProvider = createProcessStackProvider({
 
 export const stackProvider = {
   ...appStackProvider,
-  explore,
+  capabilities,
 };
 ```
 
@@ -176,7 +176,7 @@ export const stackProvider: StackProvider<{ appUrl: string; logPath: string }> =
 };
 ```
 
-`stack.start` should return service URLs through `status`: `StackStatusPacket.services` is the journey-facing runtime contract for browser/API targets. Named Stack Allocations make Dev MCP and worker-scoped verify reports explain which ports, logs, and paths belonged to each Stack Instance; they do not replace services. Optional `logs` should read live logs for stable service ids. `explore` should expose provider-owned tools with Zod schemas, `availableIn`, and `risk`.
+`stack.start` should return service URLs through `status`: `StackStatusPacket.services` is the journey-facing runtime contract for browser/API targets. Named Stack Allocations make Dev MCP and worker-scoped verify reports explain which ports, logs, and paths belonged to each Stack Instance; they do not replace services. Optional `logs` should read live logs for stable service ids. `capabilities` should expose provider-owned tools with Zod schemas, `availableIn`, and `risk` .
 
 ## Config Template
 

@@ -2,6 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import {
   createStackExecutionSurface,
   createStackStartContext,
+  stackCapabilityDefinitions,
   type StackAllocationRecord,
   type StackExecutionSurface,
   type StackLogsInput,
@@ -105,7 +106,7 @@ export interface StackInstanceDisposeResult {
   errors: string[];
 }
 
-export interface StackExploreRunResult {
+export interface StackCapabilityRunResult {
   toolId: string;
   output: unknown;
 }
@@ -335,43 +336,56 @@ export class StackInstanceManager<TStackHandle> {
     return await this.provider.logs(handle, input);
   }
 
-  async exploreRun(input: {
+  async capabilityRun(input: {
     stackId?: string;
     toolId: string;
     input: unknown;
-  }): Promise<StackExploreRunResult> {
-    const exploreTool = (this.provider.explore ?? []).find((tool) => tool.id === input.toolId);
-    if (!exploreTool) {
+  }): Promise<StackCapabilityRunResult> {
+    return this.runProviderCapability("stack.capability.run", "stack-capability", "Stack capability", input);
+  }
+
+  private async runProviderCapability(
+    surfaceName: string,
+    errorPrefix: string,
+    noun: string,
+    input: {
+      stackId?: string;
+      toolId: string;
+      input: unknown;
+    },
+  ): Promise<StackCapabilityRunResult> {
+    const capability = stackCapabilityDefinitions(this.provider).find((tool) => tool.id === input.toolId);
+    if (!capability) {
       throw new StackInstanceManagerError(
-        "stack-explore-tool-not-found",
-        `Stack exploration tool not found: ${input.toolId}`,
+        `${errorPrefix}-tool-not-found`,
+        `${noun} not found: ${input.toolId}`,
       );
     }
 
-    const handle = this.requireHandle("stack.explore.run", input.stackId);
+    const handle = this.requireHandle(surfaceName, input.stackId);
 
-    const inputResult = exploreTool.input.safeParse(input.input ?? {});
+    const inputResult = capability.input.safeParse(input.input ?? {});
     if (!inputResult.success) {
       throw new StackInstanceManagerError(
-        "stack-explore-invalid-input",
+        `${errorPrefix}-invalid-input`,
         inputResult.error.message,
       );
     }
 
     let output: unknown;
     try {
-      output = await exploreTool.run({ input: inputResult.data, handle });
+      output = await capability.run({ input: inputResult.data, handle });
     } catch (error) {
       throw new StackInstanceManagerError(
-        "stack-explore-handler-failed",
+        `${errorPrefix}-handler-failed`,
         error instanceof Error ? error.message : String(error),
       );
     }
 
-    const outputResult = exploreTool.output.safeParse(output);
+    const outputResult = capability.output.safeParse(output);
     if (!outputResult.success) {
       throw new StackInstanceManagerError(
-        "stack-explore-invalid-output",
+        `${errorPrefix}-invalid-output`,
         outputResult.error.message,
       );
     }
