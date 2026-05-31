@@ -132,8 +132,8 @@ export function createShowcaseMcpJourney() {
                   (candidate) => candidate.body === PROOF_NOTE_BODY && candidate.ownedByRun === runId,
                 );
               }
-              const stackObservation = execution.stack?.explore
-                ? await execution.stack.explore.run("notes.list", { limit: 10 })
+              const stackObservation = execution.stack?.capability
+                ? await execution.stack.capability.run("notes.list", { limit: 10 })
                 : undefined;
               if (stackObservation) {
                 note = stackObservation.notes.find(

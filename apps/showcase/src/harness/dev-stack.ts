@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { z } from "zod/v4";
 import {
   createProcessStackProvider,
-  defineStackExploreTools,
+  defineStackCapabilities,
   type ProcessStackHandle,
   type StackLogsInput,
   type StackLogsOutput,
@@ -38,7 +38,7 @@ export interface ShowcaseDevStackHandle {
   app: StackProvider<ProcessStackHandle>;
 }
 
-export const showcaseExploreTools = defineStackExploreTools<ShowcaseDevStackHandle>()([
+export const showcaseStackCapabilities = defineStackCapabilities<ShowcaseDevStackHandle>()([
   {
     id: "notes.list",
     title: "List proof notes",
@@ -105,7 +105,7 @@ export const showcaseExploreTools = defineStackExploreTools<ShowcaseDevStackHand
   },
 ]);
 
-export type ShowcaseStackExecution = StackExecutionSurface<typeof showcaseExploreTools>;
+export type ShowcaseStackExecution = StackExecutionSurface<typeof showcaseStackCapabilities>;
 
 export function createShowcaseDevStackProvider(
   config: ShowcaseDevStackProviderConfig = {},
@@ -124,7 +124,7 @@ export function createShowcaseDevStackProvider(
 
   return {
     id: "showcase-devmode-stack",
-    explore: showcaseExploreTools,
+    capabilities: showcaseStackCapabilities,
     async start(ctx: StackStartContext) {
       const stackArtifacts = ctx.allocateArtifactPath("showcase stack artifacts", { kind: "directory" });
       let appPort: number;

@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod/v4";
 import {
   attachedRuntime,
-  defineRuntimeExploreTool,
+  defineRuntimeCapabilities,
+  defineRuntimeCapability,
   type RuntimeLogsInput,
   type RuntimeLogsOutput,
   type RuntimeStatusPacket,
@@ -37,8 +38,8 @@ export function createShowcaseComposeAttachedRuntimeTarget(): RuntimeTarget {
         description: "Read-only Docker Compose logs for the externally owned showcase runtime.",
       },
     ],
-    explore: [
-      defineRuntimeExploreTool({
+    capabilities: defineRuntimeCapabilities([
+      defineRuntimeCapability({
         id: "compose.services",
         title: "List Compose services",
         description: "Observe Docker Compose services for the externally started showcase runtime.",
@@ -53,7 +54,7 @@ export function createShowcaseComposeAttachedRuntimeTarget(): RuntimeTarget {
         }),
         run: async () => ({ services: await composeServices() }),
       }),
-    ],
+    ]),
   });
 }
 

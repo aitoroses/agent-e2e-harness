@@ -86,6 +86,8 @@ type StackExploreSchema = z.ZodType<unknown>;
 
 export type StackExploreAvailability = "dev" | "verify";
 export type StackExploreRisk = "none" | "local-mutation" | "destructive" | "external-side-effect";
+export type StackCapabilityAvailability = StackExploreAvailability;
+export type StackCapabilityRisk = StackExploreRisk;
 
 export interface StackExploreToolDefinition<
   THandle = unknown,
@@ -104,6 +106,11 @@ export interface StackExploreToolDefinition<
     handle: THandle;
   }): MaybePromise<z.infer<TOutputSchema>>;
 }
+export type StackCapabilityDefinition<
+  THandle = unknown,
+  TInputSchema extends StackExploreSchema = StackExploreSchema,
+  TOutputSchema extends StackExploreSchema = StackExploreSchema,
+> = StackExploreToolDefinition<THandle, TInputSchema, TOutputSchema>;
 
 export interface StackExploreToolDescriptor {
   id: string;
@@ -114,21 +121,34 @@ export interface StackExploreToolDescriptor {
   inputSchema: unknown;
   outputSchema: unknown;
 }
+export type StackCapabilityDescriptor = StackExploreToolDescriptor;
 
 export type StackExploreToolById<
   TTools extends readonly StackExploreToolDefinition<any, any, any>[],
   TId extends TTools[number]["id"],
 > = Extract<TTools[number], { id: TId }>;
+export type StackCapabilityById<
+  TTools extends readonly StackCapabilityDefinition<any, any, any>[],
+  TId extends TTools[number]["id"],
+> = StackExploreToolById<TTools, TId>;
 
 export type StackExploreInputFor<
   TTools extends readonly StackExploreToolDefinition<any, any, any>[],
   TId extends TTools[number]["id"],
 > = z.infer<StackExploreToolById<TTools, TId>["input"]>;
+export type StackCapabilityInputFor<
+  TTools extends readonly StackCapabilityDefinition<any, any, any>[],
+  TId extends TTools[number]["id"],
+> = StackExploreInputFor<TTools, TId>;
 
 export type StackExploreOutputFor<
   TTools extends readonly StackExploreToolDefinition<any, any, any>[],
   TId extends TTools[number]["id"],
 > = z.infer<StackExploreToolById<TTools, TId>["output"]>;
+export type StackCapabilityOutputFor<
+  TTools extends readonly StackCapabilityDefinition<any, any, any>[],
+  TId extends TTools[number]["id"],
+> = StackExploreOutputFor<TTools, TId>;
 
 export type VerifySafeStackExploreTool<TTool> =
   TTool extends StackExploreToolDefinition<any, any, any>
@@ -142,6 +162,10 @@ export type VerifySafeStackExploreTool<TTool> =
 export type VerifySafeStackExploreTools<
   TTools extends readonly StackExploreToolDefinition<any, any, any>[],
 > = readonly VerifySafeStackExploreTool<TTools[number]>[];
+export type VerifySafeStackCapability<TTool> = VerifySafeStackExploreTool<TTool>;
+export type VerifySafeStackCapabilities<
+  TTools extends readonly StackCapabilityDefinition<any, any, any>[],
+> = VerifySafeStackExploreTools<TTools>;
 
 export interface StackExploreExecutionClient<
   TTools extends readonly StackExploreToolDefinition<any, any, any>[] = readonly StackExploreToolDefinition<any, any, any>[],
@@ -151,15 +175,29 @@ export interface StackExploreExecutionClient<
     input: StackExploreInputFor<TTools, TId>,
   ): Promise<StackExploreOutputFor<TTools, TId>>;
 }
+export type StackCapabilityExecutionClient<
+  TTools extends readonly StackCapabilityDefinition<any, any, any>[] = readonly StackCapabilityDefinition<any, any, any>[],
+> = StackExploreExecutionClient<TTools>;
 
 export type StackExecutionSurface<
   TTools extends readonly StackExploreToolDefinition<any, any, any>[] = readonly StackExploreToolDefinition<any, any, any>[],
 > = StackStatusPacket & {
+  capability: StackCapabilityExecutionClient<VerifySafeStackCapabilities<TTools>>;
+  /** @deprecated Use `capability`; kept for compatibility with 1.4.x journeys. */
   explore: StackExploreExecutionClient<VerifySafeStackExploreTools<TTools>>;
 };
 
 export interface StackProvider<THandle = unknown> {
   readonly id: string;
+  /**
+   * Provider-declared stack capabilities. Preferred over `explore`.
+   *
+   * Capabilities are product/runtime-specific tools used by agents to inspect,
+   * prepare, or locally mutate a managed stack when a universal `stack.*`,
+   * `journey.*`, or `browser.*` tool is not expressive enough.
+   */
+  readonly capabilities?: readonly StackCapabilityDefinition<THandle, any, any>[];
+  /** @deprecated Use `capabilities`; kept for compatibility with 1.4.x consumers. */
   readonly explore?: readonly StackExploreToolDefinition<THandle, any, any>[];
   prepare?(): Promise<StackStatusPacket> | StackStatusPacket;
   start(context: StackStartContext): Promise<THandle>;
@@ -212,6 +250,16 @@ export function defineStackExploreTool<
   return tool;
 }
 
+export function defineStackCapability<
+  THandle,
+  const TInputSchema extends StackExploreSchema,
+  const TOutputSchema extends StackExploreSchema,
+>(
+  capability: StackCapabilityDefinition<THandle, TInputSchema, TOutputSchema>,
+): StackCapabilityDefinition<THandle, TInputSchema, TOutputSchema> {
+  return defineStackExploreTool(capability);
+}
+
 export function defineStackExploreTools<THandle>() {
   return <
     const TTools extends readonly StackExploreToolDefinition<THandle, any, any>[],
@@ -223,17 +271,30 @@ export function defineStackExploreTools<THandle>() {
   };
 }
 
+export function defineStackCapabilities<THandle>() {
+  return <
+    const TTools extends readonly StackCapabilityDefinition<THandle, any, any>[],
+  >(
+    capabilities: TTools,
+  ): TTools => {
+    for (const capability of capabilities) assertValidExploreTool(capability);
+    return capabilities;
+  };
+}
+
 export function createStackExecutionSurface<
   THandle,
   const TTools extends readonly StackExploreToolDefinition<THandle, any, any>[],
 >(
   status: StackStatusPacket,
-  provider: { readonly explore?: TTools },
+  provider: { readonly capabilities?: TTools; readonly explore?: TTools },
   handle: THandle,
 ): StackExecutionSurface<TTools> {
+  const capability = createStackCapabilityExecutionClient(provider, handle);
   return {
     ...status,
-    explore: createStackExploreExecutionClient(provider, handle),
+    capability,
+    explore: capability,
   };
 }
 
@@ -241,28 +302,56 @@ export function createStackExploreExecutionClient<
   THandle,
   const TTools extends readonly StackExploreToolDefinition<THandle, any, any>[],
 >(
-  provider: { readonly explore?: TTools },
+  provider: { readonly capabilities?: TTools; readonly explore?: TTools },
   handle: THandle,
 ): StackExploreExecutionClient<VerifySafeStackExploreTools<TTools>> {
+  return createStackCapabilityExecutionClient(provider, handle);
+}
+
+export function createStackCapabilityExecutionClient<
+  THandle,
+  const TTools extends readonly StackCapabilityDefinition<THandle, any, any>[],
+>(
+  provider: { readonly capabilities?: TTools; readonly explore?: TTools },
+  handle: THandle,
+): StackCapabilityExecutionClient<VerifySafeStackCapabilities<TTools>> {
   return {
     async run(toolId, input) {
-      const tool = (provider.explore ?? []).find((candidate) =>
+      const tool = stackCapabilityDefinitions(provider).find((candidate) =>
         candidate.id === toolId &&
         candidate.availableIn.includes("verify") &&
         candidate.risk === "none"
       );
       if (!tool)
-        throw new Error(`Verify-safe stack exploration tool not found: ${String(toolId)}`);
+        throw new Error(`Verify-safe stack capability not found: ${String(toolId)}`);
       const inputResult = tool.input.safeParse(input);
       if (!inputResult.success)
-        throw new Error(`Invalid stack exploration input for ${String(toolId)}: ${inputResult.error.message}`);
+        throw new Error(`Invalid stack capability input for ${String(toolId)}: ${inputResult.error.message}`);
       const output = await tool.run({ input: inputResult.data, handle });
       const outputResult = tool.output.safeParse(output);
       if (!outputResult.success)
-        throw new Error(`Invalid stack exploration output for ${String(toolId)}: ${outputResult.error.message}`);
+        throw new Error(`Invalid stack capability output for ${String(toolId)}: ${outputResult.error.message}`);
       return outputResult.data;
     },
   };
+}
+
+export function stackCapabilityDefinitions<THandle>(
+  provider: {
+    readonly capabilities?: readonly StackCapabilityDefinition<THandle, any, any>[];
+    readonly explore?: readonly StackExploreToolDefinition<THandle, any, any>[];
+  },
+): readonly StackCapabilityDefinition<THandle, any, any>[] {
+  const capabilities = provider.capabilities ?? [];
+  const explore = provider.explore ?? [];
+  if (capabilities.length === 0) return explore;
+  if (explore.length === 0) return capabilities;
+
+  const seen = new Set(capabilities.map((capability) => capability.id));
+  return [
+    ...capabilities,
+    ...explore.filter((capability) => !seen.has(capability.id)),
+  ];
 }
 
 export function createProcessStackProvider(

@@ -43,7 +43,7 @@ Read only the references needed for the current task:
 - Put app-specific domain logic in the consumer app: routes, selectors, schemas, stack commands, seed data, resource ids, and assertions.
 - Keep cleanup ownership-ledger bounded. Never delete by broad prefix, tenant, timestamp, or unscoped query alone.
 - Use artifacts as the debugging surface before changing code again.
-- Treat stack exploration as provider-owned. The harness owns routing, discovery, schemas, validation, and the small grammar; the app stack provider owns concrete runtime knowledge.
+- Treat stack capability as provider-owned. The harness owns routing, discovery, schemas, validation, and the small grammar; the app stack provider owns concrete runtime knowledge.
 - Treat Runtime Targets as target selection, not lifecycle ownership. Attached Runtime Mode does not own infrastructure lifecycle.
 
 ## Runtime Targets and Attached Runtime Mode
@@ -63,15 +63,17 @@ runtime.list
 runtime.status
 runtime.logs
 runtime.access.status
+runtime.capability.list
+runtime.capability.run
 runtime.explore.list
 runtime.explore.run
 ```
 
 Attached Runtime Mode does not own infrastructure lifecycle. Start and stop the external runtime through product commands. `runtime.logs` requires `tail` and may accept `serviceId` plus best-effort `level`. Access Context status and Access Resolvers must not expose secret material in agent-visible responses; automatic `browser.open` authentication wiring is not part of this v1 attached runtime path unless product code supplies it.
 
-Runtime Exploration Tools are product-owned and schema-declared. Risk must be one of `observation`, `runMutation`, or `runtimeMutation`. Observation runs by default. runMutation requires Journey Profile opt-in through `runtime.allowRunMutationTools`. runtimeMutation is blocked by default. `run.begin` resolves the Runtime Target from the selected Journey Profile and must not use a free `targetId` override.
+Runtime Capabilities are product-owned and schema-declared. Risk must be one of `observation`, `runMutation`, or `runtimeMutation`. Observation runs by default. runMutation requires Journey Profile opt-in through `runtime.allowRunMutationTools`. runtimeMutation is blocked by default. `run.begin` resolves the Runtime Target from the selected Journey Profile and must not use a free `targetId` override.
 
-## Stack Exploration Surface
+## Stack Capability Surface
 
 The fixed stack MCP grammar is:
 
@@ -81,17 +83,19 @@ stack.list
 stack.status
 stack.stop
 stack.logs
+stack.capability.list
+stack.capability.run
 stack.explore.list
 stack.explore.run
 ```
 
-`stack.start` returns a `stackId`; pass that id to `stack.status`, `run.begin`, `stack.logs`, `stack.explore.run`, and `stack.stop`. Use `stack.list` to recover running Stack Instances after compaction or to compare two live stacks during a multi-stack investigation. `run.begin` requires a valid `stackId` when a stack provider exists, creates the run's Run Stack Binding, and rejects `stackId` when no provider exists. `stack.status` is the unified stack-state packet. `StackStatusPacket.services` is the journey-facing runtime contract for dynamic URLs, service ids, endpoints, checks, warnings, errors, artifacts, and next actions. Do not invent native `stack.services`, `stack.health`, or `stack.env` tools for v1.
+`stack.start` returns a `stackId`; pass that id to `stack.status`, `run.begin`, `stack.logs`, `stack.capability.run`, and `stack.stop`. Use `stack.list` to recover running Stack Instances after compaction or to compare two live stacks during a multi-stack investigation. `run.begin` requires a valid `stackId` when a stack provider exists, creates the run's Run Stack Binding, and rejects `stackId` when no provider exists. `stack.status` is the unified stack-state packet. `StackStatusPacket.services` is the journey-facing runtime contract for dynamic URLs, service ids, endpoints, checks, warnings, errors, artifacts, and next actions. Do not invent native `stack.services`, `stack.health`, or `stack.env` tools for v1.
 
-`stack.logs` is live exploration. It requires a `stackId`, one `serviceId`, a required `tail`, and optional `stream: "stdout" | "stderr" | "combined"`. `stack.logs` and `stack.explore.run` accept optional `runId` only to capture artifacts, and reject capture when the run is bound to a different `stackId`.
+`stack.logs` is live diagnostics. It requires a `stackId`, one `serviceId`, a required `tail`, and optional `stream: "stdout" | "stderr" | "combined"`. `stack.logs` and `stack.capability.run` accept optional `runId` only to capture artifacts, and reject capture when the run is bound to a different `stackId`. `stack.explore.list` and `stack.explore.run` remain compatibility aliases.
 
 Stack providers should use **StackStartContext** and **Named Stack Allocations** as the default stack-provider pattern. In `start(ctx)`, use `ctx.stackId`, `ctx.mode`, `ctx.workerIndex`, `ctx.workerCount`, `ctx.suiteId`, and `ctx.artifactScope` to name resources. Allocate dynamic ports with `await ctx.allocatePort(name)` and stack-scoped files or directories with `ctx.allocateArtifactPath(name, { kind: "file" | "directory" })`. These allocations make parallel Dev MCP checks and worker-scoped verify reports explainable without replacing `StackStatusPacket.services` as the data journeys use.
 
-Provider-declared `stack.explore.*` tools must have:
+Provider-declared `stack.capability.*` tools must have:
 
 - `id`, preferably dotted, such as `postgres.schema`, `postgres.query`, or `notes.list`
 - `title` and `description`
@@ -100,7 +104,7 @@ Provider-declared `stack.explore.*` tools must have:
 - mandatory Zod `input` and `output` schemas
 - a handler that receives `{ input, handle }`, where `handle` is the selected Stack Instance handle returned by `start`
 
-Only Verify Observation Tools can be used from journey execution during `agent-e2e verify`: `availableIn` includes `verify` and `risk` is exactly `none`. Dev-only tools must not fake product-visible behavior in CI. Mutations must come through the app path, seed, journey steps, reseed, or cleanup.
+Only Verify Observation Tools can be used from journey execution during `agent-e2e verify`: `availableIn` includes `verify` and `risk` is exactly `none`. Dev-only tools must not fake product-visible behavior in CI. Mutations must come through the app path, seed, journey steps, reseed, or cleanup. Use `execution.stack.capability.run(...)` in new journeys; `execution.stack.explore.run(...)` is a compatibility alias.
 
 ## Browser Workbench Surface
 
@@ -152,22 +156,22 @@ Use `mcporter` for fresh or remote agents without a registered MCP client:
 
 ```sh
 mcporter list http://127.0.0.1:3766/mcp --schema --json --allow-http
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.explore.list --args '{}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.capability.list --args '{}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.start --args '{"stackId":"dev-a"}' --output json --timeout 120000
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.start --args '{"stackId":"dev-b"}' --output json --timeout 120000
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.list --args '{}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.status --args '{"stackId":"<stack-id>"}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.logs --args '{"stackId":"<stack-id>","serviceId":"<service-id>","tail":80,"stream":"combined"}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool run.begin --args '{"journeyId":"<journey-id>","runId":"<run-id>","stackId":"<stack-id>"}' --output json
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.explore.run --args '{"stackId":"<stack-id>","toolId":"notes.list","input":{"limit":10}}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.capability.run --args '{"stackId":"<stack-id>","toolId":"notes.list","input":{"limit":10}}' --output json
 ```
 
 Before claiming adoption works, prove:
 
-- provider tools are discoverable through `stack.explore.list`
+- provider tools are discoverable through `stack.capability.list`
 - multi-stack Dev MCP behavior works: two Stack Instances can start, `stack.list` shows both ids, and `stack.status` targets the intended id
-- Dev MCP can run a provider tool through `stack.explore.run`
-- the journey uses `execution.stack.explore.run(...)` for at least one verify-safe observation when useful
+- Dev MCP can run a provider tool through `stack.capability.run`
+- the journey uses `execution.stack.capability.run(...)` for at least one verify-safe observation when useful
 - dev-only tools are absent or rejected in verify
 - worker-scoped verify evidence exists: `agent-e2e verify --workers 2` passes when the app supports it, reports `worker-0`/`worker-1` or the lazy subset of selected runs, records run `stackId`, and includes Named Stack Allocations
 - `agent-e2e verify` passes and writes a suite report
@@ -178,6 +182,6 @@ Before claiming adoption works, prove:
 - `agent-e2e.config.ts` loads journeys, stack provider, resources, and verify defaults.
 - At least one journey proves a real app behavior from seed.
 - The MCP loop can start the stack, begin a run, open/snapshot/find/act/wait/get in a browser, inspect console/network signals when useful, run a journey step or phase, read artifacts, cleanup/reseed, close the browser, and stop the stack.
-- Stack exploration is proven: `stack.status`, `stack.logs`, `stack.explore.list`, and at least one `stack.explore.run` call work against concrete app tools.
+- Stack capability surface is proven: `stack.status`, `stack.logs`, `stack.capability.list`, and at least one `stack.capability.run` call work against concrete app tools.
 - `agent-e2e verify` runs from config and writes suite reports under `.agents-e2e/artifacts/_suites/<suite-id>/`.
 - Final evidence includes commands run, MCP URL, selected journey/profile, artifact paths, cleanup result, stack stop result, and CI/verify status.

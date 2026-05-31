@@ -4,7 +4,8 @@ import { defineJourney, type HarnessTypes } from "@agent-e2e/harness/core";
 import { createDevMcpToolRouter } from "@agent-e2e/harness/dev-mcp";
 import {
   attachedRuntime,
-  defineRuntimeExploreTool,
+  defineRuntimeCapability,
+  defineRuntimeCapabilities,
   managedRuntime,
 } from "@agent-e2e/harness/runtime";
 import type { StackProvider } from "@agent-e2e/harness/stack";
@@ -112,13 +113,13 @@ describe("Runtime Tool Surface", () => {
     expect(router.listTools().map((tool) => tool.name)).not.toContain("runtime.list");
   });
 
-  it("describes runtime exploration tools with product-owned schemas", async () => {
+  it("describes runtime capabilities with product-owned schemas and keeps explore aliases", async () => {
     const router = createDevMcpToolRouter({
       runtimeTargets: [
         attachedRuntime({
           id: "compose",
-          explore: [
-            defineRuntimeExploreTool({
+          capabilities: defineRuntimeCapabilities([
+            defineRuntimeCapability({
               id: "compose.ps",
               title: "List Compose services",
               description: "Observe externally started Compose services.",
@@ -127,25 +128,31 @@ describe("Runtime Tool Surface", () => {
               output: z.object({ services: z.array(z.string()) }),
               run: async () => ({ services: ["web"] }),
             }),
-          ],
+          ]),
         }),
       ],
     });
 
+    await expect(router.callTool("runtime.capability.list", { targetId: "compose" })).resolves.toMatchObject({
+      status: "ok",
+      tool: "runtime.capability.list",
+      tools: [expect.objectContaining({ id: "compose.ps", risk: "observation" })],
+    });
     await expect(router.callTool("runtime.explore.list", { targetId: "compose" })).resolves.toMatchObject({
       status: "ok",
+      tool: "runtime.explore.list",
       tools: [expect.objectContaining({ id: "compose.ps", risk: "observation" })],
     });
   });
 
-  it("executes observation tools and gates runMutation/runtimeMutation tools", async () => {
+  it("executes observation capabilities and gates runMutation/runtimeMutation capabilities", async () => {
     const router = createDevMcpToolRouter({
       journeys: [makeJourney()],
       runtimeTargets: [
         attachedRuntime({
           id: "compose",
-          explore: [
-            defineRuntimeExploreTool({
+          capabilities: defineRuntimeCapabilities([
+            defineRuntimeCapability({
               id: "compose.ps",
               title: "List Compose services",
               description: "Observe externally started Compose services.",
@@ -154,7 +161,7 @@ describe("Runtime Tool Surface", () => {
               output: z.object({ services: z.array(z.string()) }),
               run: async ({ input }) => ({ services: input.includeStopped ? ["web", "db"] : ["web"] }),
             }),
-            defineRuntimeExploreTool({
+            defineRuntimeCapability({
               id: "notes.create-owned",
               title: "Create run-owned note",
               description: "Create a run-owned product resource for the selected journey profile.",
@@ -163,7 +170,7 @@ describe("Runtime Tool Surface", () => {
               output: z.object({ id: z.string() }),
               run: async () => ({ id: "note:owned" }),
             }),
-            defineRuntimeExploreTool({
+            defineRuntimeCapability({
               id: "compose.restart",
               title: "Restart Compose service",
               description: "Mutate shared runtime infrastructure.",
@@ -172,33 +179,45 @@ describe("Runtime Tool Surface", () => {
               output: z.object({ restarted: z.boolean() }),
               run: async () => ({ restarted: true }),
             }),
-          ],
+          ]),
         }),
       ],
     });
 
     await expect(
-      router.callTool("runtime.explore.run", {
+      router.callTool("runtime.capability.run", {
         targetId: "compose",
         toolId: "compose.ps",
         input: { includeStopped: true },
       }),
     ).resolves.toMatchObject({
       status: "ok",
+      tool: "runtime.capability.run",
       output: { services: ["web", "db"] },
     });
     await expect(
       router.callTool("runtime.explore.run", {
         targetId: "compose",
         toolId: "compose.ps",
+        input: { includeStopped: false },
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      tool: "runtime.explore.run",
+      output: { services: ["web"] },
+    });
+    await expect(
+      router.callTool("runtime.capability.run", {
+        targetId: "compose",
+        toolId: "compose.ps",
         input: { includeStopped: "yes" },
       }),
     ).resolves.toMatchObject({
       status: "error",
-      error: expect.stringContaining("Invalid runtime exploration input"),
+      error: expect.stringContaining("Invalid runtime capability input"),
     });
     await expect(
-      router.callTool("runtime.explore.run", {
+      router.callTool("runtime.capability.run", {
         targetId: "compose",
         toolId: "notes.create-owned",
         input: { body: "hello" },
@@ -208,7 +227,7 @@ describe("Runtime Tool Surface", () => {
       code: "run-mutation-requires-profile-opt-in",
     });
     await expect(
-      router.callTool("runtime.explore.run", {
+      router.callTool("runtime.capability.run", {
         targetId: "compose",
         journeyId: "journey:runtime-tools",
         profileId: "attached",
@@ -220,7 +239,7 @@ describe("Runtime Tool Surface", () => {
       output: { id: "note:owned" },
     });
     await expect(
-      router.callTool("runtime.explore.run", {
+      router.callTool("runtime.capability.run", {
         targetId: "compose",
         toolId: "compose.restart",
         input: { serviceId: "web" },

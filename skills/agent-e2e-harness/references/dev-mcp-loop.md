@@ -84,8 +84,8 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool runtime.l
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool runtime.status --args '{"targetId":"<id>"}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool runtime.logs --args '{"targetId":"<id>","tail":80}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool runtime.access.status --args '{"targetId":"<id>"}' --output json
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool runtime.explore.list --args '{"targetId":"<id>"}' --output json
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool runtime.explore.run --args '{"targetId":"<id>","toolId":"<observation-tool>","input":{}}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool runtime.capability.list --args '{"targetId":"<id>"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool runtime.capability.run --args '{"targetId":"<id>","toolId":"<observation-tool>","input":{}}' --output json
 ```
 
 Use Journey Profiles with `runtimeTargetId` to run attached journeys. Seed and cleanup are allowed only when the profile opts into run lifecycle and must stay ownership-ledger bounded.
@@ -97,9 +97,9 @@ Drive the proof through standard MCP calls:
 ```text
 journey.list
 journey.inspect
-stack.explore.list
+stack.capability.list
 stack.start
-stack.start  # optional second Stack Instance for multi-stack exploration
+stack.start  # optional second Stack Instance for multi-stack capability
 stack.list
 stack.status
 stack.logs
@@ -113,7 +113,7 @@ browser.get
 browser.console
 browser.network
 journey.step
-stack.explore.run
+stack.capability.run
 artifact.read
 cleanup.plan
 run.reseed
@@ -123,20 +123,20 @@ stack.stop
 
 For multi-step journeys, use `journey.phase` or `journey.untilPhase` when appropriate, or `journey.untilStep` to land the managed state exactly at a single step (`{ runId, phaseId, stepId }`) when you want to inspect one visual frame.
 
-The call sequence is the development Trajectory. It can include false starts, debugging probes, Browser Workbench reads, and stack exploration. Keep it as evidence while learning the app, then promote only the stable user path into reviewed Journey code before CI depends on it.
+The call sequence is the development Trajectory. It can include false starts, debugging probes, Browser Workbench reads, and stack capabilities. Keep it as evidence while learning the app, then promote only the stable user path into reviewed Journey code before CI depends on it.
 
 ## Evidence To Capture
 
 Capture these facts before changing implementation again:
 
 - `journey.inspect` shows the intended journey, tags, profiles, phases, steps, and proofs.
-- `stack.explore.list` shows provider-owned tools with input/output schemas.
+- `stack.capability.list` shows provider-owned tools with input/output schemas.
 - `stack.start` returns a `stackId` and all required services as `ready`.
 - Multi-stack Dev MCP checks work when the provider can run two local stacks: start two named Stack Instances, confirm `stack.list` shows both ids, and use `stack.status` against each explicit `stackId`.
 - `stack.list` can recover the running Stack Instance id after compaction or handoff.
 - `stack.status` with `stackId` returns the unified stack-state packet. `StackStatusPacket.services` is the journey-facing runtime contract for dynamic URLs and readiness. Do not expect native `stack.services`, `stack.health`, or `stack.env`.
 - `stack.logs` with `stackId` returns recent live logs for one active service using `serviceId` and required `tail`.
-- `stack.explore.run` with `stackId` can run at least one concrete provider tool.
+- `stack.capability.run` with `stackId` can run at least one concrete provider tool.
 - `run.begin` with `stackId` returns seed `status: "passed"` or `"warning"`, `canRunSteps: true`, and the run's Run Stack Binding.
 - `browser.open` returns a browser session id.
 - `browser.snapshot` shows expected app state and no visible runtime error.

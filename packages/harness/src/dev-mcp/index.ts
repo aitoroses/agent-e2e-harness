@@ -12,17 +12,19 @@ import type { McpToolResponse } from "../mcp/index.js";
 import { normalizeToolResponse, type ToolStatus } from "../mcp/response.js";
 import type {
   StackExecutionSurface,
-  StackExploreToolDescriptor,
+  StackCapabilityDescriptor,
   StackLogsInput,
   StackLogStream,
   StackProvider,
   StackStatusPacket,
 } from "../stack/index.js";
+import { stackCapabilityDefinitions } from "../stack/index.js";
 import {
   createRuntimeTargetRegistry,
-  runRuntimeExploreTool,
+  runRuntimeCapability,
   runtimeAccessStatus,
-  runtimeExploreDescriptors,
+  runtimeCapabilityDefinitions,
+  runtimeCapabilityDescriptors,
   runtimeStatus,
   writeRuntimeLogsArtifact,
   type RuntimeLogsInput,
@@ -109,6 +111,8 @@ export const DEV_MCP_TOOL_GRAMMAR = [
   "stack.list",
   "stack.status",
   "stack.logs",
+  "stack.capability.list",
+  "stack.capability.run",
   "stack.explore.list",
   "stack.explore.run",
   "stack.stop",
@@ -116,6 +120,8 @@ export const DEV_MCP_TOOL_GRAMMAR = [
   "runtime.status",
   "runtime.logs",
   "runtime.access.status",
+  "runtime.capability.list",
+  "runtime.capability.run",
   "runtime.explore.list",
   "runtime.explore.run",
   "journey.list",
@@ -284,6 +290,8 @@ export interface AgentE2EDevMcpManifest {
     statusTool: "runtime.status";
     logsTool: "runtime.logs";
     accessStatusTool: "runtime.access.status";
+    capabilityListTool: "runtime.capability.list";
+    capabilityRunTool: "runtime.capability.run";
     exploreListTool: "runtime.explore.list";
     exploreRunTool: "runtime.explore.run";
   };
@@ -442,6 +450,8 @@ export async function startAgentE2EDevMcp<
             statusTool: "runtime.status",
             logsTool: "runtime.logs",
             accessStatusTool: "runtime.access.status",
+            capabilityListTool: "runtime.capability.list",
+            capabilityRunTool: "runtime.capability.run",
             exploreListTool: "runtime.explore.list",
             exploreRunTool: "runtime.explore.run",
           },
@@ -696,19 +706,21 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             throw error;
           }
         }
+        case "stack.capability.list":
         case "stack.explore.list": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
           return ok(name, {
-            tools: await stackExploreDescriptors(options.stackProvider),
+            tools: await stackCapabilityDescriptors(options.stackProvider),
           });
         }
+        case "stack.capability.run":
         case "stack.explore.run": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
           const unexpectedKey = firstUnexpectedKey(args, ["stackId", "toolId", "input", "runId"]);
           if (unexpectedKey)
-            return failed(name, "stack-explore-invalid-arguments", `stack.explore.run does not accept argument: ${unexpectedKey}`);
+            return failed(name, stackToolErrorCode(name, "invalid-arguments"), `${name} does not accept argument: ${unexpectedKey}`);
           const toolId = stringArg(args, "toolId");
           try {
             const stackId = optionalStackId(args);
@@ -716,11 +728,18 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
               const incompatible = validateStackEvidenceBinding(name, args, stackId);
               if (incompatible) return incompatible;
             }
-            const result = await stackInstances!.exploreRun({
-              toolId,
-              input: args.input,
-              ...(stackId ? { stackId } : {}),
-            });
+            const result =
+              name === "stack.capability.run"
+                ? await stackInstances!.capabilityRun({
+                    toolId,
+                    input: args.input,
+                    ...(stackId ? { stackId } : {}),
+                  })
+                : await stackInstances!.exploreRun({
+                    toolId,
+                    input: args.input,
+                    ...(stackId ? { stackId } : {}),
+                  });
             const artifact = stackId
               ? await captureStackEvidence(name, args, stackId, {
                   toolId: result.toolId,
@@ -788,23 +807,33 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           });
           return ok(name, { targetId: target.id, logs: { ...logs, artifacts: [...(logs.artifacts ?? []), artifact] }, artifact });
         }
+        case "runtime.capability.list":
         case "runtime.explore.list": {
           if (!runtimeRegistry)
             return missingDependency(name, "runtimeTargets");
           const target = resolveRuntimeTarget(runtimeRegistry, args, options.runtimeTargetId);
-          return ok(name, { targetId: target.id, tools: await runtimeExploreDescriptors(target) });
+          // Both the capability tool and its explore alias resolve the same merged
+          // definition set; runtimeExploreDescriptors is a passthrough kept only as a
+          // back-compat export. The alias tool name is preserved via `name` in ok(...).
+          const tools = await runtimeCapabilityDescriptors(target);
+          return ok(name, { targetId: target.id, tools });
         }
+        case "runtime.capability.run":
         case "runtime.explore.run": {
           if (!runtimeRegistry)
             return missingDependency(name, "runtimeTargets");
           const unexpectedKey = firstUnexpectedKey(args, ["targetId", "toolId", "input", "journeyId", "profileId", "runId"]);
           if (unexpectedKey)
-            return failed(name, "runtime-explore-invalid-arguments", `runtime.explore.run does not accept argument: ${unexpectedKey}`);
+            return failed(name, runtimeToolErrorCode(name, "invalid-arguments"), `${name} does not accept argument: ${unexpectedKey}`);
           const target = resolveRuntimeTarget(runtimeRegistry, args, options.runtimeTargetId);
           const toolId = stringArg(args, "toolId");
-          const gate = runtimeExploreRiskGate(runtimeRegistry, target, toolId, args, options.journeys);
+          const gate = runtimeCapabilityRiskGate(name, runtimeRegistry, target, toolId, args, options.journeys);
           if (gate) return gate;
-          return ok(name, { targetId: target.id, toolId, output: await runRuntimeExploreTool(target, toolId, args.input) });
+          // runRuntimeExploreTool is a passthrough to runRuntimeCapability; call the
+          // capability implementation directly for both names. The alias tool name and
+          // its error-code prefix (via runtimeToolErrorCode) are still preserved.
+          const output = await runRuntimeCapability(target, toolId, args.input);
+          return ok(name, { targetId: target.id, toolId, output });
         }
         case "browser.open":
           if (!options.browserSessions)
@@ -1102,7 +1131,9 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
     });
     const artifactName = name === "stack.logs"
       ? "stack-logs"
-      : `stack-explore-${safePathSegment(optionalStringArg(args, "toolId") ?? "run")}`;
+      : name === "stack.explore.run"
+        ? `stack-explore-${safePathSegment(optionalStringArg(args, "toolId") ?? "run")}`
+        : `stack-capability-${safePathSegment(optionalStringArg(args, "toolId") ?? "run")}`;
     return await writeJsonArtifact(
       run,
       `stack-evidence/${artifactName}.json`,
@@ -1223,28 +1254,29 @@ function singleRuntimeTargetId(registry: RuntimeTargetRegistry): string | undefi
   return targets.length === 1 ? targets[0]?.id : undefined;
 }
 
-function runtimeExploreRiskGate(
+function runtimeCapabilityRiskGate(
+  name: DevMcpToolName,
   registry: RuntimeTargetRegistry,
   target: RuntimeTarget,
   toolId: string,
   args: Record<string, unknown>,
   journeys: readonly ExecutableJourney<any>[] | undefined,
 ): DevMcpToolResponse | undefined {
-  const tool = (target.explore ?? []).find((candidate) => candidate.id === toolId);
+  const tool = runtimeCapabilityDefinitions(target).find((candidate) => candidate.id === toolId);
   if (!tool)
-    return failed("runtime.explore.run", "runtime-explore-tool-not-found", `Unknown Runtime Exploration Tool: ${toolId}`, { targetId: target.id, toolId });
+    return failed(name, runtimeToolErrorCode(name, "tool-not-found"), `Unknown Runtime Capability: ${toolId}`, { targetId: target.id, toolId });
   if (tool.risk === "observation") return undefined;
   if (tool.risk === "runtimeMutation")
     return blocked(
-      "runtime.explore.run",
+      name,
       "runtime-mutation-blocked",
-      `Runtime Exploration Tool ${toolId} has runtimeMutation risk and is blocked by default.`,
+      `Runtime Capability ${toolId} has runtimeMutation risk and is blocked by default.`,
     );
   if (!profileAllowsRuntimeRisk(registry, tool.risk, toolId, args, journeys))
     return blocked(
-      "runtime.explore.run",
+      name,
       "run-mutation-requires-profile-opt-in",
-      `Runtime Exploration Tool ${toolId} has runMutation risk and requires selected Journey Profile opt-in.`,
+      `Runtime Capability ${toolId} has runMutation risk and requires selected Journey Profile opt-in.`,
     );
   return undefined;
 }
@@ -1299,7 +1331,17 @@ function implementedToolNames(
   const tools: DevMcpToolName[] = [];
 
   if (options.stackProvider)
-    tools.push("stack.start", "stack.list", "stack.status", "stack.logs", "stack.explore.list", "stack.explore.run", "stack.stop");
+    tools.push(
+      "stack.start",
+      "stack.list",
+      "stack.status",
+      "stack.logs",
+      "stack.capability.list",
+      "stack.capability.run",
+      "stack.explore.list",
+      "stack.explore.run",
+      "stack.stop",
+    );
 
   if (options.runtimeTargets && options.runtimeTargets.length > 0)
     tools.push(
@@ -1307,6 +1349,8 @@ function implementedToolNames(
       "runtime.status",
       "runtime.logs",
       "runtime.access.status",
+      "runtime.capability.list",
+      "runtime.capability.run",
       "runtime.explore.list",
       "runtime.explore.run",
     );
@@ -1348,15 +1392,19 @@ function summaryFor(name: DevMcpToolName): string {
     "stack.list": "List running managed stack instances.",
     "stack.status": "Read managed stack readiness.",
     "stack.logs": "Read live managed stack service logs.",
-    "stack.explore.list": "List provider-declared stack exploration tools.",
-    "stack.explore.run": "Run one provider-declared stack exploration tool.",
+    "stack.capability.list": "List provider-declared stack capabilities.",
+    "stack.capability.run": "Run one provider-declared stack capability.",
+    "stack.explore.list": "Deprecated alias for stack.capability.list.",
+    "stack.explore.run": "Deprecated alias for stack.capability.run.",
     "stack.stop": "Stop the managed development stack.",
     "runtime.list": "List configured Runtime Targets.",
     "runtime.status": "Read Runtime Target readiness and service status.",
     "runtime.logs": "Read bounded Runtime Target logs with artifacted evidence.",
     "runtime.access.status": "Read secret-safe Runtime Target access status.",
-    "runtime.explore.list": "List product-declared Runtime Exploration Tools.",
-    "runtime.explore.run": "Run one product-declared Runtime Exploration Tool with risk gates.",
+    "runtime.capability.list": "List product-declared Runtime Capabilities.",
+    "runtime.capability.run": "Run one product-declared Runtime Capability with risk gates.",
+    "runtime.explore.list": "Deprecated alias for runtime.capability.list.",
+    "runtime.explore.run": "Deprecated alias for runtime.capability.run.",
     "run.begin": "Begin a journey run.",
     "run.reseed":
       "Delete journey-owned resources and run environment seed again.",
@@ -1384,6 +1432,14 @@ function summaryFor(name: DevMcpToolName): string {
   return summaries[name];
 }
 
+function stackToolErrorCode(name: DevMcpToolName, suffix: string): string {
+  return name.startsWith("stack.capability.") ? `stack-capability-${suffix}` : `stack-explore-${suffix}`;
+}
+
+function runtimeToolErrorCode(name: DevMcpToolName, suffix: string): string {
+  return name.startsWith("runtime.capability.") ? `runtime-capability-${suffix}` : `runtime-explore-${suffix}`;
+}
+
 function inputSchemaForTool(
   name: DevMcpToolName,
   z: RuntimeZod,
@@ -1400,6 +1456,7 @@ function inputSchemaForTool(
         stackId: stringId().optional(),
       };
     case "stack.list":
+    case "stack.capability.list":
     case "stack.explore.list":
     case "journey.list":
       return {};
@@ -1408,11 +1465,12 @@ function inputSchemaForTool(
       return {
         stackId: stringId().describe("Stack Instance id returned by stack.start or stack.list."),
       };
+    case "stack.capability.run":
     case "stack.explore.run":
       return {
         stackId: stringId().describe("Stack Instance id returned by stack.start or stack.list."),
         runId: stringId().optional().describe("Optional run id used only to attach compatible stack evidence artifacts."),
-        toolId: stringId().describe("Provider-declared tool id returned by stack.explore.list."),
+        toolId: stringId().describe(`Provider-declared tool id returned by ${name === "stack.capability.run" ? "stack.capability.list" : "stack.explore.list"}.`),
         input: z.unknown().describe("Input parsed by the selected provider-declared tool schema."),
       };
     case "stack.logs":
@@ -1427,6 +1485,7 @@ function inputSchemaForTool(
       return {};
     case "runtime.status":
     case "runtime.access.status":
+    case "runtime.capability.list":
     case "runtime.explore.list":
       return {
         targetId: stringId().optional().describe("Runtime Target id returned by runtime.list. Optional only when the server selected one target."),
@@ -1438,10 +1497,11 @@ function inputSchemaForTool(
         tail: z.number().int().positive().describe("Number of recent log entries to return."),
         level: stringId().optional().describe("Optional best-effort provider-specific log level filter."),
       };
+    case "runtime.capability.run":
     case "runtime.explore.run":
       return {
         targetId: stringId().optional().describe("Runtime Target id returned by runtime.list. Optional only when the server selected one target."),
-        toolId: stringId().describe("Runtime Exploration Tool id returned by runtime.explore.list."),
+        toolId: stringId().describe(`Runtime Capability id returned by ${name === "runtime.capability.run" ? "runtime.capability.list" : "runtime.explore.list"}.`),
         input: z.unknown().describe("Input parsed by the selected product-declared tool schema."),
         journeyId: stringId().optional().describe("Journey id used with profileId for runMutation opt-in checks."),
         profileId: stringId().optional().describe("Journey Profile id used for runMutation opt-in checks."),
@@ -1497,10 +1557,10 @@ function inputSchemaForTool(
   }
 }
 
-async function stackExploreDescriptors<TStackHandle>(
+async function stackCapabilityDescriptors<TStackHandle>(
   stackProvider: StackProvider<TStackHandle>,
-): Promise<readonly StackExploreToolDescriptor[]> {
-  const tools = stackProvider.explore ?? [];
+): Promise<readonly StackCapabilityDescriptor[]> {
+  const tools = stackCapabilityDefinitions(stackProvider);
   const { z } = await import("zod/v4");
   return tools.map((tool) => ({
     id: tool.id,

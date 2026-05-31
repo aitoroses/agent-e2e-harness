@@ -134,11 +134,11 @@ The `agent-e2e attached --target <id>` MCP mode for inspecting and optionally ru
 _Avoid_: dev mode, one-shot production check
 
 **Runtime Tool Surface**:
-The `runtime.*` MCP family: `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.explore.list`, and `runtime.explore.run`.
+The `runtime.*` MCP family: `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.capability.list`, and `runtime.capability.run`; `runtime.explore.*` remains as a backwards-compatible alias.
 _Avoid_: hiding attached runtimes under stack lifecycle tools
 
 **Runtime Tool Risk**:
-The declared side-effect class for Runtime Exploration Tools: `observation`, `runMutation`, or `runtimeMutation`.
+The declared side-effect class for Runtime Capabilities: `observation`, `runMutation`, or `runtimeMutation`.
 _Avoid_: safe boolean, hidden side effects
 
 **Verify Worker Stack**:
@@ -158,7 +158,7 @@ One started **Managed Execution Stack** with a stable stack id, handle, status, 
 _Avoid_: active stack, global stack, hidden handle
 
 **Run Stack Binding**:
-The explicit relationship between a journey run and the **Stack Instance** it uses for journey execution, stack exploration, logs, and evidence.
+The explicit relationship between a journey run and the **Stack Instance** it uses for journey execution, stack capability, logs, and evidence.
 _Avoid_: implicit active stack, ambient stack, run-owned stack
 
 **Named Stack Allocation**:
@@ -170,27 +170,27 @@ An extension point that starts, inspects, and stops a **Managed Execution Stack*
 _Avoid_: hardcoded Docker logic, test helper, deployment adapter
 
 **Stack Runtime Tools**:
-Native MCP tools for stack-level runtime facts that most agents need during validation. The core set should stay small: `stack.start`, `stack.list`, `stack.status`, `stack.logs`, `stack.stop`, and `stack.explore.*` for provider-declared exploration tools, with `stack.status` as the unified services/readiness/health packet for one stack instance.
+Native MCP tools for stack-level runtime facts that most agents need during validation. The core set should stay small: `stack.start`, `stack.list`, `stack.status`, `stack.logs`, `stack.stop`, and `stack.capability.*` for provider-declared capabilities, with `stack.explore.*` retained as a compatibility alias and `stack.status` as the unified services/readiness/health packet for one stack instance.
 _Avoid_: provider-specific debug endpoint, generic diagnostic API, hidden service metadata
 
 **Exploration Surface**:
 The Dev MCP tool surface agents use during development to discover a live system, test hypotheses, inspect browser and stack state, mutate controlled local state when useful, and crystallize that exploration into an **Executable Journey**.
 _Avoid_: runner-only API, CI command, remote shell, static test script
 
-**Stack Exploration Surface**:
+**Stack Capability Surface**:
 The stack-provider-owned part of the **Exploration Surface**, where agents can discover and run typed stack/app runtime capabilities without the harness hardcoding a specific stack technology.
 _Avoid_: generic diagnostic API, hardcoded database tooling, product-specific core API
 
-**Stack Exploration Tool**:
-A discoverable, typed operation exposed by a **Stack Provider** through the **Stack Exploration Surface**, such as database reads or writes, schema inspection, SQL execution, queue inspection or mutation, cache clearing, product-owned domain reads, or controlled product-owned writes.
+**Stack Capability**:
+A discoverable, typed operation exposed by a **Stack Provider** through the **Stack Capability Surface**, such as database reads or writes, schema inspection, SQL execution, queue inspection or mutation, cache clearing, product-owned domain reads, or controlled product-owned writes.
 _Avoid_: hidden troubleshooting command, undocumented script, ad-hoc handler
 
 **Verify Observation Tool**:
-A **Stack Exploration Tool** that is safe to use from journey execution and `agent-e2e verify` because it observes stack or application state without becoming the cause of the product behavior under validation.
+A **Stack Capability** that is safe to use from journey execution and `agent-e2e verify` because it observes stack or application state without becoming the cause of the product behavior under validation.
 _Avoid_: proof helper, test backdoor, hidden setup
 
 **Exploration Tool Risk**:
-The declared risk class for a **Stack Exploration Tool**, used by the harness to surface side effects to the agent and record evidence.
+The declared risk class for a **Stack Capability**, used by the harness to surface side effects to the agent and record evidence.
 _Avoid_: implicit trust, best-effort warning, buried side effect
 
 
@@ -251,11 +251,11 @@ The fixed **Dev MCP Tool Grammar** for universal browser exploration and interac
 _Avoid_: provider-owned browser action registry, journey helper registry, generic `browser.explore.run`, hidden Playwright script, raw CDP shell
 
 **Browser Playwright Escape Hatch**:
-The explicit `browser.playwright` Dev MCP tool for agent-only live exploration that needs direct Playwright `page`, `browser`, and context access before the interaction is crystallized into journey code. It executes an async function body supplied by the agent against the live **MCP-Owned Browser Session** and returns that body's JSON-serializable output as the tool result. Execution is timeout-bounded by default, and responses report elapsed duration plus the effective timeout. It may mutate the live browser session; snapshot refs should be treated as stale afterward. JSON `input` is passed separately from code, and latest snapshot `refs` are provided as a lightweight bridge to Playwright selectors.
+The explicit `browser.playwright` Dev MCP tool for agent-only live diagnostics that needs direct Playwright `page`, `browser`, and context access before the interaction is crystallized into journey code. It executes an async function body supplied by the agent against the live **MCP-Owned Browser Session** and returns that body's JSON-serializable output as the tool result. Execution is timeout-bounded by default, and responses report elapsed duration plus the effective timeout. It may mutate the live browser session; snapshot refs should be treated as stale afterward. JSON `input` is passed separately from code, and latest snapshot `refs` are provided as a lightweight bridge to Playwright selectors.
 _Avoid_: primary browser workflow, verify helper, registered journey closure, hidden generic code runner
 
 **Browser Page Evaluation**:
-The `browser.eval` Dev MCP tool for running an async function body in the page context during live exploration, separate from `browser.get` for simple reads and `browser.playwright` for full Playwright access. It shares the `browser.playwright` timeout and JSON-serializable output response shape. It may mutate page state; snapshot refs should be treated as stale afterward. JSON `input` is passed separately from code.
+The `browser.eval` Dev MCP tool for running an async function body in the page context during live diagnostics, separate from `browser.get` for simple reads and `browser.playwright` for full Playwright access. It shares the `browser.playwright` timeout and JSON-serializable output response shape. It may mutate page state; snapshot refs should be treated as stale afterward. JSON `input` is passed separately from code.
 _Avoid_: primary interaction grammar, Playwright closure, journey helper, unbounded script
 
 **Browser Targeted Read**:
@@ -366,15 +366,15 @@ _Avoid_: per-adapter status enum, tool-specific response shape, unchecked respon
 - `stack.start` may accept a caller-chosen `stackId` or return a generated one, but every later tool that targets a **Stack Instance** must use an explicit `stackId`.
 - Public `stack.stop` stops exactly one explicit **Stack Instance**; server disposal may stop all remaining stacks internally, but there is no public stop-all shortcut.
 - Duplicate caller-chosen `stackId` values are rejected while a **Stack Instance** with that id is running.
-- `stack.status`, `stack.logs`, `stack.explore.run`, and `stack.stop` reject missing `stackId` instead of selecting an implicit active stack.
-- `stack.explore.list` remains provider-level and does not require a started **Stack Instance**.
+- `stack.status`, `stack.logs`, `stack.capability.run`, and `stack.stop` reject missing `stackId` instead of selecting an implicit active stack.
+- `stack.capability.list` remains provider-level and does not require a started **Stack Instance**.
 - A **Stack Provider** receives a **StackStartContext** when Dev MCP starts a **Stack Instance** and when the current verify runner starts its suite-scoped stack.
 - **StackStartContext** carries mode, `stackId`, worker identity in the current serial verify shape, suite id when available, and the stack artifact scope.
 - **Named Stack Allocations** created through **StackStartContext** cover ports plus file/directory artifact paths and are recorded by the harness without provider-authored duplicate metadata.
 - `StackStatusPacket` services remain the journey-facing runtime contract for URLs, readiness, and health; **Named Stack Allocations** are report/debug evidence and resource-allocation support rather than a replacement for stack status.
 - Journey runs that use a stack bind to a specific **Stack Instance** through `stackId`; subsequent journey execution and stack evidence resolve through that binding instead of a temporary ambient fallback.
 - When a **Stack Provider** is configured, `run.begin` requires `stackId`; when no **Stack Provider** is configured, `stackId` is invalid rather than ignored.
-- `stack.logs` and `stack.explore.run` may accept optional `runId` only for artifact capture and must validate that the run's **Run Stack Binding** matches the target `stackId`.
+- `stack.logs` and `stack.capability.run` may accept optional `runId` only for artifact capture and must validate that the run's **Run Stack Binding** matches the target `stackId`.
 - Planned for later worker-scoped verify slices: `verify.workers` controls the maximum number of active **Verify Worker Stacks** as well as the selected-run worker queue; each worker executes its assigned runs serially inside its stack.
 - Planned for later worker-scoped verify slices: Verify starts **Verify Worker Stacks** lazily only for workers that receive selected runs; the maximum active worker stacks is `min(workers, selectedRuns.length)`.
 - Planned for later worker-scoped verify slices: a **Verify Worker Stack** start failure stops scheduling new runs, lets already-active workers finish and clean up, and fails the suite without classifying the unstarted journeys as proof failures.
@@ -383,12 +383,12 @@ _Avoid_: per-adapter status enum, tool-specific response shape, unchecked respon
 - Planned for later worker-scoped verify slices: dynamic stack runtime resources such as allocated URLs and paths belong on the **Execution Surface** through `execution.stack`, not by mutating **Journey Profile** data.
 - Direct stack runtime concerns should feel native through **Stack Runtime Tools** rather than being hidden behind generic action plumbing, but simple wins: `stack.status` should carry services, endpoints, readiness checks, and next actions instead of splitting separate `stack.services` or `stack.health` tools.
 - The **Dev MCP Server** is an **Exploration Surface** first: agents use it to discover the live system and crystallize the discovered trajectory into an **Executable Journey**.
-- A **Stack Provider** may expose **Stack Exploration Tools** so agents can inspect or manipulate runtime and application state without the harness hardcoding a specific stack technology.
-- The **Stack Exploration Surface** should define the typed envelope, discovery shape, risk metadata, and artifact plumbing, while concrete tools remain stack-provider-declared and discoverable by the agent.
+- A **Stack Provider** may expose **Stack Capabilitys** so agents can inspect or manipulate runtime and application state without the harness hardcoding a specific stack technology.
+- The **Stack Capability Surface** should define the typed envelope, discovery shape, risk metadata, and artifact plumbing, while concrete tools remain stack-provider-declared and discoverable by the agent.
 - **Stack Runtime Tools** should use stable provider service ids such as `next-dev` or `postgres`; unlike browser snapshots, stack services do not need ephemeral refs.
 - Stack exploration calls may run live without a `runId`; passing `runId` means the harness should also capture the observation as a run artifact for time-travel and proof history.
 - Stack exploration calls should not require repeated `journeyId`; artifact scope should resolve from `runId` when capture is requested.
-- Dev agents may access the full stack-provider-declared **Stack Exploration Surface** subject to risk policy, while journey execution and `agent-e2e verify` may receive only **Verify Observation Tools**.
+- Dev agents may access the full stack-provider-declared **Stack Capability Surface** subject to risk policy, while journey execution and `agent-e2e verify` may receive only **Verify Observation Tools**.
 - **Verify Observation Tools** preserve validation integrity by forcing the application path, not the verification helper, to be the cause of product-visible mutations.
 - A **Managed Execution Stack** is torn down by stack lifecycle, while product resources created during a journey remain bounded by the **Ownership Ledger** and **Resource Adapters**.
 - **Environment Seed** may prepare application state through product APIs, direct database access, admin clients, or other product-owned setup mechanisms; it is defined by purpose, not by transport.
@@ -480,7 +480,7 @@ _Avoid_: per-adapter status enum, tool-specific response shape, unchecked respon
 - Dev MCP mode resolved: development should use an HTTP **Dev MCP Server**, not only one-shot stdio, so journey definitions and app code can hot-reload during agent iteration.
 - MCP browser ownership resolved: dev-mode MCP operations should create and manage Playwright browser/page sessions themselves, headed by default for visibility, with headless reserved for closure/CI paths.
 - Browser forensics resolved: `browser.snapshot` should be the primary MCP browser forensics tool, not a narrow DOM or screenshot helper.
-- Browser workbench grammar resolved: browser tooling should expand through fixed universal `browser.*` tools rather than copying the provider-declared `stack.explore.list` / `stack.explore.run` model.
+- Browser workbench grammar resolved: browser tooling should expand through fixed universal `browser.*` tools rather than copying the provider-declared `stack.capability.list` / `stack.capability.run` model.
 - Browser workbench audience resolved: browser workbench tools serve the agent's live MCP exploration loop, while crystallized journeys continue to use direct execution objects such as Playwright `page` and `browser`.
 - Browser escape hatch shape resolved: `browser.playwright` executes an async closure-like body with direct live Playwright access rather than a declarative mini-language or page-only evaluation.
 - Browser escape hatch output resolved: `browser.playwright` returns the closure output as the tool result and does not create automatic evidence artifacts by default.

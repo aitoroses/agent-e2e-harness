@@ -9,6 +9,7 @@ import { createDevMcpToolRouter } from "@agent-e2e/harness/dev-mcp";
 import { createMcpHarnessServer } from "../src/mcp/index.js";
 import {
   createProcessStackProvider,
+  defineStackCapabilities,
   defineStackExploreTools,
   type StackExecutionSurface,
   type StackStartContext,
@@ -1360,8 +1361,8 @@ describe("Dev MCP Tool Router", () => {
     });
   });
 
-  it("lists provider-declared stack exploration tools before the stack starts", async () => {
-    const explore = defineStackExploreTools<{ id: string }>()([
+  it("lists provider-declared stack capabilities before the stack starts", async () => {
+    const capabilities = defineStackCapabilities<{ id: string }>()([
       {
         id: "notes.list",
         title: "List proof notes",
@@ -1389,9 +1390,9 @@ describe("Dev MCP Tool Router", () => {
     ]);
     const provider: StackProvider<{ id: string }> = {
       id: "explorable-stack",
-      explore,
+      capabilities,
       start: async () => {
-        throw new Error("stack.explore.list must not start the stack");
+        throw new Error("stack.capability.list must not start the stack");
       },
       status: () => ({
         status: "ready",
@@ -1413,8 +1414,28 @@ describe("Dev MCP Tool Router", () => {
     const router = createDevMcpToolRouter({ stackProvider: provider });
 
     expect(router.listTools().map((tool) => tool.name)).toEqual(
-      expect.arrayContaining(["stack.explore.list"]),
+      expect.arrayContaining(["stack.capability.list", "stack.explore.list"]),
     );
+    await expect(router.callTool("stack.capability.list")).resolves.toMatchObject({
+      status: "ok",
+      tool: "stack.capability.list",
+      tools: [
+        {
+          id: "notes.list",
+          availableIn: ["dev", "verify"],
+          risk: "none",
+          inputSchema: expect.objectContaining({ type: "object" }),
+          outputSchema: expect.objectContaining({ type: "object" }),
+        },
+        {
+          id: "postgres.query",
+          availableIn: ["dev"],
+          risk: "local-mutation",
+          inputSchema: expect.objectContaining({ type: "object" }),
+          outputSchema: expect.objectContaining({ type: "object" }),
+        },
+      ],
+    });
     await expect(router.callTool("stack.explore.list")).resolves.toMatchObject({
       status: "ok",
       tool: "stack.explore.list",
@@ -1454,10 +1475,10 @@ describe("Dev MCP Tool Router", () => {
     ).toThrow("cannot be available in verify unless risk is none");
   });
 
-  it("runs provider-declared stack exploration tools through Dev MCP validation", async () => {
+  it("runs provider-declared stack capabilities through Dev MCP validation", async () => {
     const provider: StackProvider<{ multiplier: number }> = {
       id: "explore-run-stack",
-      explore: defineStackExploreTools<{ multiplier: number }>()([
+      capabilities: defineStackCapabilities<{ multiplier: number }>()([
         {
           id: "notes.count",
           title: "Count notes",
@@ -1490,8 +1511,15 @@ describe("Dev MCP Tool Router", () => {
     const router = createDevMcpToolRouter({ stackProvider: provider });
 
     expect(router.listTools().map((tool) => tool.name)).toEqual(
-      expect.arrayContaining(["stack.explore.run"]),
+      expect.arrayContaining(["stack.capability.run", "stack.explore.run"]),
     );
+    await expect(
+      router.callTool("stack.capability.run", { toolId: "notes.count", input: { limit: 2 } }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      tool: "stack.capability.run",
+      code: "stack-id-required",
+    });
     await expect(
       router.callTool("stack.explore.run", { toolId: "notes.count", input: { limit: 2 } }),
     ).resolves.toMatchObject({
@@ -1501,6 +1529,14 @@ describe("Dev MCP Tool Router", () => {
     });
 
     await router.callTool("stack.start", { stackId: "explore" });
+    await expect(
+      router.callTool("stack.capability.run", { stackId: "explore", toolId: "notes.count", input: { limit: 3 } }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      tool: "stack.capability.run",
+      toolId: "notes.count",
+      output: { count: 6 },
+    });
     await expect(
       router.callTool("stack.explore.run", { stackId: "explore", toolId: "notes.count", input: { limit: 3 } }),
     ).resolves.toMatchObject({
