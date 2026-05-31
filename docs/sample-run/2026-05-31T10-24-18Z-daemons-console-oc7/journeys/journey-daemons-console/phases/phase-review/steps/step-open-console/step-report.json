@@ -1,0 +1,50 @@
+{
+  "ids": {
+    "runId": "2026-05-31T10-24-18Z-daemons-console-oc7",
+    "phaseId": "phase:review",
+    "stepId": "step:open-console"
+  },
+  "status": "passed",
+  "ran": {
+    "phaseId": "phase:review",
+    "stepId": "step:open-console",
+    "startedAt": "2026-05-31T19:53:30.794Z",
+    "endedAt": "2026-05-31T19:53:30.794Z",
+    "durationMs": 0
+  },
+  "artifacts": {
+    "before": "runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/before.png",
+    "terminal": "runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/after.png",
+    "inspect": "runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/inspect.md",
+    "inspectJson": "runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/inspect.json"
+  },
+  "signals": {
+    "consoleErrors": 0,
+    "consoleWarnings": 0,
+    "networkErrors": 0
+  },
+  "guidance": [
+    {
+      "type": "continue",
+      "label": "Run complete",
+      "target": "run:complete"
+    }
+  ],
+  "execution": {
+    "observed": {
+      "title": "Developer Run Console"
+    },
+    "proofs": [],
+    "ownedResources": [],
+    "feedback": {
+      "status": "passed",
+      "observed": {
+        "title": "Developer Run Console"
+      }
+    },
+    "warnings": [],
+    "errors": [],
+    "console": [],
+    "network": []
+  }
+}

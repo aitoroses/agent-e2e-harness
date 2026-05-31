@@ -1,0 +1,2320 @@
+{
+  "url": "file:///Users/aitoroses/repositories/agent-e2e-worktrees/codex-browser-inspect-refs/packages/harness/test/fixtures/console-app.html",
+  "title": "Developer Run Console",
+  "viewport": {
+    "width": 1280,
+    "height": 720,
+    "devicePixelRatio": 1
+  },
+  "document": {
+    "width": 1280,
+    "height": 1002,
+    "scrollX": 0,
+    "scrollY": 0,
+    "devicePixelRatio": 1
+  },
+  "target": {
+    "input": null,
+    "kind": "page",
+    "resolved": true
+  },
+  "overlayEnabled": false,
+  "signals": {
+    "consoleErrors": 0,
+    "networkFailures": 0
+  },
+  "summary": {
+    "interactive": 34,
+    "landmarks": [
+      {
+        "role": "banner"
+      },
+      {
+        "role": "navigation",
+        "name": "Primary"
+      },
+      {
+        "role": "main"
+      },
+      {
+        "role": "form"
+      }
+    ],
+    "headings": {
+      "h1": 1,
+      "h2": 1,
+      "h3": 3
+    },
+    "alerts": 1,
+    "dialogs": 1,
+    "forms": 1,
+    "formControls": 5,
+    "tables": 1,
+    "images": 0,
+    "imagesMissingAlt": 0
+  },
+  "facts": {
+    "primaryHeading": "Daemons",
+    "activeLandmark": "main",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Daemons"
+      },
+      {
+        "level": 2,
+        "text": "Routing hosts for users, sessions, and credentials"
+      },
+      {
+        "level": 3,
+        "text": "Active"
+      },
+      {
+        "level": 3,
+        "text": "Pending"
+      },
+      {
+        "level": 3,
+        "text": "Failed"
+      }
+    ],
+    "landmarks": [
+      {
+        "role": "banner"
+      },
+      {
+        "role": "navigation",
+        "name": "Primary"
+      },
+      {
+        "role": "main"
+      },
+      {
+        "role": "form"
+      }
+    ],
+    "alerts": [
+      "Seed warning: one daemon failed its last health check."
+    ],
+    "dialogs": [
+      "Confirm delete"
+    ],
+    "loading": false,
+    "visibleText": [
+      "Terrarium",
+      "⌘K",
+      "Theme",
+      "Daemons",
+      "Sessions",
+      "Credentials",
+      "Settings",
+      "Routing hosts for users, sessions, and credentials",
+      "Active",
+      "Pending",
+      "Failed",
+      "Seed warning: one daemon failed its last health check."
+    ]
+  },
+  "interactive": [
+    {
+      "ref": "@e1",
+      "role": "banner",
+      "name": "Terrarium ⌘K Theme",
+      "selector": "[data-ui=\"topbar\"]",
+      "sig": "ui:topbar",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 56
+      }
+    },
+    {
+      "ref": "@e2",
+      "role": "link",
+      "name": "Terrarium",
+      "selector": "[data-ui=\"brand\"]",
+      "sig": "ui:brand",
+      "rect": {
+        "x": 20,
+        "y": 19,
+        "width": 76,
+        "height": 18
+      }
+    },
+    {
+      "ref": "@e3",
+      "role": "textbox",
+      "name": "Search daemons",
+      "selector": "[data-ui=\"search\"]",
+      "sig": "ui:search",
+      "rect": {
+        "x": 112,
+        "y": 11,
+        "width": 168,
+        "height": 34
+      }
+    },
+    {
+      "ref": "@e4",
+      "role": "button",
+      "name": "Open command palette",
+      "selector": "[data-ui=\"command-palette\"]",
+      "sig": "ui:command-palette",
+      "rect": {
+        "x": 1117,
+        "y": 10,
+        "width": 53,
+        "height": 35
+      }
+    },
+    {
+      "ref": "@e5",
+      "role": "button",
+      "name": "Switch theme",
+      "selector": "[data-ui=\"theme-toggle\"]",
+      "sig": "ui:theme-toggle",
+      "rect": {
+        "x": 1186,
+        "y": 11,
+        "width": 74,
+        "height": 34
+      },
+      "disabled": true
+    },
+    {
+      "ref": "@e6",
+      "role": "navigation",
+      "name": "Primary",
+      "selector": "[data-ui=\"sidebar\"]",
+      "sig": "ui:sidebar",
+      "rect": {
+        "x": 0,
+        "y": 56,
+        "width": 220,
+        "height": 820
+      }
+    },
+    {
+      "ref": "@e7",
+      "role": "link",
+      "name": "Daemons",
+      "selector": "[data-ui=\"nav-daemons\"]",
+      "sig": "ui:nav-daemons",
+      "rect": {
+        "x": 12,
+        "y": 72,
+        "width": 196,
+        "height": 34
+      }
+    },
+    {
+      "ref": "@e8",
+      "role": "link",
+      "name": "Sessions",
+      "selector": "[data-ui=\"nav-sessions\"]",
+      "sig": "ui:nav-sessions",
+      "rect": {
+        "x": 12,
+        "y": 106,
+        "width": 196,
+        "height": 34
+      }
+    },
+    {
+      "ref": "@e9",
+      "role": "link",
+      "name": "Credentials",
+      "selector": "[data-ui=\"nav-credentials\"]",
+      "sig": "ui:nav-credentials",
+      "rect": {
+        "x": 12,
+        "y": 140,
+        "width": 196,
+        "height": 34
+      }
+    },
+    {
+      "ref": "@e10",
+      "role": "link",
+      "name": "Settings",
+      "selector": "[data-ui=\"nav-settings\"]",
+      "sig": "ui:nav-settings",
+      "rect": {
+        "x": 12,
+        "y": 174,
+        "width": 196,
+        "height": 34
+      }
+    },
+    {
+      "ref": "@e11",
+      "role": "main",
+      "name": "Daemons Routing hosts for users, sessions, and credentials Active12 Pending3 Failed1 Seed warning: one daemon failed its",
+      "selector": "[data-ui=\"content\"]",
+      "sig": "ui:content",
+      "rect": {
+        "x": 220,
+        "y": 56,
+        "width": 1060,
+        "height": 820
+      }
+    },
+    {
+      "ref": "@e12",
+      "role": "section",
+      "name": "Daemons Routing hosts for users, sessions, and credentials",
+      "selector": "[data-ui=\"overview\"]",
+      "sig": "ui:overview",
+      "rect": {
+        "x": 244,
+        "y": 80,
+        "width": 1012,
+        "height": 129
+      }
+    },
+    {
+      "ref": "@e13",
+      "role": "heading",
+      "name": "Daemons",
+      "selector": "body > [data-ui=\"overview\"] > h1:nth-of-type(1)",
+      "sig": "role:heading|name:Daemons",
+      "rect": {
+        "x": 244,
+        "y": 101,
+        "width": 1012,
+        "height": 38
+      }
+    },
+    {
+      "ref": "@e14",
+      "role": "heading",
+      "name": "Routing hosts for users, sessions, and credentials",
+      "selector": "body > [data-ui=\"overview\"] > h2:nth-of-type(1)",
+      "sig": "role:heading|name:Routing hosts for users, sessions, and credentials",
+      "rect": {
+        "x": 244,
+        "y": 161,
+        "width": 1012,
+        "height": 28
+      }
+    },
+    {
+      "ref": "@e15",
+      "role": "div",
+      "name": "Active12 Pending3 Failed1",
+      "selector": "[data-ui=\"metrics\"]",
+      "sig": "ui:metrics",
+      "rect": {
+        "x": 244,
+        "y": 229,
+        "width": 1012,
+        "height": 90
+      }
+    },
+    {
+      "ref": "@e16",
+      "role": "article",
+      "name": "Active12",
+      "selector": "[data-ui=\"card-active\"]",
+      "sig": "ui:card-active",
+      "rect": {
+        "x": 244,
+        "y": 229,
+        "width": 327,
+        "height": 90
+      }
+    },
+    {
+      "ref": "@e17",
+      "role": "heading",
+      "name": "Active",
+      "selector": "body > [data-ui=\"card-active\"] > h3:nth-of-type(1)",
+      "sig": "role:heading|name:Active",
+      "rect": {
+        "x": 261,
+        "y": 246,
+        "width": 293,
+        "height": 17
+      }
+    },
+    {
+      "ref": "@e18",
+      "role": "article",
+      "name": "Pending3",
+      "selector": "[data-ui=\"card-pending\"]",
+      "sig": "ui:card-pending",
+      "rect": {
+        "x": 587,
+        "y": 229,
+        "width": 327,
+        "height": 90
+      }
+    },
+    {
+      "ref": "@e19",
+      "role": "heading",
+      "name": "Pending",
+      "selector": "body > [data-ui=\"card-pending\"] > h3:nth-of-type(1)",
+      "sig": "role:heading|name:Pending",
+      "rect": {
+        "x": 604,
+        "y": 246,
+        "width": 293,
+        "height": 17
+      }
+    },
+    {
+      "ref": "@e20",
+      "role": "article",
+      "name": "Failed1",
+      "selector": "[data-ui=\"card-failed\"]",
+      "sig": "ui:card-failed",
+      "rect": {
+        "x": 929,
+        "y": 229,
+        "width": 327,
+        "height": 90
+      }
+    },
+    {
+      "ref": "@e21",
+      "role": "heading",
+      "name": "Failed",
+      "selector": "body > [data-ui=\"card-failed\"] > h3:nth-of-type(1)",
+      "sig": "role:heading|name:Failed",
+      "rect": {
+        "x": 946,
+        "y": 246,
+        "width": 293,
+        "height": 17
+      }
+    },
+    {
+      "ref": "@e22",
+      "role": "alert",
+      "name": "Seed warning: one daemon failed its last health check.",
+      "selector": "[data-ui=\"seed-alert\"]",
+      "sig": "ui:seed-alert",
+      "rect": {
+        "x": 244,
+        "y": 339,
+        "width": 1012,
+        "height": 40
+      }
+    },
+    {
+      "ref": "@e23",
+      "role": "form",
+      "name": "Display name Runtime Local Docker runtime Remote runtime Start daemon Auto restart Bulk delete",
+      "selector": "[data-ui=\"create-form\"]",
+      "sig": "ui:create-form",
+      "rect": {
+        "x": 244,
+        "y": 399,
+        "width": 1012,
+        "height": 136
+      }
+    },
+    {
+      "ref": "@e24",
+      "role": "textbox",
+      "name": "Display name",
+      "selector": "[data-ui=\"daemon-name\"]",
+      "sig": "ui:daemon-name",
+      "rect": {
+        "x": 261,
+        "y": 438,
+        "width": 420,
+        "height": 34
+      }
+    },
+    {
+      "ref": "@e25",
+      "role": "combobox",
+      "name": "Runtime",
+      "selector": "[data-ui=\"runtime\"]",
+      "sig": "ui:runtime",
+      "rect": {
+        "x": 693,
+        "y": 436,
+        "width": 420,
+        "height": 36
+      }
+    },
+    {
+      "ref": "@e26",
+      "role": "button",
+      "name": "Start daemon",
+      "selector": "[data-ui=\"create-daemon\"]",
+      "sig": "ui:create-daemon",
+      "rect": {
+        "x": 1125,
+        "y": 438,
+        "width": 114,
+        "height": 34
+      }
+    },
+    {
+      "ref": "@e27",
+      "role": "checkbox",
+      "name": "Auto restart",
+      "selector": "[data-ui=\"auto-restart\"]",
+      "sig": "ui:auto-restart",
+      "rect": {
+        "x": 265,
+        "y": 502,
+        "width": 13,
+        "height": 13
+      }
+    },
+    {
+      "ref": "@e28",
+      "role": "button",
+      "name": "Bulk delete",
+      "selector": "[data-ui=\"bulk-delete\"]",
+      "sig": "ui:bulk-delete",
+      "rect": {
+        "x": 693,
+        "y": 484,
+        "width": 420,
+        "height": 34
+      },
+      "disabled": true
+    },
+    {
+      "ref": "@e29",
+      "role": "div",
+      "name": "Recent events",
+      "selector": "[data-ui=\"log-scroll\"]",
+      "sig": "ui:log-scroll",
+      "rect": {
+        "x": 244,
+        "y": 555,
+        "width": 1012,
+        "height": 140
+      }
+    },
+    {
+      "ref": "@e30",
+      "role": "table",
+      "name": "NameRuntimeStatus daemon-01dockeractive daemon-03dockerfailed daemon-04remoteactive",
+      "selector": "[data-ui=\"daemons-table\"]",
+      "sig": "ui:daemons-table",
+      "rect": {
+        "x": 244,
+        "y": 715,
+        "width": 1012,
+        "height": 137
+      }
+    },
+    {
+      "ref": "@e31",
+      "role": "div",
+      "name": "Offscreen helper text (not visible)",
+      "selector": "[data-ui=\"offscreen-hint\"]",
+      "sig": "ui:offscreen-hint",
+      "rect": {
+        "x": -9999,
+        "y": 0,
+        "width": 243,
+        "height": 18
+      }
+    },
+    {
+      "ref": "@e32",
+      "role": "dialog",
+      "name": "Confirm delete",
+      "selector": "[data-ui=\"confirm-dialog\"]",
+      "sig": "ui:confirm-dialog",
+      "rect": {
+        "x": 426,
+        "y": 876,
+        "width": 428,
+        "height": 126
+      }
+    },
+    {
+      "ref": "@e33",
+      "role": "button",
+      "name": "Cancel",
+      "selector": "[data-ui=\"confirm-cancel\"]",
+      "sig": "ui:confirm-cancel",
+      "rect": {
+        "x": 447,
+        "y": 947,
+        "width": 74,
+        "height": 34
+      }
+    },
+    {
+      "ref": "@e34",
+      "role": "button",
+      "name": "Delete",
+      "selector": "[data-ui=\"confirm-delete\"]",
+      "sig": "ui:confirm-delete",
+      "rect": {
+        "x": 525,
+        "y": 947,
+        "width": 70,
+        "height": 34
+      }
+    }
+  ],
+  "tree": [
+    {
+      "depth": 0,
+      "tag": "header",
+      "ref": "@e1",
+      "role": "banner",
+      "name": "Terrarium ⌘K Theme",
+      "selector": "[data-ui=\"topbar\"]",
+      "dataUi": "topbar",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 56
+      },
+      "visible": true,
+      "layout": {
+        "display": "flex",
+        "position": "static",
+        "flexDirection": "row",
+        "gap": "16px",
+        "alignItems": "center"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "background": "rgb(255, 255, 255)"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "a",
+      "ref": "@e2",
+      "role": "link",
+      "name": "Terrarium",
+      "selector": "[data-ui=\"brand\"]",
+      "dataUi": "brand",
+      "rect": {
+        "x": 20,
+        "y": 19,
+        "width": 76,
+        "height": 18
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "700",
+        "color": "rgb(180, 83, 9)"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "input",
+      "ref": "@e3",
+      "role": "textbox",
+      "name": "Search daemons",
+      "selector": "[data-ui=\"search\"]",
+      "dataUi": "search",
+      "rect": {
+        "x": 112,
+        "y": 11,
+        "width": 168,
+        "height": 34
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(0, 0, 0)",
+        "background": "rgb(255, 255, 255)",
+        "border": "1px solid rgb(209, 213, 219)",
+        "borderRadius": "6px",
+        "padding": "8px 10px"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "button",
+      "ref": "@e4",
+      "name": "Open command palette",
+      "selector": "[data-ui=\"command-palette\"]",
+      "dataUi": "command-palette",
+      "rect": {
+        "x": 1117,
+        "y": 10,
+        "width": 53,
+        "height": 35
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(0, 0, 0)",
+        "background": "rgb(255, 255, 255)",
+        "border": "1px solid rgb(209, 213, 219)",
+        "borderRadius": "6px",
+        "padding": "8px 14px"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "button",
+      "ref": "@e5",
+      "name": "Switch theme",
+      "selector": "[data-ui=\"theme-toggle\"]",
+      "dataUi": "theme-toggle",
+      "rect": {
+        "x": 1186,
+        "y": 11,
+        "width": 74,
+        "height": 34
+      },
+      "visible": true,
+      "disabled": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgba(16, 16, 16, 0.3)",
+        "background": "rgb(255, 255, 255)",
+        "border": "1px solid rgb(209, 213, 219)",
+        "borderRadius": "6px",
+        "padding": "8px 14px"
+      }
+    },
+    {
+      "depth": 0,
+      "tag": "nav",
+      "ref": "@e6",
+      "role": "navigation",
+      "name": "Primary",
+      "selector": "[data-ui=\"sidebar\"]",
+      "dataUi": "sidebar",
+      "rect": {
+        "x": 0,
+        "y": 56,
+        "width": 220,
+        "height": 820
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(226, 232, 240)",
+        "background": "rgb(15, 23, 42)",
+        "padding": "16px 12px"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "a",
+      "ref": "@e7",
+      "role": "link",
+      "name": "Daemons",
+      "selector": "[data-ui=\"nav-daemons\"]",
+      "dataUi": "nav-daemons",
+      "rect": {
+        "x": 12,
+        "y": 72,
+        "width": 196,
+        "height": 34
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(255, 255, 255)",
+        "background": "rgb(30, 41, 59)",
+        "borderRadius": "6px",
+        "padding": "8px 10px"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "a",
+      "ref": "@e8",
+      "role": "link",
+      "name": "Sessions",
+      "selector": "[data-ui=\"nav-sessions\"]",
+      "dataUi": "nav-sessions",
+      "rect": {
+        "x": 12,
+        "y": 106,
+        "width": 196,
+        "height": 34
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(203, 213, 225)",
+        "borderRadius": "6px",
+        "padding": "8px 10px"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "a",
+      "ref": "@e9",
+      "role": "link",
+      "name": "Credentials",
+      "selector": "[data-ui=\"nav-credentials\"]",
+      "dataUi": "nav-credentials",
+      "rect": {
+        "x": 12,
+        "y": 140,
+        "width": 196,
+        "height": 34
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(203, 213, 225)",
+        "borderRadius": "6px",
+        "padding": "8px 10px"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "a",
+      "ref": "@e10",
+      "role": "link",
+      "name": "Settings",
+      "selector": "[data-ui=\"nav-settings\"]",
+      "dataUi": "nav-settings",
+      "rect": {
+        "x": 12,
+        "y": 174,
+        "width": 196,
+        "height": 34
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(203, 213, 225)",
+        "borderRadius": "6px",
+        "padding": "8px 10px"
+      }
+    },
+    {
+      "depth": 0,
+      "tag": "main",
+      "ref": "@e11",
+      "name": "Daemons Routing hosts for users, sessions, and credentials Active12 Pending3 Fai",
+      "selector": "[data-ui=\"content\"]",
+      "dataUi": "content",
+      "rect": {
+        "x": 220,
+        "y": 56,
+        "width": 1060,
+        "height": 820
+      },
+      "visible": true,
+      "layout": {
+        "display": "flex",
+        "position": "static",
+        "flexDirection": "column",
+        "gap": "20px"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "padding": "24px"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "section",
+      "ref": "@e12",
+      "name": "Daemons Routing hosts for users, sessions, and credentials",
+      "selector": "[data-ui=\"overview\"]",
+      "dataUi": "overview",
+      "rect": {
+        "x": 244,
+        "y": 80,
+        "width": 1012,
+        "height": 129
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 2,
+      "tag": "h1",
+      "ref": "@e13",
+      "role": "heading",
+      "name": "Daemons",
+      "selector": "body > [data-ui=\"overview\"] > h1:nth-of-type(1)",
+      "rect": {
+        "x": 244,
+        "y": 101,
+        "width": 1012,
+        "height": 38
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "32px",
+        "fontWeight": "700",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 2,
+      "tag": "h2",
+      "ref": "@e14",
+      "role": "heading",
+      "name": "Routing hosts for users, sessions, and credentials",
+      "selector": "body > [data-ui=\"overview\"] > h2:nth-of-type(1)",
+      "rect": {
+        "x": 244,
+        "y": 161,
+        "width": 1012,
+        "height": 28
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "24px",
+        "fontWeight": "700",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "div",
+      "ref": "@e15",
+      "name": "Active12 Pending3 Failed1",
+      "selector": "[data-ui=\"metrics\"]",
+      "dataUi": "metrics",
+      "rect": {
+        "x": 244,
+        "y": 229,
+        "width": 1012,
+        "height": 90
+      },
+      "visible": true,
+      "layout": {
+        "display": "grid",
+        "position": "static",
+        "gridTemplateColumns": "326.656px 326.672px 326.656px",
+        "gap": "16px"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 2,
+      "tag": "article",
+      "ref": "@e16",
+      "name": "Active12",
+      "selector": "[data-ui=\"card-active\"]",
+      "dataUi": "card-active",
+      "rect": {
+        "x": 244,
+        "y": 229,
+        "width": 327,
+        "height": 90
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "background": "rgb(255, 255, 255)",
+        "border": "1px solid rgb(229, 231, 235)",
+        "borderRadius": "10px",
+        "padding": "16px"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "h3",
+      "ref": "@e17",
+      "role": "heading",
+      "name": "Active",
+      "selector": "body > [data-ui=\"card-active\"] > h3:nth-of-type(1)",
+      "rect": {
+        "x": 261,
+        "y": 246,
+        "width": 293,
+        "height": 17
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "600",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 2,
+      "tag": "article",
+      "ref": "@e18",
+      "name": "Pending3",
+      "selector": "[data-ui=\"card-pending\"]",
+      "dataUi": "card-pending",
+      "rect": {
+        "x": 587,
+        "y": 229,
+        "width": 327,
+        "height": 90
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "background": "rgb(255, 255, 255)",
+        "border": "1px solid rgb(229, 231, 235)",
+        "borderRadius": "10px",
+        "padding": "16px"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "h3",
+      "ref": "@e19",
+      "role": "heading",
+      "name": "Pending",
+      "selector": "body > [data-ui=\"card-pending\"] > h3:nth-of-type(1)",
+      "rect": {
+        "x": 604,
+        "y": 246,
+        "width": 293,
+        "height": 17
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "600",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 2,
+      "tag": "article",
+      "ref": "@e20",
+      "name": "Failed1",
+      "selector": "[data-ui=\"card-failed\"]",
+      "dataUi": "card-failed",
+      "rect": {
+        "x": 929,
+        "y": 229,
+        "width": 327,
+        "height": 90
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "background": "rgb(255, 255, 255)",
+        "border": "1px solid rgb(229, 231, 235)",
+        "borderRadius": "10px",
+        "padding": "16px"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "h3",
+      "ref": "@e21",
+      "role": "heading",
+      "name": "Failed",
+      "selector": "body > [data-ui=\"card-failed\"] > h3:nth-of-type(1)",
+      "rect": {
+        "x": 946,
+        "y": 246,
+        "width": 293,
+        "height": 17
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "600",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "div",
+      "ref": "@e22",
+      "role": "alert",
+      "name": "Seed warning: one daemon failed its last health check.",
+      "selector": "[data-ui=\"seed-alert\"]",
+      "dataUi": "seed-alert",
+      "rect": {
+        "x": 244,
+        "y": 339,
+        "width": 1012,
+        "height": 40
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(146, 64, 14)",
+        "background": "rgb(254, 243, 199)",
+        "border": "1px solid rgb(245, 158, 11)",
+        "borderRadius": "8px",
+        "padding": "10px 14px"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "form",
+      "ref": "@e23",
+      "name": "Display name Runtime Local Docker runtime Remote runtime Start daemon Auto resta",
+      "selector": "[data-ui=\"create-form\"]",
+      "dataUi": "create-form",
+      "rect": {
+        "x": 244,
+        "y": 399,
+        "width": 1012,
+        "height": 136
+      },
+      "visible": true,
+      "layout": {
+        "display": "grid",
+        "position": "static",
+        "gridTemplateColumns": "419.969px 419.969px 114.062px",
+        "gap": "12px"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "background": "rgb(255, 255, 255)",
+        "border": "1px solid rgb(229, 231, 235)",
+        "borderRadius": "10px",
+        "padding": "16px"
+      }
+    },
+    {
+      "depth": 2,
+      "tag": "label",
+      "name": "Display name",
+      "selector": "body > [data-ui=\"create-form\"] > label:nth-of-type(1)",
+      "rect": {
+        "x": 261,
+        "y": 418,
+        "width": 420,
+        "height": 54
+      },
+      "visible": true,
+      "layout": {
+        "display": "flex",
+        "position": "static",
+        "flexDirection": "column",
+        "gap": "4px"
+      },
+      "style": {
+        "fontSize": "13px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "input",
+      "ref": "@e24",
+      "role": "textbox",
+      "name": "Display name",
+      "selector": "[data-ui=\"daemon-name\"]",
+      "dataUi": "daemon-name",
+      "rect": {
+        "x": 261,
+        "y": 438,
+        "width": 420,
+        "height": 34
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(0, 0, 0)",
+        "background": "rgb(255, 255, 255)",
+        "border": "1px solid rgb(209, 213, 219)",
+        "borderRadius": "6px",
+        "padding": "8px 10px"
+      }
+    },
+    {
+      "depth": 2,
+      "tag": "label",
+      "name": "Runtime Local Docker runtime Remote runtime",
+      "selector": "body > [data-ui=\"create-form\"] > label:nth-of-type(2)",
+      "rect": {
+        "x": 693,
+        "y": 416,
+        "width": 420,
+        "height": 56
+      },
+      "visible": true,
+      "layout": {
+        "display": "flex",
+        "position": "static",
+        "flexDirection": "column",
+        "gap": "4px"
+      },
+      "style": {
+        "fontSize": "13px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "select",
+      "ref": "@e25",
+      "role": "combobox",
+      "name": "Runtime",
+      "selector": "[data-ui=\"runtime\"]",
+      "dataUi": "runtime",
+      "rect": {
+        "x": 693,
+        "y": 436,
+        "width": 420,
+        "height": 36
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(0, 0, 0)",
+        "background": "rgb(255, 255, 255)",
+        "border": "1px solid rgb(209, 213, 219)",
+        "borderRadius": "6px",
+        "padding": "8px 10px"
+      }
+    },
+    {
+      "depth": 2,
+      "tag": "button",
+      "ref": "@e26",
+      "name": "Start daemon",
+      "selector": "[data-ui=\"create-daemon\"]",
+      "dataUi": "create-daemon",
+      "rect": {
+        "x": 1125,
+        "y": 438,
+        "width": 114,
+        "height": 34
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(255, 255, 255)",
+        "background": "rgb(180, 83, 9)",
+        "border": "1px solid rgb(180, 83, 9)",
+        "borderRadius": "6px",
+        "padding": "8px 14px"
+      }
+    },
+    {
+      "depth": 2,
+      "tag": "label",
+      "name": "Auto restart",
+      "selector": "body > [data-ui=\"create-form\"] > label:nth-of-type(3)",
+      "rect": {
+        "x": 261,
+        "y": 499,
+        "width": 420,
+        "height": 19
+      },
+      "visible": true,
+      "layout": {
+        "display": "flex",
+        "position": "static",
+        "flexDirection": "row",
+        "gap": "6px",
+        "alignItems": "center"
+      },
+      "style": {
+        "fontSize": "13px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "input",
+      "ref": "@e27",
+      "role": "checkbox",
+      "name": "Auto restart",
+      "selector": "[data-ui=\"auto-restart\"]",
+      "dataUi": "auto-restart",
+      "rect": {
+        "x": 265,
+        "y": 502,
+        "width": 13,
+        "height": 13
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(0, 0, 0)"
+      }
+    },
+    {
+      "depth": 2,
+      "tag": "button",
+      "ref": "@e28",
+      "name": "Bulk delete",
+      "selector": "[data-ui=\"bulk-delete\"]",
+      "dataUi": "bulk-delete",
+      "rect": {
+        "x": 693,
+        "y": 484,
+        "width": 420,
+        "height": 34
+      },
+      "visible": true,
+      "disabled": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgba(16, 16, 16, 0.3)",
+        "background": "rgb(255, 255, 255)",
+        "border": "1px solid rgb(209, 213, 219)",
+        "borderRadius": "6px",
+        "padding": "8px 14px"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "div",
+      "ref": "@e29",
+      "name": "Recent events",
+      "selector": "[data-ui=\"log-scroll\"]",
+      "dataUi": "log-scroll",
+      "rect": {
+        "x": 244,
+        "y": 555,
+        "width": 1012,
+        "height": 140
+      },
+      "visible": true,
+      "scroll": {
+        "scrollWidth": 1010,
+        "scrollHeight": 232,
+        "clientWidth": 1010,
+        "clientHeight": 138,
+        "scrollLeft": 0,
+        "scrollTop": 0,
+        "overflowX": "auto",
+        "overflowY": "auto",
+        "scrollable": true
+      },
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "background": "rgb(255, 255, 255)",
+        "border": "1px solid rgb(229, 231, 235)",
+        "borderRadius": "8px"
+      }
+    },
+    {
+      "depth": 2,
+      "tag": "ul",
+      "role": "list",
+      "name": "daemon-01 starteddaemon-02 starteddaemon-03 health check failed daemon-04 starte",
+      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1)",
+      "rect": {
+        "x": 245,
+        "y": 556,
+        "width": 1010,
+        "height": 232
+      },
+      "visible": true,
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "padding": "8px 16px"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "li",
+      "role": "listitem",
+      "name": "daemon-01 started",
+      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(1)",
+      "rect": {
+        "x": 261,
+        "y": 564,
+        "width": 978,
+        "height": 18
+      },
+      "visible": true,
+      "layout": {
+        "display": "list-item",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "li",
+      "role": "listitem",
+      "name": "daemon-02 started",
+      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(2)",
+      "rect": {
+        "x": 261,
+        "y": 582,
+        "width": 978,
+        "height": 18
+      },
+      "visible": true,
+      "layout": {
+        "display": "list-item",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "li",
+      "role": "listitem",
+      "name": "daemon-03 health check failed",
+      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(3)",
+      "rect": {
+        "x": 261,
+        "y": 600,
+        "width": 978,
+        "height": 18
+      },
+      "visible": true,
+      "layout": {
+        "display": "list-item",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "li",
+      "role": "listitem",
+      "name": "daemon-04 started",
+      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(4)",
+      "rect": {
+        "x": 261,
+        "y": 618,
+        "width": 978,
+        "height": 18
+      },
+      "visible": true,
+      "layout": {
+        "display": "list-item",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "li",
+      "role": "listitem",
+      "name": "daemon-05 started",
+      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(5)",
+      "rect": {
+        "x": 261,
+        "y": 636,
+        "width": 978,
+        "height": 18
+      },
+      "visible": true,
+      "layout": {
+        "display": "list-item",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "li",
+      "role": "listitem",
+      "name": "daemon-06 stopped",
+      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(6)",
+      "rect": {
+        "x": 261,
+        "y": 654,
+        "width": 978,
+        "height": 18
+      },
+      "visible": true,
+      "layout": {
+        "display": "list-item",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "li",
+      "role": "listitem",
+      "name": "daemon-07 started",
+      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(7)",
+      "rect": {
+        "x": 261,
+        "y": 672,
+        "width": 978,
+        "height": 18
+      },
+      "visible": true,
+      "layout": {
+        "display": "list-item",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "li",
+      "role": "listitem",
+      "name": "daemon-08 started",
+      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(8)",
+      "rect": {
+        "x": 261,
+        "y": 690,
+        "width": 978,
+        "height": 18
+      },
+      "visible": true,
+      "layout": {
+        "display": "list-item",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "li",
+      "role": "listitem",
+      "name": "daemon-09 started",
+      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(9)",
+      "rect": {
+        "x": 261,
+        "y": 708,
+        "width": 978,
+        "height": 18
+      },
+      "visible": true,
+      "layout": {
+        "display": "list-item",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "li",
+      "role": "listitem",
+      "name": "daemon-10 started",
+      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(10)",
+      "rect": {
+        "x": 261,
+        "y": 726,
+        "width": 978,
+        "height": 18
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "list-item",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "li",
+      "role": "listitem",
+      "name": "daemon-11 started",
+      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(11)",
+      "rect": {
+        "x": 261,
+        "y": 744,
+        "width": 978,
+        "height": 18
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "list-item",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "li",
+      "role": "listitem",
+      "name": "daemon-12 started",
+      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(12)",
+      "rect": {
+        "x": 261,
+        "y": 762,
+        "width": 978,
+        "height": 18
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "list-item",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "table",
+      "ref": "@e30",
+      "name": "NameRuntimeStatus daemon-01dockeractive daemon-03dockerfailed daemon-04remoteact",
+      "selector": "[data-ui=\"daemons-table\"]",
+      "dataUi": "daemons-table",
+      "rect": {
+        "x": 244,
+        "y": 715,
+        "width": 1012,
+        "height": 137
+      },
+      "visible": true,
+      "layout": {
+        "display": "table",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "background": "rgb(255, 255, 255)",
+        "border": "1px solid rgb(229, 231, 235)",
+        "borderRadius": "8px"
+      }
+    },
+    {
+      "depth": 2,
+      "tag": "thead",
+      "name": "NameRuntimeStatus",
+      "selector": "body > [data-ui=\"daemons-table\"] > thead:nth-of-type(1)",
+      "rect": {
+        "x": 245,
+        "y": 715,
+        "width": 1011,
+        "height": 34
+      },
+      "visible": true,
+      "layout": {
+        "display": "table-header-group",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "tr",
+      "name": "NameRuntimeStatus",
+      "selector": "body > [data-ui=\"daemons-table\"] > thead:nth-of-type(1) > tr:nth-of-type(1)",
+      "rect": {
+        "x": 245,
+        "y": 715,
+        "width": 1011,
+        "height": 34
+      },
+      "visible": true,
+      "layout": {
+        "display": "table-row",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 4,
+      "tag": "th",
+      "name": "Name",
+      "selector": "body > [data-ui=\"daemons-table\"] > thead:nth-of-type(1) > tr:nth-of-type(1) > th:nth-of-type(1)",
+      "rect": {
+        "x": 245,
+        "y": 715,
+        "width": 404,
+        "height": 34
+      },
+      "visible": true,
+      "layout": {
+        "display": "table-cell",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "700",
+        "color": "rgb(17, 24, 39)",
+        "padding": "8px 12px"
+      }
+    },
+    {
+      "depth": 4,
+      "tag": "th",
+      "name": "Runtime",
+      "selector": "body > [data-ui=\"daemons-table\"] > thead:nth-of-type(1) > tr:nth-of-type(1) > th:nth-of-type(2)",
+      "rect": {
+        "x": 648,
+        "y": 715,
+        "width": 327,
+        "height": 34
+      },
+      "visible": true,
+      "layout": {
+        "display": "table-cell",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "700",
+        "color": "rgb(17, 24, 39)",
+        "padding": "8px 12px"
+      }
+    },
+    {
+      "depth": 4,
+      "tag": "th",
+      "name": "Status",
+      "selector": "body > [data-ui=\"daemons-table\"] > thead:nth-of-type(1) > tr:nth-of-type(1) > th:nth-of-type(3)",
+      "rect": {
+        "x": 976,
+        "y": 715,
+        "width": 280,
+        "height": 34
+      },
+      "visible": true,
+      "layout": {
+        "display": "table-cell",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "700",
+        "color": "rgb(17, 24, 39)",
+        "padding": "8px 12px"
+      }
+    },
+    {
+      "depth": 2,
+      "tag": "tbody",
+      "name": "daemon-01dockeractive daemon-03dockerfailed daemon-04remoteactive",
+      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1)",
+      "rect": {
+        "x": 245,
+        "y": 749,
+        "width": 1011,
+        "height": 102
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "table-row-group",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "tr",
+      "name": "daemon-01dockeractive",
+      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(1)",
+      "rect": {
+        "x": 245,
+        "y": 749,
+        "width": 1011,
+        "height": 34
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "table-row",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 4,
+      "tag": "td",
+      "name": "daemon-01",
+      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1)",
+      "rect": {
+        "x": 245,
+        "y": 749,
+        "width": 404,
+        "height": 34
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "table-cell",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "padding": "8px 12px"
+      }
+    },
+    {
+      "depth": 4,
+      "tag": "td",
+      "name": "docker",
+      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(2)",
+      "rect": {
+        "x": 648,
+        "y": 749,
+        "width": 327,
+        "height": 34
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "table-cell",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "padding": "8px 12px"
+      }
+    },
+    {
+      "depth": 4,
+      "tag": "td",
+      "name": "active",
+      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(3)",
+      "rect": {
+        "x": 976,
+        "y": 749,
+        "width": 280,
+        "height": 34
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "table-cell",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "padding": "8px 12px"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "tr",
+      "name": "daemon-03dockerfailed",
+      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(2)",
+      "rect": {
+        "x": 245,
+        "y": 783,
+        "width": 1011,
+        "height": 34
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "table-row",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 4,
+      "tag": "td",
+      "name": "daemon-03",
+      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(2) > td:nth-of-type(1)",
+      "rect": {
+        "x": 245,
+        "y": 783,
+        "width": 404,
+        "height": 34
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "table-cell",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "padding": "8px 12px"
+      }
+    },
+    {
+      "depth": 4,
+      "tag": "td",
+      "name": "docker",
+      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(2) > td:nth-of-type(2)",
+      "rect": {
+        "x": 648,
+        "y": 783,
+        "width": 327,
+        "height": 34
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "table-cell",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "padding": "8px 12px"
+      }
+    },
+    {
+      "depth": 4,
+      "tag": "td",
+      "name": "failed",
+      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(2) > td:nth-of-type(3)",
+      "rect": {
+        "x": 976,
+        "y": 783,
+        "width": 280,
+        "height": 34
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "table-cell",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "padding": "8px 12px"
+      }
+    },
+    {
+      "depth": 3,
+      "tag": "tr",
+      "name": "daemon-04remoteactive",
+      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(3)",
+      "rect": {
+        "x": 245,
+        "y": 817,
+        "width": 1011,
+        "height": 34
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "table-row",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 4,
+      "tag": "td",
+      "name": "daemon-04",
+      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(3) > td:nth-of-type(1)",
+      "rect": {
+        "x": 245,
+        "y": 817,
+        "width": 404,
+        "height": 34
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "table-cell",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "padding": "8px 12px"
+      }
+    },
+    {
+      "depth": 4,
+      "tag": "td",
+      "name": "remote",
+      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(3) > td:nth-of-type(2)",
+      "rect": {
+        "x": 648,
+        "y": 817,
+        "width": 327,
+        "height": 34
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "table-cell",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "padding": "8px 12px"
+      }
+    },
+    {
+      "depth": 4,
+      "tag": "td",
+      "name": "active",
+      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(3) > td:nth-of-type(3)",
+      "rect": {
+        "x": 976,
+        "y": 817,
+        "width": 280,
+        "height": 34
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "table-cell",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)",
+        "padding": "8px 12px"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "div",
+      "ref": "@e31",
+      "name": "Offscreen helper text (not visible)",
+      "selector": "[data-ui=\"offscreen-hint\"]",
+      "dataUi": "offscreen-hint",
+      "rect": {
+        "x": -9999,
+        "y": 0,
+        "width": 243,
+        "height": 18
+      },
+      "visible": true,
+      "hidden": "aria-hidden",
+      "layout": {
+        "display": "block",
+        "position": "absolute"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(17, 24, 39)"
+      }
+    },
+    {
+      "depth": 0,
+      "tag": "dialog",
+      "ref": "@e32",
+      "name": "Confirm delete",
+      "selector": "[data-ui=\"confirm-dialog\"]",
+      "dataUi": "confirm-dialog",
+      "rect": {
+        "x": 426,
+        "y": 876,
+        "width": 428,
+        "height": 126
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "block",
+        "position": "absolute"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(0, 0, 0)",
+        "background": "rgb(255, 255, 255)",
+        "border": "1px solid rgb(229, 231, 235)",
+        "borderRadius": "12px",
+        "padding": "20px"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "p",
+      "name": "Delete the selected daemon? This cannot be undone.",
+      "selector": "body > [data-ui=\"confirm-dialog\"] > p:nth-of-type(1)",
+      "rect": {
+        "x": 447,
+        "y": 913,
+        "width": 386,
+        "height": 18
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "color": "rgb(0, 0, 0)"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "button",
+      "ref": "@e33",
+      "name": "Cancel",
+      "selector": "[data-ui=\"confirm-cancel\"]",
+      "dataUi": "confirm-cancel",
+      "rect": {
+        "x": 447,
+        "y": 947,
+        "width": 74,
+        "height": 34
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "inline-block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(0, 0, 0)",
+        "background": "rgb(255, 255, 255)",
+        "border": "1px solid rgb(209, 213, 219)",
+        "borderRadius": "6px",
+        "padding": "8px 14px"
+      }
+    },
+    {
+      "depth": 1,
+      "tag": "button",
+      "ref": "@e34",
+      "name": "Delete",
+      "selector": "[data-ui=\"confirm-delete\"]",
+      "dataUi": "confirm-delete",
+      "rect": {
+        "x": 525,
+        "y": 947,
+        "width": 70,
+        "height": 34
+      },
+      "visible": true,
+      "hidden": "offscreen",
+      "layout": {
+        "display": "inline-block",
+        "position": "static"
+      },
+      "style": {
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "color": "rgb(255, 255, 255)",
+        "background": "rgb(180, 83, 9)",
+        "border": "1px solid rgb(180, 83, 9)",
+        "borderRadius": "6px",
+        "padding": "8px 14px"
+      }
+    }
+  ],
+  "treeTruncated": false
+}

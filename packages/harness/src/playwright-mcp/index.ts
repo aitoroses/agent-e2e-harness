@@ -243,9 +243,8 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
     session.lastUsedAt = new Date().toISOString();
 
     const maxNodes = clampMaxNodes(input.maxNodes);
-    const nodes = await session.refs.derive(session.page, maxNodes);
-    const facts = await session.refs.pageFacts(session.page);
-    const overlayEnabled = facts.overlayEnabled;
+    const capture = await session.refs.capture(session.page, maxNodes);
+    const overlayEnabled = capture.facts.overlayEnabled;
     const target = await resolveInspectTarget(session, input.target);
     const signals = inspectSignals(session);
 
@@ -255,8 +254,7 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
       page: asInspectPage(session.page),
       run: session.run,
       dirRelative,
-      nodes,
-      facts,
+      capture,
       target,
       signals,
     });
@@ -264,8 +262,8 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
     return {
       status: "ok",
       browserSessionId: input.browserSessionId,
-      url: facts.url,
-      title: facts.title,
+      url: capture.facts.url,
+      title: capture.facts.title,
       target,
       artifacts: { inspect: md.path, inspectJson: json.path, screenshot: screenshot.path },
       signals,

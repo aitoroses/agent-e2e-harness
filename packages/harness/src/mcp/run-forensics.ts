@@ -138,7 +138,7 @@ export async function writeStepArtifacts<TTypes extends AnyHarnessTypes>(input: 
   const page = pageFromExecution(input.execution);
   if (page?.evaluate && page.screenshot) {
     try {
-      const { nodes, facts } = await deriveForensics(asInspectPage(page));
+      const capture = await deriveForensics(asInspectPage(page));
       const target: InspectTarget = { input: null, kind: "page", resolved: true };
       const signals = {
         consoleErrors: input.signalSlice.signals.consoleErrors,
@@ -147,14 +147,14 @@ export async function writeStepArtifacts<TTypes extends AnyHarnessTypes>(input: 
       inspectJson = await writeJsonArtifact(
         run,
         stepRelativePath(journey, phaseId, stepId, "inspect.json"),
-        buildInspectJson(facts, nodes, target, signals),
-        { name: "inspect", kind: "json", description: "Structured UI forensics refs with bounding boxes captured at step end." },
+        buildInspectJson(capture, target, signals),
+        { name: "inspect", kind: "json", description: "Structured UI forensics: summary, refs with bounding boxes, and a hierarchical tree captured at step end." },
       );
       inspectMd = await writeTextArtifact(
         run,
         stepRelativePath(journey, phaseId, stepId, "inspect.md"),
-        renderInspectMarkdown(facts, nodes, target, signals, input.terminalScreenshot?.path, inspectJson.path),
-        { name: "inspect", kind: "markdown", description: "Agent-facing inspect view captured at step end." },
+        renderInspectMarkdown(capture, target, signals, input.terminalScreenshot?.path, inspectJson.path),
+        { name: "inspect", kind: "markdown", description: "Agent-facing OC-grade inspect view captured at step end." },
       );
       output.push(inspectJson, inspectMd);
     } catch {

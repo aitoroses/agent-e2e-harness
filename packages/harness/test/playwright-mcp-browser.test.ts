@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createPlaywrightMcpBrowserSessionManager } from '@agent-e2e/harness/playwright-mcp';
 
-// Must match FORENSICS_OVERLAY_CONTAINER_ID in src/playwright-mcp/forensics-browser-script.ts.
+// Must match FORENSICS_OVERLAY_CONTAINER_ID in src/forensics/browser-script.ts.
 const OVERLAY_ID = 'agent-e2e-refs-overlay';
 
 const managers: Array<ReturnType<typeof createPlaywrightMcpBrowserSessionManager>> = [];
@@ -55,21 +55,79 @@ describe('Playwright MCP browser session manager', () => {
     expect(existsSync(result.artifacts.inspect!)).toBe(true);
     expect(existsSync(result.artifacts.screenshot!)).toBe(true);
 
-    // inspect.json carries structured refs with bounding boxes.
+    // inspect.json carries structured interactive refs with bounding boxes.
     const json = JSON.parse(readFileSync(result.artifacts.inspectJson!, 'utf8'));
-    expect(json.refs.length).toBeGreaterThan(0);
-    const button = json.refs.find((node: { name?: string }) => node.name === 'Create record');
+    expect(json.interactive.length).toBeGreaterThan(0);
+    const button = json.interactive.find((node: { name?: string }) => node.name === 'Create record');
     expect(button).toMatchObject({ ref: expect.stringMatching(/^@e\d+$/), role: 'button' });
     expect(button.rect).toMatchObject({ x: expect.any(Number), y: expect.any(Number), width: expect.any(Number), height: expect.any(Number) });
     expect(json.facts.alerts).toContain('Seed warning is visible');
+    // OC-grade: page summary + document facts + a hierarchical tree with layout facts.
+    expect(json.summary).toMatchObject({ interactive: expect.any(Number) });
+    expect(json.document).toMatchObject({ width: expect.any(Number), height: expect.any(Number), devicePixelRatio: expect.any(Number) });
+    expect(Array.isArray(json.tree)).toBe(true);
+    expect(json.tree.length).toBeGreaterThan(0);
+    const treeNode = json.tree[0];
+    expect(treeNode).toMatchObject({ tag: expect.any(String), rect: expect.any(Object), visible: expect.any(Boolean), layout: expect.objectContaining({ display: expect.any(String) }) });
+    // A referencable tree node carries the same ref the overlay/act use.
+    const refIds = new Set(json.interactive.map((n: { ref: string }) => n.ref));
+    expect(json.tree.some((n: { ref?: string }) => n.ref && refIds.has(n.ref))).toBe(true);
 
     // inspect.md is the agent-iteration view, not a raw dump.
     const md = readFileSync(result.artifacts.inspect!, 'utf8');
     expect(md).toContain('## Where am I');
+    expect(md).toContain('## Summary');
     expect(md).toContain('## What can I act on');
+    expect(md).toContain('| ref | role | name | tag | box | state |');
     expect(md).toContain('## UI tree');
 
     await rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('produces an OC-grade forensics tree for a complex page (scroll/grid/disabled/hidden/table/dialog)', async () => {
+    const manager = createPlaywrightMcpBrowserSessionManager();
+    managers.push(manager);
+    const fixtureUrl = new URL('./fixtures/console-app.html', import.meta.url).href;
+    const open = await manager.open({ headed: false, targetUrl: fixtureUrl });
+
+    const result = await manager.inspect({ browserSessionId: open.browserSessionId });
+    const json = JSON.parse(readFileSync(result.artifacts.inspectJson!, 'utf8'));
+
+    // Page summary reflects the real structure.
+    expect(json.summary.interactive).toBeGreaterThanOrEqual(10);
+    expect(json.summary.tables).toBe(1);
+    expect(json.summary.dialogs).toBeGreaterThanOrEqual(1);
+    const landmarkRoles = json.summary.landmarks.map((l: { role: string }) => l.role);
+    expect(landmarkRoles).toEqual(expect.arrayContaining(['banner', 'navigation', 'main', 'form']));
+
+    const tree = json.tree as Array<Record<string, unknown>>;
+    // Layout facts: a grid container (metrics) and a flex container (topbar).
+    expect(tree.some((n) => (n.layout as { display?: string })?.display === 'grid')).toBe(true);
+    expect(tree.some((n) => (n.layout as { display?: string })?.display?.includes('flex'))).toBe(true);
+    // Scroll facts: the log-scroll region reports a scrollable overflow.
+    expect(tree.some((n) => (n.scroll as { scrollable?: boolean })?.scrollable === true)).toBe(true);
+    // Disabled control is flagged.
+    expect(tree.some((n) => n.disabled === true)).toBe(true);
+    // Hidden/offscreen node is included and marked (not silently dropped).
+    expect(tree.some((n) => typeof n.hidden === 'string')).toBe(true);
+    // Structural depth: nested nodes exist (not a flat list).
+    expect(tree.some((n) => (n.depth as number) >= 2)).toBe(true);
+    // Referencable tree nodes carry geometry + a ref the overlay/act share.
+    const refIds = new Set((json.interactive as Array<{ ref: string }>).map((n) => n.ref));
+    const refNode = tree.find((n) => typeof n.ref === 'string' && refIds.has(n.ref as string));
+    expect(refNode).toBeTruthy();
+    expect(refNode!.rect).toMatchObject({ x: expect.any(Number), y: expect.any(Number) });
+
+    // The disabled control resolves and acting on it fails cleanly (not silently).
+    const disabledRef = (json.interactive as Array<{ ref: string; name?: string }>).find((n) => n.name === 'Bulk delete');
+    expect(disabledRef).toBeTruthy();
+
+    // The markdown tree exposes the same facts for human/agent reading.
+    const md = readFileSync(result.artifacts.inspect!, 'utf8');
+    expect(md).toMatch(/scroll \d+\/\d+/);
+    expect(md).toContain('grid');
+    expect(md).toContain('disabled');
+    expect(md).toMatch(/hidden:/);
   });
 
   it('acts on a ref from inspect and resolves through the shared registry', async () => {
@@ -84,7 +142,7 @@ describe('Playwright MCP browser session manager', () => {
 
     const inspected = await manager.inspect({ browserSessionId: open.browserSessionId });
     const json = JSON.parse(readFileSync(inspected.artifacts.inspectJson!, 'utf8'));
-    const createRef = json.refs.find((n: { name?: string }) => n.name === 'Create').ref;
+    const createRef = json.interactive.find((n: { name?: string }) => n.name === 'Create').ref;
 
     const action = await manager.act({ browserSessionId: open.browserSessionId, ref: createRef, action: 'click' });
     expect(action).toMatchObject({ status: 'ok', action: 'click', target: { ref: createRef, role: 'button' } });
@@ -103,7 +161,7 @@ describe('Playwright MCP browser session manager', () => {
 
     const first = await manager.inspect({ browserSessionId: open.browserSessionId });
     const firstJson = JSON.parse(readFileSync(first.artifacts.inspectJson!, 'utf8'));
-    const firstRef = firstJson.refs.find((n: { name?: string }) => n.name === 'First').ref;
+    const firstRef = firstJson.interactive.find((n: { name?: string }) => n.name === 'First').ref;
 
     // Remove the element, then act before re-inspect: ref is stale, not live.
     await manager.evaluate({ browserSessionId: open.browserSessionId, code: "document.getElementById('host').innerHTML=''; return true;" });
@@ -115,7 +173,7 @@ describe('Playwright MCP browser session manager', () => {
     await manager.evaluate({ browserSessionId: open.browserSessionId, code: "document.getElementById('host').innerHTML='<button data-ui=\"second\">Second</button>'; return true;" });
     const second = await manager.inspect({ browserSessionId: open.browserSessionId });
     const secondJson = JSON.parse(readFileSync(second.artifacts.inspectJson!, 'utf8'));
-    const secondRef = secondJson.refs.find((n: { name?: string }) => n.name === 'Second').ref;
+    const secondRef = secondJson.interactive.find((n: { name?: string }) => n.name === 'Second').ref;
     expect(secondRef).not.toBe(firstRef);
 
     const retiredAct = await manager.act({ browserSessionId: open.browserSessionId, ref: firstRef, action: 'click' });
@@ -150,7 +208,7 @@ describe('Playwright MCP browser session manager', () => {
 
     // Overlay is pointer-events:none, so a real click still reaches the button.
     const counterRef = JSON.parse(readFileSync((await manager.inspect({ browserSessionId: open.browserSessionId })).artifacts.inspectJson!, 'utf8'))
-      .refs.find((n: { name?: string }) => n.name === 'Click me').ref;
+      .interactive.find((n: { name?: string }) => n.name === 'Click me').ref;
     await manager.act({ browserSessionId: open.browserSessionId, ref: counterRef, action: 'click' });
     const clicks = await manager.evaluate({ browserSessionId: open.browserSessionId, code: 'return window.__clicks || 0;' });
     expect(clicks.output).toBe(1);
@@ -211,7 +269,7 @@ describe('Playwright MCP browser session manager', () => {
     ).resolves.toMatchObject({ status: 'ok', output: { title: 'Code', label: 'e2e' } });
 
     const inspected = await manager.inspect({ browserSessionId: open.browserSessionId });
-    const runRef = JSON.parse(readFileSync(inspected.artifacts.inspectJson!, 'utf8')).refs.find((n: { name?: string }) => n.name === 'Run').ref;
+    const runRef = JSON.parse(readFileSync(inspected.artifacts.inspectJson!, 'utf8')).interactive.find((n: { name?: string }) => n.name === 'Run').ref;
     await expect(
       manager.playwright({
         browserSessionId: open.browserSessionId,

@@ -4,8 +4,8 @@ import {
   asInspectPage,
   deriveForensics,
   ensureForensicsInstalled,
+  type ForensicsCapture,
   type ForensicsNode,
-  type PageFacts,
 } from "../forensics/inspect-capture.js";
 
 export type { ForensicsNode, ForensicsRect, PageFacts } from "../forensics/inspect-capture.js";
@@ -22,8 +22,7 @@ const GLOBAL = FORENSICS_SINGLETON_GLOBAL;
  */
 export interface BrowserRefRegistry {
   ensureInstalled(page: Page): Promise<void>;
-  derive(page: Page, maxNodes?: number): Promise<ForensicsNode[]>;
-  pageFacts(page: Page): Promise<PageFacts>;
+  capture(page: Page, maxNodes?: number): Promise<ForensicsCapture>;
   resolveHandle(page: Page, ref: string): Promise<ElementHandle<Element> | null>;
   refState(page: Page, ref: string): Promise<RefState>;
   enableOverlay(page: Page): Promise<void>;
@@ -36,7 +35,6 @@ export interface BrowserRefRegistry {
 export function createBrowserRefRegistry(): BrowserRefRegistry {
   let installed = false;
   let cache: ForensicsNode[] = [];
-  let cachedFacts: PageFacts | undefined;
 
   async function ensureInstalled(page: Page): Promise<void> {
     // Cheap fast-path once installed: the manager also registers the source via
@@ -54,22 +52,13 @@ export function createBrowserRefRegistry(): BrowserRefRegistry {
   }
 
   // Reading the tree goes through the one shared derive helper so there is a
-  // single way to read it; the registry only adds caching (+ resolveHandle /
-  // refState / overlay) on top. `pageFacts` reuses the facts from the paired
-  // `derive` call — inspect always derives first, so it returns fresh data
-  // without a second round-trip.
-  async function derive(page: Page, maxNodes?: number): Promise<ForensicsNode[]> {
-    const { nodes, facts } = await deriveForensics(asInspectPage(page), maxNodes);
-    cache = nodes;
-    cachedFacts = facts;
-    return nodes;
-  }
-
-  async function pageFacts(page: Page): Promise<PageFacts> {
-    if (cachedFacts) return cachedFacts;
-    const { facts } = await deriveForensics(asInspectPage(page));
-    cachedFacts = facts;
-    return facts;
+  // single way to read it; the registry only adds caching of the act-target
+  // nodes (for act's metadata + browser.playwright refs) plus resolveHandle /
+  // refState / overlay on top.
+  async function capture(page: Page, maxNodes?: number): Promise<ForensicsCapture> {
+    const result = await deriveForensics(asInspectPage(page), maxNodes);
+    cache = result.nodes;
+    return result;
   }
 
   async function resolveHandle(page: Page, ref: string): Promise<ElementHandle<Element> | null> {
@@ -127,8 +116,7 @@ export function createBrowserRefRegistry(): BrowserRefRegistry {
 
   return {
     ensureInstalled,
-    derive,
-    pageFacts,
+    capture,
     resolveHandle,
     refState,
     enableOverlay,
