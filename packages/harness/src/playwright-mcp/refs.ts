@@ -1,18 +1,14 @@
-import type { ElementHandle, Locator, Page } from "playwright";
+import type { ElementHandle, Page } from "playwright";
 import { FORENSICS_BROWSER_SOURCE, FORENSICS_SINGLETON_GLOBAL } from "../forensics/browser-script.js";
-import type { ForensicsNode, PageFacts } from "../forensics/inspect-capture.js";
+import {
+  asInspectPage,
+  deriveForensics,
+  ensureForensicsInstalled,
+  type ForensicsNode,
+  type PageFacts,
+} from "../forensics/inspect-capture.js";
 
 export type { ForensicsNode, ForensicsRect, PageFacts } from "../forensics/inspect-capture.js";
-
-// Selector / semantic locator descriptors. `browser.act` and `browser.wait`
-// accept a raw selector target; refs resolve through the in-page registry.
-export type BrowserLocatorDescriptor =
-  | { kind: "selector"; selector: string }
-  | { kind: "role"; role: string; name?: string; exact?: boolean; index?: number }
-  | { kind: "text"; text: string; exact?: boolean; index?: number }
-  | { kind: "label"; text: string; exact?: boolean; index?: number }
-  | { kind: "placeholder"; text: string; exact?: boolean; index?: number }
-  | { kind: "testId"; testId: string; index?: number };
 
 export type RefState = "live" | "stale" | "retired" | "unknown";
 
@@ -40,10 +36,11 @@ export interface BrowserRefRegistry {
 export function createBrowserRefRegistry(): BrowserRefRegistry {
   let installed = false;
   let cache: ForensicsNode[] = [];
+  let cachedFacts: PageFacts | undefined;
 
   async function ensureInstalled(page: Page): Promise<void> {
     // Cheap fast-path once installed: the manager also registers the source via
-    // addInitScript so it survives navigations. Re-evaluating is harmless (the
+    // addInitScript so it survives navigations. Re-installing is harmless (the
     // singleton early-returns) but avoids re-sending the source on every call.
     if (installed) {
       const present = await page.evaluate(
@@ -52,34 +49,27 @@ export function createBrowserRefRegistry(): BrowserRefRegistry {
       );
       if (present) return;
     }
-    // Evaluating the source as a statement (then `void 0`) avoids returning the
-    // non-serializable api object to Playwright.
-    await page.evaluate(`${FORENSICS_BROWSER_SOURCE};\nvoid 0;`);
+    await ensureForensicsInstalled(asInspectPage(page));
     installed = true;
   }
 
+  // Reading the tree goes through the one shared derive helper so there is a
+  // single way to read it; the registry only adds caching (+ resolveHandle /
+  // refState / overlay) on top. `pageFacts` reuses the facts from the paired
+  // `derive` call — inspect always derives first, so it returns fresh data
+  // without a second round-trip.
   async function derive(page: Page, maxNodes?: number): Promise<ForensicsNode[]> {
-    await ensureInstalled(page);
-    const nodes = (await page.evaluate(
-      (args: { global: string; maxNodes: number }) => {
-        const api = (window as unknown as Record<string, { derive: (n?: number) => unknown[] }>)[args.global];
-        return api ? api.derive(args.maxNodes || undefined) : [];
-      },
-      { global: GLOBAL, maxNodes: maxNodes ?? 0 },
-    )) as ForensicsNode[];
+    const { nodes, facts } = await deriveForensics(asInspectPage(page), maxNodes);
     cache = nodes;
+    cachedFacts = facts;
     return nodes;
   }
 
   async function pageFacts(page: Page): Promise<PageFacts> {
-    await ensureInstalled(page);
-    return (await page.evaluate(
-      (global: string) => {
-        const api = (window as unknown as Record<string, { pageFacts: () => unknown }>)[global];
-        return api ? api.pageFacts() : null;
-      },
-      GLOBAL,
-    )) as PageFacts;
+    if (cachedFacts) return cachedFacts;
+    const { facts } = await deriveForensics(asInspectPage(page));
+    cachedFacts = facts;
+    return facts;
   }
 
   async function resolveHandle(page: Page, ref: string): Promise<ElementHandle<Element> | null> {
@@ -156,36 +146,3 @@ export function createBrowserRefRegistry(): BrowserRefRegistry {
 // Whether the singleton init script should also be registered via addInitScript
 // so the registry survives soft navigations within the session.
 export const FORENSICS_INIT_SCRIPT = `${FORENSICS_BROWSER_SOURCE};\nvoid 0;`;
-
-export function descriptorForSelector(selector: string): BrowserLocatorDescriptor {
-  return { kind: "selector", selector };
-}
-
-export function locatorFor(page: Page, descriptor: BrowserLocatorDescriptor): Locator {
-  let locator: Locator;
-  if (descriptor.kind === "selector") {
-    locator = page.locator(descriptor.selector);
-  } else if (descriptor.kind === "role") {
-    locator = page.getByRole(descriptor.role as never, {
-      ...(descriptor.name !== undefined ? { name: descriptor.name } : {}),
-      ...(descriptor.exact !== undefined ? { exact: descriptor.exact } : {}),
-    });
-  } else if (descriptor.kind === "text") {
-    locator = page.getByText(descriptor.text, {
-      ...(descriptor.exact !== undefined ? { exact: descriptor.exact } : {}),
-    });
-  } else if (descriptor.kind === "label") {
-    locator = page.getByLabel(descriptor.text, {
-      ...(descriptor.exact !== undefined ? { exact: descriptor.exact } : {}),
-    });
-  } else if (descriptor.kind === "placeholder") {
-    locator = page.getByPlaceholder(descriptor.text, {
-      ...(descriptor.exact !== undefined ? { exact: descriptor.exact } : {}),
-    });
-  } else {
-    locator = page.getByTestId(descriptor.testId);
-  }
-  return descriptor.kind !== "selector" && descriptor.index !== undefined
-    ? locator.nth(descriptor.index)
-    : locator;
-}

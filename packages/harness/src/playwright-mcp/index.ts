@@ -4,13 +4,11 @@ import {
   createRunArtifacts,
   type RunArtifacts,
 } from "../artifacts/index.js";
-import { writeInspection, type InspectPage } from "../forensics/inspect-capture.js";
+import { asInspectPage, writeInspection } from "../forensics/inspect-capture.js";
 import { runBrowserAction, type BrowserActionable } from "./actions.js";
 import { runPageCode, runPlaywrightCode, effectiveTimeout, type BrowserCodeRunInput, type BrowserCodeRunResult } from "./code-runner.js";
 import {
   createBrowserRefRegistry,
-  descriptorForSelector,
-  locatorFor,
   FORENSICS_INIT_SCRIPT,
   type BrowserRefRegistry,
 } from "./refs.js";
@@ -163,6 +161,17 @@ export const playwrightMcpApiContract: AgentE2EPlaywrightMcpApiContract = {
 
 const BROWSER_CLOSE_TIMEOUT_MS = 1_000;
 
+// browser.wait's ref-state vocabulary (attached|detached|visible|hidden) mapped
+// onto Playwright's ElementHandle.waitForElementState vocabulary. `attached` ->
+// `stable` (present and settled); `detached` is handled by the null-handle path
+// above, so the live-handle case only ever maps the remaining three.
+const REF_HANDLE_STATE: Record<"attached" | "detached" | "visible" | "hidden", "stable" | "hidden" | "visible"> = {
+  attached: "stable",
+  detached: "hidden",
+  visible: "visible",
+  hidden: "hidden",
+};
+
 export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot?: string } = {}) {
   const sessions = new Map<string, BrowserSession>();
 
@@ -243,7 +252,7 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
     const seq = (session.inspectionSeq += 1);
     const dirRelative = `inspections/${String(seq).padStart(4, "0")}`;
     const { md, json, screenshot } = await writeInspection({
-      page: session.page as unknown as InspectPage,
+      page: asInspectPage(session.page),
       run: session.run,
       dirRelative,
       nodes,
@@ -328,7 +337,10 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
       publicMeta = { ref: input.ref, ...(node?.selector ? { selector: node.selector } : {}), ...(node?.role ? { role: node.role } : {}), ...(node?.name ? { name: node.name } : {}) };
     } else {
       const selector = input.selector as string;
-      actionable = locatorFor(session.page, descriptorForSelector(selector)) as unknown as BrowserActionable;
+      // A Playwright Locator structurally satisfies BrowserActionable, the same
+      // way a resolved ElementHandle does — browser.act treats refs and raw
+      // selectors identically.
+      actionable = session.page.locator(selector);
       publicMeta = { selector };
     }
 
@@ -373,16 +385,17 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
         const wantedState = input.until.state ?? "visible";
         const handle = await session.refs.resolveHandle(session.page, input.until.ref);
         if (!handle) {
+          // A retired/stale ref already satisfies a wait for it to go away;
+          // otherwise the ref cannot become attached/visible, so fail.
           if (wantedState === "detached" || wantedState === "hidden") {
-            // A retired/stale ref satisfies a wait for it to go away.
-          } else {
-            throw new Error(`Ref ${input.until.ref} does not resolve to a live element.`);
+            session.lastUsedAt = new Date().toISOString();
+            return { status: "ok", browserSessionId: input.browserSessionId, matched: input.until, durationMs: Date.now() - start, timeoutMs };
           }
-        } else {
-          await handle.waitForElementState(wantedState === "attached" ? "stable" : wantedState === "detached" ? "hidden" : wantedState, { timeout: timeoutMs });
+          throw new Error(`Ref ${input.until.ref} does not resolve to a live element.`);
         }
+        await handle.waitForElementState(REF_HANDLE_STATE[wantedState], { timeout: timeoutMs });
       } else if (input.until.kind === "selector") {
-        await locatorFor(session.page, descriptorForSelector(input.until.selector)).waitFor({
+        await session.page.locator(input.until.selector).waitFor({
           state: input.until.state ?? "visible",
           timeout: timeoutMs,
         });

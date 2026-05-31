@@ -9,9 +9,10 @@ import {
   type RunArtifacts,
 } from "../artifacts/index.js";
 import {
+  asInspectPage,
+  buildInspectJson,
   deriveForensics,
   renderInspectMarkdown,
-  type InspectPage,
   type InspectTarget,
 } from "../forensics/inspect-capture.js";
 import type {
@@ -137,7 +138,7 @@ export async function writeStepArtifacts<TTypes extends AnyHarnessTypes>(input: 
   const page = pageFromExecution(input.execution);
   if (page?.evaluate && page.screenshot) {
     try {
-      const { nodes, facts } = await deriveForensics(page as unknown as InspectPage);
+      const { nodes, facts } = await deriveForensics(asInspectPage(page));
       const target: InspectTarget = { input: null, kind: "page", resolved: true };
       const signals = {
         consoleErrors: input.signalSlice.signals.consoleErrors,
@@ -146,16 +147,7 @@ export async function writeStepArtifacts<TTypes extends AnyHarnessTypes>(input: 
       inspectJson = await writeJsonArtifact(
         run,
         stepRelativePath(journey, phaseId, stepId, "inspect.json"),
-        {
-          url: facts.url,
-          title: facts.title,
-          viewport: facts.viewport,
-          target,
-          overlayEnabled: facts.overlayEnabled,
-          signals,
-          facts: { headings: facts.headings, alerts: facts.alerts, dialogs: facts.dialogs, loading: facts.loading },
-          refs: nodes,
-        },
+        buildInspectJson(facts, nodes, target, signals),
         { name: "inspect", kind: "json", description: "Structured UI forensics refs with bounding boxes captured at step end." },
       );
       inspectMd = await writeTextArtifact(

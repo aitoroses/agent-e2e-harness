@@ -60,8 +60,39 @@ export interface InspectPage {
   screenshot(options?: { fullPage?: boolean }): Promise<Uint8Array>;
 }
 
+// Single adapter for the forensics boundary: Playwright's `Page.evaluate`
+// overloads do not structurally match `InspectPage`, so the cast lives here once
+// instead of being re-derived (`as unknown as InspectPage`) at each call site.
+export function asInspectPage(page: unknown): InspectPage {
+  return page as InspectPage;
+}
+
 const INSPECT_TREE_CAP = 60;
 const GLOBAL = FORENSICS_SINGLETON_GLOBAL;
+
+/**
+ * Canonical inspect.json payload. Both evidence paths (ad-hoc `browser.inspect`
+ * via {@link writeInspection} and `journey.step` via the step recorder) write
+ * THIS object, so the single-evidence-path guarantee is enforced by construction:
+ * add or rename a field here and both paths move together.
+ */
+export function buildInspectJson(
+  facts: PageFacts,
+  nodes: readonly ForensicsNode[],
+  target: InspectTarget,
+  signals: InspectSignals,
+): Record<string, unknown> {
+  return {
+    url: facts.url,
+    title: facts.title,
+    viewport: facts.viewport,
+    target,
+    overlayEnabled: facts.overlayEnabled,
+    signals,
+    facts: { headings: facts.headings, alerts: facts.alerts, dialogs: facts.dialogs, loading: facts.loading },
+    refs: nodes,
+  };
+}
 
 /** Ensure the in-page forensics singleton is installed (idempotent). */
 export async function ensureForensicsInstalled(page: InspectPage): Promise<void> {
@@ -111,16 +142,7 @@ export async function writeInspection(input: {
   const json = await writeJsonArtifact(
     run,
     `${dirRelative}/inspect.json`,
-    {
-      url: facts.url,
-      title: facts.title,
-      viewport: facts.viewport,
-      target,
-      overlayEnabled: facts.overlayEnabled,
-      signals,
-      facts: { headings: facts.headings, alerts: facts.alerts, dialogs: facts.dialogs, loading: facts.loading },
-      refs: nodes,
-    },
+    buildInspectJson(facts, nodes, target, signals),
     { kind: "json", name: "inspect", description: "Structured UI forensics refs with bounding boxes, page facts, and signals." },
   );
   const md = await writeTextArtifact(
