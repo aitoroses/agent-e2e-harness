@@ -300,7 +300,7 @@ async function runSingleVerifyRun<TTypes extends AnyHarnessTypes>(input: {
       status = "warning_failed";
       errors.push("warnings-as-errors enabled");
     }
-    await artifacts.writeResult({
+    await artifacts.writeRunReport({
       status,
       runId,
       journeyId: input.journey.id,
@@ -398,12 +398,13 @@ async function runJourneyWithArtifacts<TTypes extends AnyHarnessTypes>(
         run.execution,
         result.phaseId,
         result.stepId,
-        result.status === "passed" ? "after" : "failure",
+        result.status === "passed" ? "after" : result.status === "skipped" ? "skipped" : "failure",
       );
       const generatedArtifacts = await writeStepArtifacts({
         artifacts,
         run,
         result,
+        execution: run.execution,
         beforeArtifact,
         terminalScreenshot,
         signalSlice: signals.slice(mark),

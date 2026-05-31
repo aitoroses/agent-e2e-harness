@@ -62,17 +62,14 @@ describe("Dev MCP Streamable HTTP server", () => {
       harness,
       browserSessions: {
         open: async () => ({ browserSessionId: "browser-1" }),
-        snapshot: async (browserSessionId) => ({ browserSessionId, refs: [] }),
         close: async (browserSessionId) => ({ status: "closed", browserSessionId }),
         list: () => [],
-        find: async (input) => ({ status: "ok", input, targets: [] }),
+        inspect: async (input) => ({ status: "ok", input }),
+        refs: async (input) => ({ status: "ok", input }),
         act: async (input) => ({ status: "ok", input }),
         wait: async (input) => ({ status: "ok", input }),
-        get: async (input) => ({ status: "ok", input, value: "value" }),
         evaluate: async (input) => ({ status: "ok", input, output: null }),
         playwright: async (input) => ({ status: "ok", input, output: null }),
-        console: async (input) => ({ status: "ok", input, entries: [], nextCursor: 0 }),
-        network: async (input) => ({ status: "ok", input, entries: [], nextCursor: 0 }),
       },
     });
     handles.push(server);
@@ -110,13 +107,20 @@ describe("Dev MCP Streamable HTTP server", () => {
         },
         required: ["browserSessionId", "action"],
       });
-      expect(tools.tools.find((tool) => tool.name === "browser.find")?.inputSchema).toMatchObject({
+      expect(tools.tools.find((tool) => tool.name === "browser.inspect")?.inputSchema).toMatchObject({
         type: "object",
         properties: {
-          by: expect.objectContaining({ enum: ["role", "text", "label", "placeholder", "testId", "selector"] }),
-          value: expect.objectContaining({ description: expect.stringContaining("Role name") }),
+          browserSessionId: expect.objectContaining({ type: "string" }),
+          target: expect.objectContaining({ description: expect.stringContaining("UI forensics ref") }),
         },
-        required: ["browserSessionId", "by", "value"],
+        required: ["browserSessionId"],
+      });
+      expect(tools.tools.find((tool) => tool.name === "browser.refs")?.inputSchema).toMatchObject({
+        type: "object",
+        properties: {
+          enabled: expect.objectContaining({ type: "boolean" }),
+        },
+        required: ["browserSessionId", "enabled"],
       });
       expect(tools.tools.find((tool) => tool.name === "browser.eval")?.inputSchema).toMatchObject({
         type: "object",

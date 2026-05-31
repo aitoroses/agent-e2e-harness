@@ -52,11 +52,9 @@ import {
 import type {
   BrowserActInput,
   BrowserCodeRunInput,
-  BrowserFindInput,
-  BrowserGetInput,
+  BrowserInspectInput,
   BrowserOpenInput,
-  BrowserScreenshotInput,
-  BrowserSignalToolInput,
+  BrowserRefsInput,
   BrowserWaitInput,
 } from "../playwright-mcp/index.js";
 import {
@@ -126,7 +124,6 @@ export const DEV_MCP_TOOL_GRAMMAR = [
   "run.reseed",
   "run.teardown",
   "cleanup.plan",
-  "artifact.read",
   "journey.step",
   "journey.untilStep",
   "journey.untilPhase",
@@ -189,7 +186,6 @@ export interface DevMcpToolResponse {
 
 export interface DevMcpBrowserSessionController extends DevMcpBrowserWorkbenchController {
   open: (input?: BrowserOpenInput) => Promise<unknown>;
-  snapshot: (browserSessionId: string) => Promise<unknown>;
   close: (browserSessionId: string) => Promise<unknown>;
   closeAll?: () => Promise<unknown>;
   execution?: (browserSessionId: string) => unknown;
@@ -613,8 +609,6 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           return fromHarness(name, await resolveHarness(options.harness), "teardown", args);
         case "cleanup.plan":
           return fromHarness(name, await resolveHarness(options.harness), "cleanupPlan", args);
-        case "artifact.read":
-          return fromHarness(name, await resolveHarness(options.harness), "readArtifact", args);
         case "journey.step":
           return fromHarnessWithRunStackBinding(name, "runStep", args);
         case "journey.untilStep":
@@ -814,20 +808,19 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
           return ok(name, { result: await options.browserSessions.open(browserToolInput<BrowserOpenInput>(args)) });
-        case "browser.snapshot": {
+        case "browser.inspect": {
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
-          const browserSessionId = stringArg(args, "browserSessionId");
-          return ok(name, {
-            result: await options.browserSessions.snapshot(browserSessionId),
-          });
+          if (!options.browserSessions.inspect)
+            return blocked(name, "browser-inspect-not-wired", "The browser session controller does not expose browser.inspect.");
+          return ok(name, { result: await options.browserSessions.inspect(browserToolInput<BrowserInspectInput>(args)) });
         }
-        case "browser.find": {
+        case "browser.refs": {
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
-          if (!options.browserSessions.find)
-            return blocked(name, "browser-find-not-wired", "The browser session controller does not expose browser.find.");
-          return ok(name, { result: await options.browserSessions.find(browserToolInput<BrowserFindInput>(args)) });
+          if (!options.browserSessions.refs)
+            return blocked(name, "browser-refs-not-wired", "The browser session controller does not expose the refs overlay.");
+          return ok(name, { result: await options.browserSessions.refs(browserToolInput<BrowserRefsInput>(args)) });
         }
         case "browser.close": {
           if (!options.browserSessions)
@@ -861,13 +854,6 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             return blocked(name, "browser-wait-not-wired", "The browser session controller does not expose conditional browser waits.");
           return ok(name, { result: await options.browserSessions.wait(browserToolInput<BrowserWaitInput>(args)) });
         }
-        case "browser.get": {
-          if (!options.browserSessions)
-            return missingDependency(name, "browserSessions");
-          if (!options.browserSessions.get)
-            return blocked(name, "browser-get-not-wired", "The browser session controller does not expose targeted browser reads.");
-          return ok(name, { result: await options.browserSessions.get(browserToolInput<BrowserGetInput>(args)) });
-        }
         case "browser.eval": {
           if (!options.browserSessions)
             return missingDependency(name, "browserSessions");
@@ -881,33 +867,6 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           if (!options.browserSessions.playwright)
             return blocked(name, "browser-playwright-not-wired", "The browser session controller does not expose direct Playwright code execution.");
           return ok(name, { result: await options.browserSessions.playwright(browserToolInput<BrowserCodeRunInput>(args)) });
-        }
-        case "browser.console": {
-          if (!options.browserSessions)
-            return missingDependency(name, "browserSessions");
-          if (!options.browserSessions.console)
-            return blocked(name, "browser-console-not-wired", "The browser session controller does not expose browser console signal reads.");
-          return ok(name, { result: await options.browserSessions.console(browserToolInput<BrowserSignalToolInput>(args)) });
-        }
-        case "browser.network": {
-          if (!options.browserSessions)
-            return missingDependency(name, "browserSessions");
-          if (!options.browserSessions.network)
-            return blocked(name, "browser-network-not-wired", "The browser session controller does not expose browser network signal reads.");
-          return ok(name, { result: await options.browserSessions.network(browserToolInput<BrowserSignalToolInput>(args)) });
-        }
-        case "browser.screenshot": {
-          if (!options.browserSessions)
-            return missingDependency(name, "browserSessions");
-          if (!options.browserSessions.screenshot)
-            return blocked(
-              name,
-              "browser-screenshot-not-wired",
-              "The browser session controller does not expose screenshot capture.",
-            );
-          return ok(name, {
-            result: await options.browserSessions.screenshot(browserToolInput<BrowserScreenshotInput>(args)),
-          });
         }
         default:
           return { status: "not-found", tool: name, subject: "tool" };
@@ -1332,7 +1291,6 @@ function implementedToolNames(
       "run.reseed",
       "run.teardown",
       "cleanup.plan",
-      "artifact.read",
       "journey.step",
       "journey.untilStep",
       "journey.phase",
@@ -1376,22 +1334,17 @@ function summaryFor(name: DevMcpToolName): string {
     "run.teardown": "Delete journey-owned resources for a run.",
     "browser.open": browserWorkbenchSummary("browser.open"),
     "browser.sessions": browserWorkbenchSummary("browser.sessions"),
-    "browser.snapshot": browserWorkbenchSummary("browser.snapshot"),
-    "browser.find": browserWorkbenchSummary("browser.find"),
+    "browser.inspect": browserWorkbenchSummary("browser.inspect"),
+    "browser.refs": browserWorkbenchSummary("browser.refs"),
     "browser.act": browserWorkbenchSummary("browser.act"),
     "browser.wait": browserWorkbenchSummary("browser.wait"),
-    "browser.get": browserWorkbenchSummary("browser.get"),
     "browser.eval": browserWorkbenchSummary("browser.eval"),
     "browser.playwright": browserWorkbenchSummary("browser.playwright"),
-    "browser.console": browserWorkbenchSummary("browser.console"),
-    "browser.network": browserWorkbenchSummary("browser.network"),
-    "browser.screenshot": browserWorkbenchSummary("browser.screenshot"),
     "browser.close": browserWorkbenchSummary("browser.close"),
     "journey.step": "Run one journey step.",
     "journey.untilStep": "Run journey steps up to and including a target step (visual frame).",
     "journey.untilPhase": "Run journey steps until a phase boundary.",
     "journey.phase": "Run a journey phase.",
-    "artifact.read": "Read a safe emitted artifact.",
     "cleanup.plan": "Preview journey-owned cleanup.",
   };
   return summaries[name];
@@ -1495,11 +1448,6 @@ function inputSchemaForTool(
     case "cleanup.plan":
       return {
         runId: stringId(),
-      };
-    case "artifact.read":
-      return {
-        artifactId: stringId().optional(),
-        path: stringId().optional(),
       };
     case "journey.step":
     case "journey.untilStep":

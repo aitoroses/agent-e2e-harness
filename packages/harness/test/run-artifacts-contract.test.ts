@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, readdir } from "node:fs/promises";
+import { mkdtemp, readFile, readlink, rm, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -43,21 +43,24 @@ function twoStepJourney() {
   });
 }
 
-async function readJson(root: string, runId: string, file: string): Promise<Record<string, unknown>> {
-  const raw = await readFile(join(root, "journey-contract", runId, file), "utf8");
+// All run artifacts live under `runs/<runId>/` — the run id is the only path
+// prefix; journey/phase/step evidence nests inside the run.
+async function readReport(root: string, runId: string, file = "run-report.json"): Promise<Record<string, unknown>> {
+  const raw = await readFile(join(root, runId, file), "utf8");
   return JSON.parse(raw) as Record<string, unknown>;
 }
 
+const STEP_A_DIR = "journeys/journey-contract/phases/phase-one/steps/step-a";
+const STEP_B_DIR = "journeys/journey-contract/phases/phase-one/steps/step-b";
+
 describe("interactive run artifact contract", () => {
-  it("reports a whole-run verdict in result.json (running until all steps complete, then passed)", async () => {
+  it("reports a whole-run verdict in run-report.json (running until all steps complete, then passed)", async () => {
     const artifactRoot = await tempRoot();
     const server = createMcpHarnessServer({ journeys: [twoStepJourney()], artifactRoot });
     const begin = await server.callTool("beginRun", { journeyId: "journey:contract", execution: { runId: "r1" } });
     expect(begin).toMatchObject({ status: "ok", runId: "r1" });
 
-    // After begin (no steps yet) the run-level status is `running`, NOT the
-    // last-step status, and the run is explicitly not crystallized.
-    const afterBegin = await readJson(artifactRoot, "r1", "result.json");
+    const afterBegin = await readReport(artifactRoot, "r1");
     expect(afterBegin).toMatchObject({
       status: "running",
       crystallized: false,
@@ -65,21 +68,16 @@ describe("interactive run artifact contract", () => {
     });
     expect(afterBegin.completedAt).toBeUndefined();
 
-    // After the first of two steps, the run is still `running` even though the
-    // step passed — this is the bug the finding flagged (last-step status was
-    // masquerading as the run verdict).
     await server.callTool("runStep", { runId: "r1", phaseId: "phase:one", stepId: "step:a" });
-    const afterStepA = await readJson(artifactRoot, "r1", "result.json");
+    const afterStepA = await readReport(artifactRoot, "r1");
     expect(afterStepA).toMatchObject({
       status: "running",
       completion: { totalSteps: 2, completedSteps: 1, remainingSteps: 1 },
     });
     expect(afterStepA.completedAt).toBeUndefined();
 
-    // Only once every step has completed does the run read `passed`, with a
-    // completedAt stamp and a human summary.
     await server.callTool("runStep", { runId: "r1", phaseId: "phase:one", stepId: "step:b" });
-    const finalized = await readJson(artifactRoot, "r1", "result.json");
+    const finalized = await readReport(artifactRoot, "r1");
     expect(finalized).toMatchObject({
       status: "passed",
       summary: "All 2 steps passed.",
@@ -88,59 +86,43 @@ describe("interactive run artifact contract", () => {
     expect(typeof finalized.completedAt).toBe("string");
   });
 
-  it("writes a run index that links headline proof, per-step artifacts, and a journey latest pointer", async () => {
+  it("writes a run report that links headline proof, per-step reports, and refreshes the latest symlink", async () => {
     const artifactRoot = await tempRoot();
     const server = createMcpHarnessServer({ journeys: [twoStepJourney()], artifactRoot });
     await server.callTool("beginRun", { journeyId: "journey:contract", execution: { runId: "r2" } });
     await server.callTool("runStep", { runId: "r2", phaseId: "phase:one", stepId: "step:a" });
     await server.callTool("runStep", { runId: "r2", phaseId: "phase:one", stepId: "step:b" });
 
-    const runDir = join(artifactRoot, "journey-contract", "r2");
-    expect(existsSync(join(runDir, "index.json"))).toBe(true);
-    expect(existsSync(join(runDir, "index.md"))).toBe(true);
+    const runDir = join(artifactRoot, "r2");
+    expect(existsSync(join(runDir, "run-report.json"))).toBe(true);
+    expect(existsSync(join(runDir, "run-report.md"))).toBe(true);
+    // No legacy result.json / index.json in the new contract.
+    expect(existsSync(join(runDir, "result.json"))).toBe(false);
+    expect(existsSync(join(runDir, "index.json"))).toBe(false);
 
-    const index = await readJson(artifactRoot, "r2", "index.json");
-    expect(index).toMatchObject({
-      runId: "r2",
-      journeyId: "journey:contract",
-      status: "passed",
-    });
-    // Headline proof is discoverable without knowing filenames.
-    expect(index.headline).toMatchObject({
-      result: "result.json",
+    const report = await readReport(artifactRoot, "r2");
+    expect(report).toMatchObject({ runId: "r2", journeyId: "journey:contract", status: "passed" });
+    expect(report.headline).toMatchObject({
       timeline: "timeline.json",
       metrics: "metrics.json",
       seed: "seed-manifest.json",
       ownedResources: "owned-resources.json",
     });
-    // Both step directories are linked with their step artifacts.
-    const steps = index.steps as Array<{ dir: string; artifacts: Record<string, string> }>;
-    expect(steps.map((step) => step.dir).sort()).toEqual([
-      "01-phase-phase-one/01-step-step-a",
-      "01-phase-phase-one/02-step-step-b",
-    ]);
-    expect(steps[0]?.artifacts.result).toContain("result.json");
 
-    // result.json self-points to the index so the status path links everything.
-    const result = await readJson(artifactRoot, "r2", "result.json");
-    expect(result).toMatchObject({ index: "index.json", humanIndex: "index.md" });
+    const steps = report.steps as Array<{ dir: string; artifacts: Record<string, string> }>;
+    expect(steps.map((step) => step.dir).sort()).toEqual([STEP_A_DIR, STEP_B_DIR]);
+    expect(steps[0]?.artifacts["step-report"]).toContain("step-report.json");
 
-    // Human index links headline proof.
-    const humanIndex = await readFile(join(runDir, "index.md"), "utf8");
-    expect(humanIndex).toContain("# Run r2");
-    expect(humanIndex).toContain("**Status:** passed");
-    expect(humanIndex).toContain("[result](result.json)");
+    // run-report self-points so the status path links everything.
+    expect(report).toMatchObject({ report: "run-report.json", humanReport: "run-report.md" });
 
-    // Journey-level latest pointer lets an operator open the newest run.
-    const latestRaw = await readFile(join(artifactRoot, "journey-contract", "latest.json"), "utf8");
-    const latest = JSON.parse(latestRaw) as Record<string, unknown>;
-    expect(latest).toMatchObject({
-      runId: "r2",
-      status: "passed",
-      runDir: "r2",
-      index: "r2/index.md",
-      result: "r2/result.json",
-    });
+    const humanReport = await readFile(join(runDir, "run-report.md"), "utf8");
+    expect(humanReport).toContain("# Run r2");
+    expect(humanReport).toContain("**Status:** passed");
+
+    // `latest` is a convenience symlink to the newest run id.
+    expect(await readlink(join(artifactRoot, "latest"))).toBe("r2");
+    expect(existsSync(join(artifactRoot, "latest", "run-report.json"))).toBe(true);
   });
 
   it("finalizes the run when a whole phase is run at once (journey.phase path)", async () => {
@@ -148,33 +130,30 @@ describe("interactive run artifact contract", () => {
     const server = createMcpHarnessServer({ journeys: [twoStepJourney()], artifactRoot });
     await server.callTool("beginRun", { journeyId: "journey:contract", execution: { runId: "r3" } });
 
-    // Driving the whole phase used to write NO run artifacts; the run now
-    // finalizes to `passed` with per-step artifacts and an index.
     const phase = await server.callTool("runPhase", { runId: "r3", phaseId: "phase:one" });
     expect(phase).toMatchObject({ status: "ok", results: [{ status: "passed" }, { status: "passed" }] });
 
-    const result = await readJson(artifactRoot, "r3", "result.json");
-    expect(result).toMatchObject({ status: "passed", completion: { completedSteps: 2, totalSteps: 2 } });
-    expect(existsSync(join(artifactRoot, "journey-contract", "r3", "index.md"))).toBe(true);
-    expect(existsSync(join(artifactRoot, "journey-contract", "r3", "01-phase-phase-one", "02-step-step-b", "result.json"))).toBe(true);
+    const report = await readReport(artifactRoot, "r3");
+    expect(report).toMatchObject({ status: "passed", completion: { completedSteps: 2, totalSteps: 2 } });
+    expect(existsSync(join(artifactRoot, "r3", "run-report.md"))).toBe(true);
+    expect(existsSync(join(artifactRoot, "r3", STEP_B_DIR, "step-report.json"))).toBe(true);
   });
 
   it("gives each unnamed interactive run its own directory instead of overwriting", async () => {
     const artifactRoot = await tempRoot();
     const server = createMcpHarnessServer({ journeys: [twoStepJourney()], artifactRoot });
 
-    // No execution.runId: the harness mints a unique per-run id so two
-    // consecutive runs of the same journey do not collide into one directory.
     const first = await server.callTool("beginRun", { journeyId: "journey:contract", execution: {} });
     const second = await server.callTool("beginRun", { journeyId: "journey:contract", execution: {} });
     expect(first.status).toBe("ok");
     expect(second.status).toBe("ok");
     expect(first.runId).not.toEqual(second.runId);
 
-    const journeyDir = join(artifactRoot, "journey-contract");
-    const entries = (await readdir(journeyDir, { withFileTypes: true }))
+    // Each run is its own directory directly under the artifact root; `latest`
+    // is a symlink (not a directory), so it is not counted.
+    const entries = (await readdir(artifactRoot, { withFileTypes: true }))
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name);
-    expect(entries.length).toBe(2);
+    expect(entries.sort()).toEqual([String(first.runId), String(second.runId)].sort());
   });
 });

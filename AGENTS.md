@@ -65,8 +65,8 @@ npm run e2e:verify --workspace @agent-e2e/showcase
 For visual/app proof, use the Playwright-owned MCP browser tools:
 
 1. `browser.open` with `headed: true` when the user needs to see the browser.
-2. `browser.snapshot` as the primary forensics packet.
-3. `browser.screenshot` for visual evidence.
+2. `browser.inspect` as the primary forensics call — returns a compact index and writes `inspect.md`, `inspect.json`, and `screenshot.png` to `runs/<runId>/inspections/<seq>/`.
+3. `browser.refs` to toggle the live overlay when correlating visible nodes to `@eN` refs.
 4. `browser.close` only when the user asks or cleanup/teardown explicitly requires it.
 
 The visible window may be a Chromium engine window, but the proof must identify it as a Playwright-owned MCP browser session and include the `browserSessionId`.
@@ -78,22 +78,43 @@ For showcase-facing changes, minimum evidence is:
 - documented command path works;
 - a standard MCP client can discover/call the relevant MCP tools, or `mcporter` can do so for repo-internal MCP smoke testing;
 - Playwright-owned MCP browser can open the app;
-- `browser.snapshot` has no visible app/runtime errors;
+- `browser.inspect` returns no `consoleErrors` or `networkFailures` signals, and the written `inspect.md` shows no visible app/runtime errors;
 - screenshot looks acceptable for the claimed UX state;
 - `npm run e2e:verify --workspace @agent-e2e/showcase` passes and exits cleanly when the change affects journey/config/CLI/CI behavior;
 - targeted harness/showcase tests pass.
 
 ### Validation artifact standard
 
-Generated proof/debug evidence belongs under `.agents-e2e/artifacts/<journey>/<run>/` for interactive runs and `.agents-e2e/artifacts/_suites/<suite-id>/` for verify suite reports. Interactive artifacts should be returned through MCP artifact refs. Do not use `.scratch`, `ui-e2e/`, or an extra `steps/` nesting layer as the primary validation artifact layout.
+Generated proof/debug evidence belongs under `runs/<runId>/` for each run and `.agents-e2e/artifacts/_suites/<suite-id>/` for verify suite reports. Interactive artifacts should be returned through MCP artifact refs. Do not use `.scratch`, `ui-e2e/`, or numbered `01-phase-.../01-step-.../` nesting as the primary validation artifact layout.
 
-Each interactive run gets its OWN run directory: an unnamed `run.begin` mints a unique, sortable run id (`run-<utc-timestamp>-<suffix>`), so re-running a journey never overwrites a prior run's evidence. A journey-level `latest.json` pointer (`.agents-e2e/artifacts/<journey>/latest.json`) records the newest run's id, status, summary, and index links so an operator can open the most recent run without scanning timestamps.
+Each run gets its OWN run directory with a timestamp-first run id (e.g. `2026-05-31T10-24-18Z-auth-boundary-oc7`), so re-running a journey never overwrites prior evidence. A `runs/latest` symlink (local convenience only) points to the newest run id.
 
-Expected run evidence includes a run-level `index.md` (the human entry point — open this first) and `index.json` (machine), top-level `seed-manifest.json`, `result.json`, `timeline.json`, `metrics.json`, `owned-resources.json`, cleanup artifacts when applicable, `forensics/` browser snapshots/screenshots, and numbered `01-phase-.../01-step-.../` step folders with `before.png`, `after.png` or `failure.png`, `console.json`, `network.json`, `result.json`, and `step-feedback.json`. The run-level `result.json` carries the whole-run verdict (`status` = `running` until every step completes, then `passed`/`failed`), a `completion` breakdown, a `summary`, `completedAt` once terminal, `crystallized: false` (only the Closure Command crystallizes), and self-pointers to its `index`/`humanIndex`. The `index` is built by scanning the run directory, so it links every artifact — including forensics written by the browser module. Forensics files are capture-sequenced and action-tagged (`<NNNN>-browser-snapshot.json`, `<NNNN>-browser-screenshot[-<label>].png`), not timestamp-only.
+Expected run layout:
+
+```text
+runs/
+  latest -> <runId>                 # local convenience symlink only
+  <runId>/
+    run-report.md                   # human entry point — open this first
+    run-report.json                 # whole-run verdict + index (NO separate result.json / index.json / latest.json)
+    seed-manifest.json
+    timeline.json
+    metrics.json
+    owned-resources.json
+    inspections/<seq>/{inspect.md,inspect.json,screenshot.png}
+    journeys/<journeyId>/phases/<phaseId>/steps/<stepId>/
+      before.png
+      after.png | failure.png | skipped.png
+      inspect.md
+      inspect.json
+      step-report.json              # single agent-facing per-step report (replaces step-feedback.json)
+```
+
+`run-report.md` and `run-report.json` are the whole-run entry points. There is no separate `result.json`, `index.json`, or `latest.json`. `step-report.json` is the single agent-facing per-step report (status, what ran, artifact paths, signal counters, failure info, raw execution payload under `execution`); it replaces the old `step-feedback.json`. Console and network facts are captured as signals inside inspect artifacts (`signals.consoleErrors`, `signals.networkFailures`), not as separate `console.json`/`network.json` step files. Journey steps use the same inspect machinery as `browser.inspect` — one evidence system, not two.
 
 Expected verify suite evidence includes `report.json`, `report.md`, and `runs/<journey>/<profile>/<run>/` entries inside the suite directory.
 
-**Retention contract (filesystem-local).** Artifacts under `.agents-e2e/` are local, gitignored, and operator-owned. The harness does NOT auto-prune: run directories accumulate until the operator deletes them (e.g. `rm -rf .agents-e2e/artifacts/<journey>`), so CI should treat the suite directory as the upload unit and dispose of it per build, and local operators can clear stale runs at will. The unique per-run directories plus the `latest.json` pointer make "keep the newest, drop the rest" a safe manual operation: `latest.json` always names the run to keep.
+**Retention contract (filesystem-local).** Artifacts under `.agents-e2e/` are local, gitignored, and operator-owned. The harness does NOT auto-prune: run directories accumulate until the operator deletes them (e.g. `rm -rf runs/<runId>`), so CI should treat the suite directory as the upload unit and dispose of it per build, and local operators can clear stale runs at will.
 
 ### Skill and transcript standard
 

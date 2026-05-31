@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -152,7 +152,6 @@ describe("Dev MCP Tool Router", () => {
       harness,
       browserSessions: {
         open: async () => ({ browserSessionId: "browser-1" }),
-        snapshot: async (browserSessionId) => ({ browserSessionId, refs: [] }),
         close: async (browserSessionId) => ({ status: "closed", browserSessionId }),
         list: () => [],
         execution: (browserSessionId) => ({ runId: "router-run", marker: `execution:${browserSessionId}` }),
@@ -200,23 +199,16 @@ describe("Dev MCP Tool Router", () => {
       status: "ok",
       tool: "run.begin",
       runId: "router-run",
-      artifactDir: expect.stringContaining("journey-router/router-run"),
+      artifactDir: expect.stringContaining("router-run"),
       artifacts: expect.arrayContaining([
         expect.objectContaining({ name: "seed-manifest" }),
       ]),
     });
     const seedArtifact = (begin.artifacts as Array<{ path: string }>)[0];
     expect(existsSync(seedArtifact.path)).toBe(true);
-
-    await expect(
-      router.callTool("artifact.read", { path: seedArtifact.path }),
-    ).resolves.toMatchObject({
-      status: "ok",
-      content: {
-        environment: {
-          created: [{ kind: "record", id: "record:seed-baseline" }],
-        },
-      },
+    // Agents read artifacts directly from disk (no artifact.read tool).
+    expect(JSON.parse(await readFile(seedArtifact.path, "utf8"))).toMatchObject({
+      environment: { created: [{ kind: "record", id: "record:seed-baseline" }] },
     });
 
     const step = await router.callTool("journey.step", {
@@ -228,28 +220,23 @@ describe("Dev MCP Tool Router", () => {
     expect(step).toMatchObject({
       status: "ok",
       tool: "journey.step",
-      artifactDir: expect.stringContaining("journey-router/router-run"),
+      artifactDir: expect.stringContaining("router-run"),
       result: {
         status: "passed",
         observed: { message: "execution:browser-1" },
         artifacts: expect.arrayContaining([
-          expect.objectContaining({ name: "console", kind: "console-log" }),
-          expect.objectContaining({ name: "network", kind: "network-log" }),
-          expect.objectContaining({ name: "result", kind: "json" }),
-          expect.objectContaining({ name: "step-feedback", kind: "json" }),
+          expect.objectContaining({ name: "step-report", kind: "json" }),
         ]),
-        stepFeedbackArtifact: expect.objectContaining({ name: "step-feedback" }),
+        stepReportArtifact: expect.objectContaining({ name: "step-report" }),
       },
     });
     const stepArtifacts = (step.result as { artifacts: Array<{ path: string }> }).artifacts;
     expect(stepArtifacts.map((artifact) => artifact.path)).toEqual(
       expect.arrayContaining([
-        expect.stringContaining("01-phase-phase-router/01-step-step-router/result.json"),
-        expect.stringContaining("01-phase-phase-router/01-step-step-router/step-feedback.json"),
+        expect.stringContaining("journeys/journey-router/phases/phase-router/steps/step-router/step-report.json"),
       ]),
     );
     expect(stepArtifacts.every((artifact) => !artifact.path.includes("/ui-e2e/"))).toBe(true);
-    expect(stepArtifacts.every((artifact) => !artifact.path.includes("/steps/"))).toBe(true);
 
     await expect(
       router.callTool("run.reseed", { runId: "router-run" }),
@@ -401,35 +388,22 @@ describe("Dev MCP Tool Router", () => {
         artifacts: expect.arrayContaining([
           expect.objectContaining({ name: "before", kind: "screenshot" }),
           expect.objectContaining({ name: "failure", kind: "screenshot" }),
-          expect.objectContaining({ name: "step-feedback", kind: "json" }),
+          expect.objectContaining({ name: "step-report", kind: "json" }),
         ]),
-        stepFeedbackArtifact: expect.objectContaining({ name: "step-feedback" }),
+        stepReportArtifact: expect.objectContaining({ name: "step-report" }),
       },
     });
     const artifacts = (step.result as { artifacts: Array<{ name?: string; path: string }> }).artifacts;
     const failureArtifact = artifacts.find((artifact) => artifact.name === "failure");
-    const feedbackArtifact = artifacts.find((artifact) => artifact.name === "step-feedback");
-    expect(failureArtifact?.path).toContain("01-phase-phase-failing/01-step-step-failing/failure.png");
+    const reportArtifact = artifacts.find((artifact) => artifact.name === "step-report");
+    expect(failureArtifact?.path).toContain("journeys/journey-failing/phases/phase-failing/steps/step-failing/failure.png");
     expect(existsSync(failureArtifact?.path ?? "")).toBe(true);
-    await expect(
-      router.callTool("artifact.read", { path: failureArtifact?.path }),
-    ).resolves.toMatchObject({
-      status: "ok",
-      encoding: "base64",
-    });
-    await expect(
-      router.callTool("artifact.read", { path: feedbackArtifact?.path }),
-    ).resolves.toMatchObject({
-      status: "ok",
-      content: {
-        status: "failed",
-        artifacts: {
-          primary: expect.arrayContaining([
-            expect.objectContaining({ name: "failure" }),
-            expect.objectContaining({ name: "result" }),
-          ]),
-        },
-      },
+    // The single step report carries status + failure info + the terminal artifact path.
+    const report = JSON.parse(await readFile(reportArtifact?.path ?? "", "utf8"));
+    expect(report).toMatchObject({
+      status: "failed",
+      failure: expect.objectContaining({ errors: expect.any(Array) }),
+      artifacts: { terminal: expect.stringContaining("failure.png") },
     });
 
     await rm(artifactRoot, { recursive: true, force: true });
@@ -852,18 +826,13 @@ describe("Dev MCP Tool Router", () => {
       stackId: "alpha",
       stackBinding: { stackId: "alpha" },
     });
-    const resultArtifact = (begin.artifacts as Array<{ name?: string; path: string }>).find(
-      (artifact) => artifact.name === "result",
+    const reportArtifact = (begin.artifacts as Array<{ name?: string; path: string }>).find(
+      (artifact) => artifact.name === "run-report",
     );
-    await expect(
-      router.callTool("artifact.read", { path: resultArtifact?.path }),
-    ).resolves.toMatchObject({
-      status: "ok",
-      content: {
-        runId: "bound-run",
-        stackId: "alpha",
-        stackBinding: { stackId: "alpha" },
-      },
+    expect(JSON.parse(await readFile(reportArtifact?.path ?? "", "utf8"))).toMatchObject({
+      runId: "bound-run",
+      stackId: "alpha",
+      stackBinding: { stackId: "alpha" },
     });
 
     await rm(artifactRoot, { recursive: true, force: true });
@@ -1060,16 +1029,11 @@ describe("Dev MCP Tool Router", () => {
       logs: { summary: "logs:alpha" },
       artifact: expect.objectContaining({ name: "stack-logs", kind: "json" }),
     });
-    await expect(
-      router.callTool("artifact.read", { path: (logs.artifact as { path: string }).path }),
-    ).resolves.toMatchObject({
-      status: "ok",
-      content: {
-        runId: "evidence-run",
-        stackId: "alpha",
-        tool: "stack.logs",
-        logs: { summary: "logs:alpha" },
-      },
+    expect(JSON.parse(await readFile((logs.artifact as { path: string }).path, "utf8"))).toMatchObject({
+      runId: "evidence-run",
+      stackId: "alpha",
+      tool: "stack.logs",
+      logs: { summary: "logs:alpha" },
     });
 
     const capability = await router.callTool("stack.capability.run", {
@@ -1168,15 +1132,10 @@ describe("Dev MCP Tool Router", () => {
       logs: { summary: "logs:alpha" },
       artifact: expect.objectContaining({ name: "stack-logs", kind: "json" }),
     });
-    await expect(
-      router.callTool("artifact.read", { path: (logs.artifact as { path: string }).path }),
-    ).resolves.toMatchObject({
-      status: "ok",
-      content: {
-        runId: "after-reseed",
-        stackId: "alpha",
-        tool: "stack.logs",
-      },
+    expect(JSON.parse(await readFile((logs.artifact as { path: string }).path, "utf8"))).toMatchObject({
+      runId: "after-reseed",
+      stackId: "alpha",
+      tool: "stack.logs",
     });
 
     await expect(
@@ -2010,7 +1969,6 @@ describe("Dev MCP Tool Router", () => {
       stackProvider: provider,
       browserSessions: {
         open: async () => ({ browserSessionId: "browser-1" }),
-        snapshot: async (browserSessionId) => ({ browserSessionId, refs: [] }),
         close: async (browserSessionId) => {
           events.push(`browser:${browserSessionId}`);
           return { status: "closed", browserSessionId };
@@ -2036,14 +1994,19 @@ describe("Dev MCP Tool Router", () => {
     const router = createDevMcpToolRouter({
       browserSessions: {
         open: async () => ({ browserSessionId: "browser-1" }),
-        snapshot: async (browserSessionId) => ({
-          browserSessionId,
-          refs: [{ ref: "@e1", role: "button" }],
-        }),
-        find: async (input) => ({
+        inspect: async (input) => ({
           status: "ok",
           browserSessionId: input.browserSessionId,
-          targets: [{ ref: "@f1", role: input.value }],
+          url: "http://127.0.0.1",
+          target: { input: input.target ?? null, kind: "page", resolved: true },
+          artifacts: { inspect: "inspections/0001/inspect.md" },
+          signals: { consoleErrors: 0, networkFailures: 0 },
+          refsOverlayEnabled: false,
+        }),
+        refs: async (input) => ({
+          status: "ok",
+          browserSessionId: input.browserSessionId,
+          enabled: input.enabled,
         }),
         act: async (input) => ({
           status: "ok",
@@ -2055,12 +2018,6 @@ describe("Dev MCP Tool Router", () => {
           browserSessionId: input.browserSessionId,
           matched: input.until,
         }),
-        get: async (input) => ({
-          status: "ok",
-          browserSessionId: input.browserSessionId,
-          kind: input.kind,
-          value: "value",
-        }),
         evaluate: async (input) => ({
           status: "ok",
           browserSessionId: input.browserSessionId,
@@ -2070,23 +2027,6 @@ describe("Dev MCP Tool Router", () => {
           status: "ok",
           browserSessionId: input.browserSessionId,
           output: { ran: "playwright" },
-        }),
-        console: async (input) => ({
-          status: "ok",
-          browserSessionId: input.browserSessionId,
-          entries: [],
-          nextCursor: 0,
-        }),
-        network: async (input) => ({
-          status: "ok",
-          browserSessionId: input.browserSessionId,
-          entries: [],
-          nextCursor: 0,
-        }),
-        screenshot: async (input) => ({
-          status: "ok",
-          browserSessionId: input.browserSessionId,
-          artifact: { kind: "png" },
         }),
         close: async (browserSessionId) => ({
           status: "closed",
@@ -2099,16 +2039,13 @@ describe("Dev MCP Tool Router", () => {
     expect(router.listTools().map((tool) => tool.name)).toEqual(
       expect.arrayContaining([
         "browser.open",
-        "browser.snapshot",
-        "browser.find",
+        "browser.sessions",
+        "browser.inspect",
+        "browser.refs",
         "browser.act",
         "browser.wait",
-        "browser.get",
         "browser.eval",
         "browser.playwright",
-        "browser.console",
-        "browser.network",
-        "browser.screenshot",
         "browser.close",
       ]),
     );
@@ -2117,24 +2054,20 @@ describe("Dev MCP Tool Router", () => {
       result: { browserSessionId: "browser-1" },
     });
     await expect(
-      router.callTool("browser.snapshot", { browserSessionId: "browser-1" }),
+      router.callTool("browser.inspect", { browserSessionId: "browser-1" }),
     ).resolves.toMatchObject({
       status: "ok",
-      result: { refs: [{ ref: "@e1" }] },
+      result: { status: "ok", target: { kind: "page", resolved: true } },
+    });
+    await expect(
+      router.callTool("browser.refs", { browserSessionId: "browser-1", enabled: true }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      result: { enabled: true },
     });
     await expect(router.callTool("browser.sessions")).resolves.toMatchObject({
       status: "ok",
       sessions: [{ browserSessionId: "browser-1" }],
-    });
-    await expect(
-      router.callTool("browser.find", {
-        browserSessionId: "browser-1",
-        by: "role",
-        value: "button",
-      }),
-    ).resolves.toMatchObject({
-      status: "ok",
-      result: { targets: [{ ref: "@f1" }] },
     });
     await expect(
       router.callTool("browser.act", {
@@ -2156,16 +2089,6 @@ describe("Dev MCP Tool Router", () => {
       result: { matched: { kind: "text", text: "ready" } },
     });
     await expect(
-      router.callTool("browser.get", {
-        browserSessionId: "browser-1",
-        kind: "text",
-        ref: "@e1",
-      }),
-    ).resolves.toMatchObject({
-      status: "ok",
-      result: { value: "value" },
-    });
-    await expect(
       router.callTool("browser.eval", {
         browserSessionId: "browser-1",
         code: "return 1",
@@ -2182,18 +2105,6 @@ describe("Dev MCP Tool Router", () => {
     ).resolves.toMatchObject({
       status: "ok",
       result: { output: { ran: "playwright" } },
-    });
-    await expect(
-      router.callTool("browser.console", { browserSessionId: "browser-1" }),
-    ).resolves.toMatchObject({ status: "ok", result: { entries: [] } });
-    await expect(
-      router.callTool("browser.network", { browserSessionId: "browser-1" }),
-    ).resolves.toMatchObject({ status: "ok", result: { entries: [] } });
-    await expect(
-      router.callTool("browser.screenshot", { browserSessionId: "browser-1" }),
-    ).resolves.toMatchObject({
-      status: "ok",
-      result: { artifact: { kind: "png" } },
     });
     await expect(
       router.callTool("browser.close", { browserSessionId: "browser-1" }),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEV_MCP_TOOL_GRAMMAR } from '@agent-e2e/harness/dev-mcp';
-import { PLAYWRIGHT_MCP_DEFAULT_BROWSER_MODE, type BrowserSnapshotPacket } from '@agent-e2e/harness/playwright-mcp';
+import { PLAYWRIGHT_MCP_DEFAULT_BROWSER_MODE, type BrowserInspectResult } from '@agent-e2e/harness/playwright-mcp';
 
 const requiredTools = [
   'stack.start',
@@ -22,23 +22,18 @@ const requiredTools = [
   'run.reseed',
   'run.teardown',
   'cleanup.plan',
-  'artifact.read',
   'journey.step',
   'journey.untilStep',
   'journey.untilPhase',
   'journey.phase',
   'browser.open',
   'browser.sessions',
-  'browser.snapshot',
-  'browser.find',
+  'browser.inspect',
+  'browser.refs',
   'browser.act',
   'browser.wait',
-  'browser.get',
   'browser.eval',
   'browser.playwright',
-  'browser.console',
-  'browser.network',
-  'browser.screenshot',
   'browser.close'
 ] as const;
 
@@ -71,21 +66,27 @@ describe('Dev MCP Tool Grammar contracts', () => {
     });
   });
 
-  it('treats browser.snapshot as the primary forensics packet shape', () => {
-    const packet: BrowserSnapshotPacket = {
+  it('treats browser.inspect output as a compact, path-oriented index', () => {
+    // The inspect return is an index: status, page facts, target resolution,
+    // artifact paths, and signal counters. Detailed state lives in artifacts,
+    // never inline — so there is no `refs` tree or markdown dump on the result.
+    const result: BrowserInspectResult = {
       status: 'ok',
       browserSessionId: 'browser-visible-dev',
-      url: 'http://127.0.0.1:3000',
-      title: 'Example App',
-      summary: 'Example App is ready for the next action.',
-      refs: [{ ref: '@e1', role: 'button', name: 'Create record', selector: 'button' }],
-      artifacts: [{ id: 'artifact:snapshot', kind: 'json', uri: 'artifact://snapshot.json' }],
-      warnings: [],
-      errors: [],
-      next: { actions: [{ id: 'create-record', tool: 'browser.act', why: 'Exercise the next visible UI affordance.' }] }
+      url: 'http://127.0.0.1:5173/daemons',
+      title: 'Developer Run Console',
+      target: { input: '@e1', kind: 'ref', resolved: true },
+      artifacts: {
+        inspect: 'runs/abc/inspections/0001/inspect.md',
+        inspectJson: 'runs/abc/inspections/0001/inspect.json',
+        screenshot: 'runs/abc/inspections/0001/screenshot.png',
+      },
+      signals: { consoleErrors: 0, networkFailures: 0 },
+      refsOverlayEnabled: false,
     };
 
-    expect(packet.refs[0]).toEqual({ ref: '@e1', role: 'button', name: 'Create record', selector: 'button' });
-    expect(packet.next.actions[0]).toMatchObject({ tool: 'browser.act' });
+    expect(result).not.toHaveProperty('refs');
+    expect(result.target).toMatchObject({ kind: 'ref', resolved: true });
+    expect(result.artifacts.inspectJson).toMatch(/inspect\.json$/);
   });
 });

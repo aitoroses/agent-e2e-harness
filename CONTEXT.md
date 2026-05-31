@@ -242,61 +242,53 @@ _Avoid_: caller-injected page, hidden test browser, one-shot browser fixture
 A headed browser launched by MCP dev-mode operations so agents and humans can see the product surface while journeys execute, inspect parked states, and correlate artifacts with visible UI.
 _Avoid_: invisible default, CI-only headless browser, screenshot-only debugging
 
-**Browser Snapshot**:
-The primary dev-mode browser forensics tool exposed through MCP. It should summarize the current page as an agent-usable investigation packet: URL, title, semantic structure, interactive targets, stable refs, visible errors, relevant network/console signals, screenshots or crops when useful, artifacts, and next guidance.
-_Avoid_: raw DOM dump, screenshot-only artifact, selector list, generic Playwright snapshot
+**Browser Inspect** (primary forensics):
+The primary dev-mode browser forensics tool exposed through MCP as `browser.inspect`. It packages the costly, repeated evidence-collection pattern into one call: runs the UI forensics pass, writes `inspect.md`, `inspect.json`, and `screenshot.png` to `runs/<runId>/inspections/<seq>/`, captures console errors and network failures as signals, and returns a compact index. Agents reason over the written artifacts rather than over inline payload.
+_Avoid_: raw DOM dump in tool response, screenshot-only artifact, selector list, inline tree data, separate console/network capture tools
 
 **Browser Workbench**:
-The fixed **Dev MCP Tool Grammar** for universal browser exploration and interaction: snapshot-driven refs, user-like actions, waits, targeted reads, console and network inspection, page evaluation, screenshots, tabs, and browser session controls.
+The fixed **Dev MCP Tool Grammar** for universal browser exploration and interaction: inspect-driven refs, user-like actions, waits, page evaluation, tabs, and browser session controls. The complete frozen tool surface is: `browser.open`, `browser.sessions`, `browser.inspect`, `browser.refs`, `browser.act`, `browser.wait`, `browser.eval`, `browser.playwright`, `browser.close`.
 _Avoid_: provider-owned browser action registry, journey helper registry, generic `browser.explore.run`, hidden Playwright script, raw CDP shell
 
 **Browser Playwright Escape Hatch**:
-The explicit `browser.playwright` Dev MCP tool for agent-only live diagnostics that needs direct Playwright `page`, `browser`, and context access before the interaction is crystallized into journey code. It executes an async function body supplied by the agent against the live **MCP-Owned Browser Session** and returns that body's JSON-serializable output as the tool result. Execution is timeout-bounded by default, and responses report elapsed duration plus the effective timeout. It may mutate the live browser session; snapshot refs should be treated as stale afterward. JSON `input` is passed separately from code, and latest snapshot `refs` are provided as a lightweight bridge to Playwright selectors.
+The explicit `browser.playwright` Dev MCP tool for agent-only live diagnostics that needs direct Playwright `page`, `browser`, and context access before the interaction is crystallized into journey code. It executes an async function body supplied by the agent against the live **MCP-Owned Browser Session** and returns that body's JSON-serializable output as the tool result. Execution is timeout-bounded by default, and responses report elapsed duration plus the effective timeout. It may mutate the live browser session; inspect refs should be treated as stale afterward. JSON `input` is passed separately from code, and latest inspect `refs` are provided as a lightweight bridge to Playwright selectors.
 _Avoid_: primary browser workflow, verify helper, registered journey closure, hidden generic code runner
 
 **Browser Page Evaluation**:
-The `browser.eval` Dev MCP tool for running an async function body in the page context during live diagnostics, separate from `browser.get` for simple reads and `browser.playwright` for full Playwright access. It shares the `browser.playwright` timeout and JSON-serializable output response shape. It may mutate page state; snapshot refs should be treated as stale afterward. JSON `input` is passed separately from code.
+The `browser.eval` Dev MCP tool for running an async function body in the page context during live diagnostics, separate from `browser.playwright` for full Playwright access. It shares the `browser.playwright` timeout and JSON-serializable output response shape. It may mutate page state; inspect refs should be treated as stale afterward. JSON `input` is passed separately from code.
 _Avoid_: primary interaction grammar, Playwright closure, journey helper, unbounded script
 
-**Browser Targeted Read**:
-The `browser.get` Dev MCP tool for simple targeted reads from the active browser session, using a `kind` such as text, HTML, value, attribute, title, URL, or count instead of many separate read tools.
-_Avoid_: second snapshot format, raw DOM dump, Playwright escape hatch, tool-per-property sprawl
+**Browser Inspect**:
+The standard evidence path for browser forensics: `browser.inspect`. Input `{ browserSessionId, target?, depth?, maxNodes? }` where `target` omitted means the current page, `"@<ref>"` means UI forensics ref, and any other value is treated as a selector or locator-compatible target. Returns a compact path-oriented index only: `{ status, url, title, target:{input,kind,resolved}, artifacts:{inspect,inspectJson,screenshot}, signals:{consoleErrors,networkFailures}, refsOverlayEnabled }`. No inline tree, markdown, or screenshot data in the tool response; no automatic diagnosis. Writes `runs/<runId>/inspections/<seq>/{inspect.md,inspect.json,screenshot.png}`. Console and network facts are captured as inspect signals — there are no separate console or network tools.
+_Avoid_: inline tree dumps, raw DOM payload in tool response, separate console/network tools, screenshot-only debugging
+
+**Browser Refs Overlay**:
+The `browser.refs({ enabled })` tool that toggles a live overlay painting exactly the referenceable nodes from the UI forensics tree — the same registry shared by `browser.inspect` and `browser.act`. The overlay has `pointer-events:none`, updates on DOM mutation/scroll/resize, never alters layout or intercepts clicks, and is removed completely on disable, close, or teardown. It is captured in inspect screenshots when enabled. There is no kind/filter taxonomy.
+_Avoid_: layout-altering overlays, click-intercepting overlays, separate overlay registry from inspect
+
+**Browser Ref Store**:
+The per-**MCP-Owned Browser Session** UI forensics registry that is the single source of truth shared by `browser.inspect`, the refs overlay, and `browser.act`. Refs are best-effort stable per session (`@e1`, `@e2`, …), matched by accessible role/name plus `data-ui`/`data-testid`/`id` plus DOM-path fallback. A ref is retired on node removal and never reused. `browser.act("@ref")` fails cleanly when a ref is stale or retired.
+_Avoid_: incompatible ref namespaces, multiple registries, hidden stale target reuse, reusing retired ref ids
 
 **Browser Conditional Wait**:
 The `browser.wait` Dev MCP tool for waiting on browser-visible conditions such as a ref, selector, text, URL pattern, load state, or page-context function, with timeout feedback and no unconditional sleep primitive.
 _Avoid_: fixed delay, hidden retry loop, Playwright-only wait script, unbounded wait
 
-**Browser Semantic Find**:
-The `browser.find` Dev MCP tool for resolving semantic locator queries such as role, text, label, placeholder, test id, or CSS selector into agent-usable targets without requiring a prior snapshot. It returns reusable targets; actions stay in `browser.act`.
-_Avoid_: replacing snapshot workflow, raw DOM search, product-specific selector helper, hidden Playwright locator string
-
-**Browser Ref Store**:
-The per-**MCP-Owned Browser Session** target store shared by snapshot refs and find refs. `browser.snapshot` emits `@eN` refs, `browser.find` emits `@fN` refs, and both can be used by browser workbench tools until browser state changes make them stale.
-_Avoid_: incompatible ref namespaces, selector retyping, hidden stale target reuse
-
-**Browser Signal Buffer**:
-The per-**MCP-Owned Browser Session** console and network event buffer exposed through `browser.console` and `browser.network` with cursor-based incremental reads.
-_Avoid_: stuffing detailed logs into snapshot, global log stream, hidden terminal-only signals, unbounded event dump
-
 **Browser Action Set**:
-The user-like actions supported directly by `browser.act` for common agent exploration: click, fill, press, hover, focus, check, uncheck, select, and scroll.
+The user-like actions supported directly by `browser.act` for common agent exploration: click, fill, press, hover, focus, check, uncheck, select, and scroll. Accepts `@ref` strings from the UI forensics registry or CSS selectors.
 _Avoid_: rare interaction kitchen sink, file transfer policy, coordinate-level mouse API, hidden Playwright script
 
-**Browser Screenshot Artifact**:
-An explicit screenshot artifact captured by `browser.screenshot` from an **MCP-Owned Browser Session**, returning the artifact location for agent inspection and later reference.
-_Avoid_: automatic screenshot after every action, hidden visual side effect, screenshot-only debugging
-
 **Browser Workbench Output Policy**:
-The browser workbench persistence rule: structured `browser.snapshot` packets are lightweight primary forensics and may be artifacted automatically; screenshots are explicit artifacts; targeted reads, waits, signal queries, eval, and Playwright escape-hatch calls return inline output unless a future tool explicitly asks to persist.
-_Avoid_: artifact spam, hidden screenshots, losing snapshot history, treating every exploratory output as durable proof
+The browser workbench persistence rule: `browser.inspect` writes a compact index and artifacts to `runs/<runId>/inspections/<seq>/`; tool responses are compact indexes, not inline data dumps. `browser.eval` and `browser.playwright` return inline output. No automatic screenshots outside of inspect.
+_Avoid_: artifact spam, inline tree dumps in tool responses, losing inspect history, treating every exploratory output as durable proof
 
 **MCP Tool Discoverability**:
 The contract that every agent-facing MCP tool and input field must carry clear descriptions so an agent can choose and call the tool correctly from `tools/list` without reading source code.
 _Avoid_: schema-only discovery, terse placeholder descriptions, hidden argument semantics, README-dependent tool usage
 
 **Run Forensics**:
-The per-step evidence capture for a **Journey Run**: before/after/failure screenshots, scoped console/network signals, result artifacts, and step feedback.
-_Avoid_: router-owned screenshot logic, unscoped browser logs, hidden debug side effects
+The per-step evidence capture for a **Journey Run**: before/after/failure screenshots, scoped console/network signals (captured as inspect signals, not separate files), step-report artifacts, and the inspect machinery shared with `browser.inspect`. All inspection artifacts live under `runs/<runId>/inspections/<seq>/` and step artifacts under `runs/<runId>/journeys/<journeyId>/phases/<phaseId>/steps/<stepId>/`.
+_Avoid_: router-owned screenshot logic, unscoped browser logs, separate console.json/network.json step files, hidden debug side effects
 
 **Dev MCP Tool Grammar**:
 The default Playwright-backed MCP tool vocabulary for journey-driven development: orientation, stack/readiness, run lifecycle, MCP-owned browser sessions, browser forensics, journey execution, artifacts, and cleanup.
@@ -325,6 +317,21 @@ _Avoid_: harness, transport layer
 **Tool Response Contract**:
 The shared status, guidance, error, and payload shape returned by harness tools before any transport-specific wrapping, used by both the **MCP Control Surface** and **Dev MCP Server**.
 _Avoid_: per-adapter status enum, tool-specific response shape, unchecked response cast
+
+## Agent UX Principles
+
+These principles govern the design of MCP tools and the browser workbench surface. They exist to keep the tool surface small, the agent loop fast, and the reasoning burden on the agent rather than embedded in tool plumbing.
+
+- **Simple tools, smart agents.** Tools expose facts and perform atomic actions. Agents reason, plan, and sequence.
+- **Few generic tools over many narrow wrappers.** A narrow tool that duplicates what `browser.eval` or `browser.playwright` already expresses adds cognitive surface without adding capability.
+- **Tools observe facts; agents reason.** A tool should return raw evidence — a compact index, a signal count, a status — not a diagnosis, a recommendation, or a synthesized interpretation.
+- **Tool output should be a compact index, not a dump.** Inline payloads bloat the context window and obscure what matters. Details live in artifacts; the tool response names where to find them.
+- **Details live in artifacts.** Artifact files (`inspect.md`, `inspect.json`, `screenshot.png`, `step-report.json`) are the debugging surface. Tool responses point to them; they do not replace them.
+- **Tool names should be obvious and single-purpose.** `browser.inspect` does one thing: run the evidence pass. `browser.act` does one thing: perform a user-like action. Names that describe exactly what the tool does are always preferred.
+- **No legacy aliases; no compatibility names that teach two ways to do one thing.** Removed tools (`browser.snapshot`, `browser.find`, `browser.get`, `browser.screenshot`, `browser.console`, `browser.network`, `artifact.read`) are gone without aliases. Teaching two names for one concept creates drift and confusion.
+- **If a capability is cleanly expressible via `browser.eval` or `browser.playwright`, do not add a narrow tool.** The escape hatches exist for exactly this reason.
+- **`browser.inspect` exists because it packages a costly, repeated evidence pattern.** Running the UI forensics pass, writing artifacts, and capturing signals is a multi-step sequence agents run on every meaningful state transition. One tool with a stable output contract is warranted.
+- **`browser.refs` exists because it connects live pixels to the UI forensics ref system.** The overlay lets agents correlate what they see in the browser with the `@eN` refs they use in `browser.inspect` and `browser.act`. It is not a generic annotation layer.
 
 ## Relationships
 
@@ -405,28 +412,22 @@ _Avoid_: per-adapter status enum, tool-specific response shape, unchecked respon
 - During **Harness-Driven TDD**, the MCP control surface should run as a **Dev MCP Server** over HTTP with a **Bun-Backed Dev MCP Runtime** and **Hot-Reloaded Journey Registry** so agents can keep the MCP endpoint configured while journey definitions evolve.
 - The **Dev MCP Server** should own Playwright through **MCP-Owned Browser Sessions**, not require callers to inject browser/page objects into tool calls.
 - **Visible Dev Browser** is the default for dev-mode MCP operations; closure and CI may use headless browser execution.
-- **Browser Snapshot** should be the default forensics entry point for visible browser state, combining semantic page structure, interactive refs, visual evidence, and debugging signals into one agent-readable packet.
+- **Browser Inspect** should be the default forensics entry point for visible browser state, packaging the UI forensics pass, artifact writes, and signal capture into one compact-index response.
 - Browser exploration should use a fixed **Browser Workbench** grammar under `browser.*`, not a provider-owned `browser.explore.list` / `browser.explore.run` pattern. Browser primitives are universal enough to deserve direct tools, unlike stack-specific runtime capabilities.
 - The **Browser Workbench** is agent-facing Dev MCP exploration, not a journey extension registry. Journey code already receives the configured execution objects such as Playwright `page` and `browser` through **Harness Types**.
 - `browser.playwright` is the named escape hatch for agent-only Dev MCP exploration that needs direct Playwright access. It executes an async closure-like body against the live `page`, `browser`, and context, returns the body output as the tool result, and should be documented as a last-resort exploration tool, not the primary workflow and not part of `agent-e2e verify`.
-- `browser.playwright` may mutate the live **MCP-Owned Browser Session**. After it runs, agents should assume previous `browser.snapshot` refs are stale and capture a fresh snapshot before ref-based actions.
+- `browser.playwright` may mutate the live **MCP-Owned Browser Session**. After it runs, agents should assume previous inspect refs are stale and run `browser.inspect` again before ref-based actions.
 - `browser.eval` and `browser.playwright` should accept JSON `input` separately from `code` so agents can pass data without string interpolation or quoting hazards.
-- `browser.playwright` should receive latest snapshot `refs` alongside `page`, `browser`, context, and `input`, but should not grow a large internal helper SDK that duplicates MCP tools.
+- `browser.playwright` should receive latest inspect `refs` alongside `page`, `browser`, context, and `input`, but should not grow a large internal helper SDK that duplicates MCP tools.
 - `browser.eval` and `browser.playwright` should treat `code` as an async function body with explicit `return`, not as a single expression.
-- `browser.get`, `browser.eval`, and `browser.playwright` are distinct browser read/escape layers: `browser.get` for simple targeted reads, `browser.eval` for page-context JavaScript, and `browser.playwright` for full Playwright access.
-- `browser.eval` may mutate page state because page-context JavaScript cannot be reliably constrained to read-only behavior. After it runs, agents should assume previous `browser.snapshot` refs are stale and capture a fresh snapshot before ref-based actions.
-- `browser.get` should be one targeted-read tool with a `kind` selector rather than separate tools per property, keeping the browser tool list compact while still covering common reads.
+- `browser.eval` and `browser.playwright` are the browser escape layers: `browser.eval` for page-context JavaScript, `browser.playwright` for full Playwright access.
+- `browser.eval` may mutate page state because page-context JavaScript cannot be reliably constrained to read-only behavior. After it runs, agents should assume previous inspect refs are stale and run `browser.inspect` again before ref-based actions.
 - `browser.wait` should wait for explicit browser-visible conditions with elapsed-duration and timeout feedback. It should not expose an unconditional sleep primitive in the first browser workbench design.
-- `browser.find` should provide direct semantic locator resolution for role, text, label, placeholder, test id, and CSS selector queries. It complements, but does not replace, `browser.snapshot`; refs from snapshots remain the default visible-state workflow. It returns reusable targets and should not perform actions itself.
-- `browser.snapshot` refs and `browser.find` refs should share one **Browser Ref Store** per browser session. Snapshot refs use `@eN`, find refs use `@fN`, and both are valid inputs for `browser.act`, `browser.get`, `browser.wait`, and `browser.playwright.refs`.
-- Semantic locator grammar should live in `browser.find` only. `browser.act`, `browser.get`, and `browser.wait` should accept refs or selectors rather than duplicating role/text/label/test-id inputs inline.
-- Browser console and network details should be exposed as separate `browser.console` and `browser.network` tools backed by per-session **Browser Signal Buffers**. `browser.snapshot` may summarize visible browser state, but it should not become a full console or network dump.
+- The **Browser Ref Store** is the UI forensics registry: a single source of truth per session producing `@eN` refs used by `browser.inspect`, `browser.refs`, `browser.act`, and `browser.playwright.refs`. Refs are retired on node removal and never reused.
+- Console and network facts are captured as inspect signals (`signals.consoleErrors`, `signals.networkFailures`) inside `browser.inspect` results. There are no separate `browser.console` or `browser.network` tools.
 - `browser.act` should cover the common **Browser Action Set** directly and leave rare interactions such as drag, upload, download, raw mouse, or raw keyboard APIs to `browser.playwright` until they earn first-class contracts.
-- `browser.act` should not capture screenshots automatically. Agents should call `browser.screenshot` explicitly when they need visual evidence, and `browser.screenshot` should return the artifact location.
-- `browser.snapshot` should continue to write a lightweight structured artifact automatically because it is the primary browser forensics packet and ref source. Other browser workbench calls should return inline output unless they are explicitly artifact-producing tools such as `browser.screenshot`.
+- `browser.inspect` writes artifacts to `runs/<runId>/inspections/<seq>/` automatically because it is the primary browser forensics call. Other browser workbench calls return inline output.
 - Agent-facing MCP tools must be self-describing through `tools/list`: every browser workbench tool and every input field should have descriptions that explain when to use it, accepted values, defaults, and important side effects such as stale refs or mutation.
-- `browser.tabs` should stay out of the first **Browser Workbench** slice because it changes the **MCP-Owned Browser Session** model from one active page to multi-page management. New-tab and multi-page flows can use `browser.playwright` until tabs earn a first-class follow-up.
-- `browser.network` should be read-only in the first **Browser Workbench** slice. Network routing, mocking, aborting, and HAR recording are deferred because they change product behavior or artifact weight and need a separate contract.
 - **Run Forensics** should be owned by a focused Module below the **MCP Control Surface**, keeping browser evidence capture local while the tool router stays orchestration-focused.
 - The default **Dev MCP Tool Grammar** should use reusable harness vocabulary and avoid product-specific tool names.
 - The **Reference Showcase App** README should include a **Showcase Build Narrative** so future agents and humans can understand how the app was built through journeys, not just how to run it.
@@ -479,40 +480,37 @@ _Avoid_: per-adapter status enum, tool-specific response shape, unchecked respon
 - Showcase TDD method resolved: use **Harness-Driven TDD**. Journeys are first written as text, then exercised through the harness MCP surface via a standard MCP client; each failing journey drives the next vertical implementation slice until it passes and can later crystallize.
 - Dev MCP mode resolved: development should use an HTTP **Dev MCP Server**, not only one-shot stdio, so journey definitions and app code can hot-reload during agent iteration.
 - MCP browser ownership resolved: dev-mode MCP operations should create and manage Playwright browser/page sessions themselves, headed by default for visibility, with headless reserved for closure/CI paths.
-- Browser forensics resolved: `browser.snapshot` should be the primary MCP browser forensics tool, not a narrow DOM or screenshot helper.
-- Browser workbench grammar resolved: browser tooling should expand through fixed universal `browser.*` tools rather than copying the provider-declared `stack.capability.list` / `stack.capability.run` model.
+- Browser forensics resolved: `browser.inspect` is the standard evidence path, packaging the UI forensics pass, artifact writes, and signal capture into one compact-index tool call. It exists because the pattern of capturing inspect + screenshot + console signals is costly, repeated, and worth a dedicated tool. Console and network facts surface as inspect signals, not as separate tool calls.
+- Browser workbench grammar resolved: browser tooling should use the frozen fixed surface (`browser.open`, `browser.sessions`, `browser.inspect`, `browser.refs`, `browser.act`, `browser.wait`, `browser.eval`, `browser.playwright`, `browser.close`) rather than copying the provider-declared `stack.capability.list` / `stack.capability.run` model.
 - Browser workbench audience resolved: browser workbench tools serve the agent's live MCP exploration loop, while crystallized journeys continue to use direct execution objects such as Playwright `page` and `browser`.
 - Browser escape hatch shape resolved: `browser.playwright` executes an async closure-like body with direct live Playwright access rather than a declarative mini-language or page-only evaluation.
 - Browser escape hatch output resolved: `browser.playwright` returns the closure output as the tool result and does not create automatic evidence artifacts by default.
 - Browser escape hatch serialization resolved: `browser.playwright` may use arbitrary Playwright objects inside the closure, but the returned output must be JSON-serializable for MCP transport.
 - Browser escape hatch timeout resolved: `browser.playwright` defaults to a 5s timeout and accepts an override capped at 30s so exploratory Playwright code cannot hang the Dev MCP server indefinitely. The tool response reports elapsed duration and effective timeout so agents can distinguish fast failures from timeout-bound failures.
-- Browser escape hatch mutation resolved: `browser.playwright` can mutate the live browser session during exploration, and any previous snapshot refs must be considered stale afterward.
+- Browser inspect target resolved: `browser.inspect` accepts `target` omitted (current page), `"@<ref>"` (UI forensics ref — UI forensics mode), or any selector/locator-compatible string. Returns a compact path-oriented index; all detail lives in the written artifacts.
+- Browser escape hatch mutation resolved: `browser.playwright` can mutate the live browser session during exploration, and any previous inspect refs must be considered stale afterward.
 - Browser eval boundary resolved: keep `browser.eval` as a separate page-context JavaScript tool even though `browser.playwright` exists, because agents need a lighter escape hatch for `window`, DOM, localStorage, and app globals.
 - Browser eval/playwright symmetry resolved: `browser.eval` and `browser.playwright` share timeout defaults, timeout caps, elapsed-duration reporting, and JSON-serializable output requirements; only the execution context differs.
 - Browser eval/playwright input resolved: both tools accept JSON `input` separately from `code`, and expose that input to the executed code.
-- Browser playwright refs resolved: `browser.playwright` receives selected snapshot/find refs as selector or locator metadata so agents can bridge from `@eN`/`@fN` exploration to direct Playwright calls without a larger helper SDK.
+- Browser playwright refs resolved: `browser.playwright` receives selected inspect refs as selector or locator metadata so agents can bridge from `@eN` exploration to direct Playwright calls without a larger helper SDK.
 - Browser code shape resolved: `browser.eval` and `browser.playwright` execute async function bodies with explicit `return`, allowing multi-line exploratory code instead of expression-only snippets.
-- Browser eval mutation resolved: `browser.eval` can mutate page state during exploration, so previous snapshot refs must be considered stale afterward.
-- Browser targeted read resolved: `browser.get` uses a `kind` field for text, HTML, value, attribute, title, URL, and count reads instead of expanding the MCP vocabulary with one tool per property.
+- Browser eval mutation resolved: `browser.eval` can mutate page state during exploration, so previous inspect refs must be considered stale afterward.
 - Browser wait resolved: `browser.wait` uses an `until` condition for ref, selector, text, URL pattern, load state, or page-context function, shares the browser timeout feedback shape, and intentionally omits fixed sleep in v1.
-- Browser semantic find resolved: include `browser.find` in v1 for role, text, label, placeholder, test id, and CSS selector queries, returning reusable targets rather than performing actions, while keeping `browser.snapshot` as the primary visible-state and ref workflow.
-- Browser ref store resolved: snapshot refs use `@eN`, find refs use `@fN`, and both share one browser session ref store accepted by the browser workbench tools.
-- Browser locator ownership resolved: `browser.find` owns semantic locator resolution; `browser.act`, `browser.get`, and `browser.wait` consume refs or selectors and do not repeat the semantic locator grammar.
-- Browser signal buffers resolved: expose console and network events through `browser.console` and `browser.network` with cursor/since incremental reads per browser session rather than embedding detailed signal history in every snapshot.
-- Browser action set resolved: `browser.act` supports click, fill, press, hover, focus, check, uncheck, select, and scroll in the browser workbench v1; rarer interactions stay behind `browser.playwright`.
-- Browser screenshot capture resolved: `browser.act` does not auto-capture screenshots; `browser.screenshot` is explicit and returns the screenshot artifact location.
-- Browser workbench output policy resolved: `browser.snapshot` auto-artifacts its structured packet, `browser.screenshot` is explicit and artifact-producing, and other browser workbench tools return inline output by default.
+- Browser ref store resolved: the UI forensics registry is the single source of truth for `@eN` refs, shared by `browser.inspect`, the refs overlay, and `browser.act`. Refs are retired on node removal and never reused.
+- Browser refs overlay resolved: `browser.refs({ enabled })` toggles a live overlay painting exactly the referenceable nodes from the UI forensics registry. It has `pointer-events:none`, never alters layout, and is captured in inspect screenshots when enabled.
+- Browser inspect signals resolved: console errors and network failures are captured as signals inside `browser.inspect` results (`signals.consoleErrors`, `signals.networkFailures`) rather than through separate `browser.console` and `browser.network` tools. Removed tools (`browser.snapshot`, `browser.find`, `browser.get`, `browser.screenshot`, `browser.console`, `browser.network`, `artifact.read`) have no aliases or compatibility names.
+- Browser action set resolved: `browser.act` supports click, fill, press, hover, focus, check, uncheck, select, and scroll; it accepts `@ref` strings from the UI forensics registry or CSS selectors.
+- Browser workbench output policy resolved: `browser.inspect` writes a compact index and artifacts to `runs/<runId>/inspections/<seq>/`; tool responses are compact indexes, not inline data dumps. Other browser workbench tools return inline output.
 - MCP discoverability resolved: browser workbench implementation must include high-quality tool and input descriptions in the MCP schemas, not rely on README prose or source inspection for correct agent usage.
-- Browser tabs deferred: avoid `browser.tabs` in the first Browser Workbench slice because it changes browser session shape; use `browser.playwright` for exceptional multi-page exploration until a tab model is designed.
-- Browser network mutation deferred: `browser.network` v1 observes network events only; route/mock/abort/HAR capabilities stay out of scope until mutation and artifact semantics are designed.
+- Browser surface frozen: the complete browser tool surface is `browser.open`, `browser.sessions`, `browser.inspect`, `browser.refs`, `browser.act`, `browser.wait`, `browser.eval`, `browser.playwright`, `browser.close`. Capabilities expressible via `browser.eval` or `browser.playwright` do not earn separate narrow tools. New narrow tools are only added when a capability is costly, repeated, and not expressible through existing tools (as `browser.inspect` and `browser.refs` are).
 - Dev MCP tool direction resolved: use a Playwright-backed MCP tool grammar shaped around stack, run, browser, journey, artifact, cleanup, and proof operations.
 - Showcase documentation outcome resolved: the showcase README should tell how the showcase was built through the harness, producing a working app, agent-inspectable proof history, and CI-demonstrable verification.
 - Journey UX priority resolved: design the journey authoring and agent execution experience upfront before building the richer showcase, so the app demonstrates an intentional proof workflow rather than accidental tool plumbing.
 - Journey UX user priority resolved: optimize first for the coding agent in dev mode, with human review and CI execution served by the same artifacts and closure evidence.
 - Skill extraction direction resolved: document the showcase construction procedure from conception through CI crystallization so it can become a reusable `SKILL.md`.
 - Skill bootstrap resolved: the future `SKILL.md` should include repo initialization through `npx skills`, so the workflow can start from a clean repository rather than assuming local manual setup.
-- Artifact layout resolved: primary proof/debug output belongs under `.agents-e2e/artifacts/<journey>/<run>/`, with numbered `01-phase-.../01-step-.../` folders. Do not keep product-specific nesting from earlier harnesses, generic `steps/` nesting, or `.scratch` as a primary proof path.
-- Failure evidence resolved: failed journey steps must return first-class artifacts too, especially `failure.png`, `result.json`, `console.json`, `network.json`, and `step-feedback.json`, so agents can debug from MCP without hidden terminal state.
+- Artifact layout resolved: primary proof/debug output belongs under `runs/<runId>/` with `run-report.md`, `run-report.json`, `inspections/<seq>/`, and `journeys/<journeyId>/phases/<phaseId>/steps/<stepId>/` folders. The run id is timestamp-first (e.g. `2026-05-31T10-24-18Z-auth-boundary-oc7`). Do not keep product-specific nesting from earlier harnesses, numbered `01-phase-.../01-step-.../` nesting, generic `steps/` nesting, or `.scratch` as a primary proof path.
+- Failure evidence resolved: failed journey steps must return first-class artifacts too, especially `failure.png` and `step-report.json`, so agents can debug from MCP without hidden terminal state. Console and network facts are captured as inspect signals inside the step inspect artifacts, not as separate `console.json`/`network.json` step files.
 - Skill packaging resolved: the consumer workflow skill lives in `skills/agent-e2e-harness/SKILL.md` after `npx skills init`; local installed copies under `.codex/` or `.agents/` are not versioned.
 - Proof transcript resolved: meaningful dogfood MCP runs should be summarized in `docs/showcase/mcporter-proof-transcript.md` so validation survives beyond terminal scrollback while generated `.agents-e2e/` artifacts remain ignored.
 - Showcase organization resolved: the showcase must model best-practice consumer-app layout, with app routes in `apps/showcase/app`, reusable product/harness integration code in `apps/showcase/src`, and app E2E tests in `apps/showcase/test` rather than inside `packages/harness/test`.
@@ -526,8 +524,8 @@ _Avoid_: per-adapter status enum, tool-specific response shape, unchecked respon
 - Verify browser isolation resolved: verify owns one Playwright browser for the process and creates a fresh browser context/page per selected journey/profile run. Each run closes its context after completion and receives an isolated run id plus artifact scope.
 - Verify failure/reporting resolved: verify completes all scheduled runs by default, then exits non-zero if any selected run failed. `--fail-fast` may stop scheduling new runs after the first failure, but cleanup, browser close, stack stop, and unified reporting still run. Verify produces one suite-level report that summarizes all selected journey/profile results and links to per-run artifacts.
 - Verify report format resolved: verify writes both a human Markdown report and a machine JSON report by default. The report captures suite timing, config path, stack summary, selected journey/profile runs, workers, per-run seed/step/cleanup status, artifact links, warnings/errors, and exit-code reason.
-- Verify suite artifact layout resolved: verify writes one suite artifact directory under `.agents-e2e/artifacts/_suites/<suite-id>/`, containing `report.md`, `report.json`, and per-run artifacts under `runs/`. CI can upload that one suite directory as the verification artifact.
-- Verify artifact scoping resolved: dev-mode MCP keeps the flat iterative layout `.agents-e2e/artifacts/<journey>/<run>/`, while `agent-e2e verify` writes selected run artifacts under `.agents-e2e/artifacts/_suites/<suite-id>/runs/<journey>/<profile>/<run>/` so a CI verify run is self-contained.
+- Verify suite artifact layout resolved: verify writes one suite artifact directory under `.agents-e2e/artifacts/_suites/<suite-id>/`, containing `report.md`, `report.json`, and per-run artifacts under `runs/`. CI can upload that one suite directory as the verification artifact. Run artifacts use the same `runs/<runId>/` tree shape with `run-report.md`, `run-report.json`, step folders, and inspect folders.
+- Verify artifact scoping resolved: dev-mode MCP keeps the iterative layout under a `runs/<runId>/` directory per run, while `agent-e2e verify` writes selected run artifacts under `.agents-e2e/artifacts/_suites/<suite-id>/runs/<journey>/<profile>/<run>/` so a CI verify run is self-contained. There is no separate `result.json`, `index.json`, or `latest.json` in the new artifact contract; `run-report.md` and `run-report.json` are the whole-run entry points.
 - Verify id contract resolved: verify uses CI-aware suite ids when available, such as `verify-github-<run-id>-<attempt>`, and a UTC timestamp plus short suffix locally. Per-run ids are readable, slugged from journey id, profile id, and selection index so artifact paths remain stable within the suite.
 - Verify selection model resolved: exact selectors, glob selectors, tags, excludes, profiles, all-profile expansion, and named verify suites are all part of the verify product surface. Tags and named suites belong in `agent-e2e.config.ts`; CLI selectors compose with or override the configured selection for local and CI use.
 - Verify journey tags resolved: tags live on journeys, not profiles. Tags classify the journey's purpose or risk class; suites select profile variants explicitly when needed.

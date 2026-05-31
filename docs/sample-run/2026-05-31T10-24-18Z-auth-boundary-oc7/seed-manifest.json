@@ -1,0 +1,14 @@
+{
+  "status": "passed",
+  "profile": {
+    "id": "default"
+  },
+  "environment": {
+    "checked": [],
+    "created": [],
+    "forbidden": []
+  },
+  "artifacts": [],
+  "warnings": [],
+  "errors": []
+}

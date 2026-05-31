@@ -1,6 +1,6 @@
 import { allocateTcpPort, type AgentE2EStackApiContract, type StackProvider } from '@agent-e2e/harness/stack';
 import { defineAgentE2EConfig, DEFAULT_DEV_MCP_PORT, type AgentE2EDevMcpApiContract, type DevMcpToolName } from '@agent-e2e/harness/dev-mcp';
-import type { AgentE2EPlaywrightMcpApiContract, BrowserSnapshotPacket } from '@agent-e2e/harness/playwright-mcp';
+import type { AgentE2EPlaywrightMcpApiContract, BrowserInspectResult } from '@agent-e2e/harness/playwright-mcp';
 import type { RunArtifacts } from '@agent-e2e/harness/artifacts';
 import { createResourceRegistry, defineResourceKind, type HarnessTypes } from '@agent-e2e/harness/core';
 
@@ -11,7 +11,7 @@ type StackSurface = Expect<Equal<AgentE2EStackApiContract['surface'], 'stack-pro
 type DevMcpSurface = Expect<Equal<AgentE2EDevMcpApiContract['surface'], 'dev-mcp-http-server-contracts'>>;
 type PlaywrightMcpSurface = Expect<Equal<AgentE2EPlaywrightMcpApiContract['surface'], 'playwright-backed-mcp-contracts'>>;
 
-const toolName: DevMcpToolName = 'browser.snapshot';
+const toolName: DevMcpToolName = 'browser.inspect';
 const stackProvider: StackProvider<{ id: string }> = {
   id: 'typed-stack',
   async start() {
@@ -40,16 +40,14 @@ const devMcpConfig = defineAgentE2EConfig<TypeHarness>({
   port: DEFAULT_DEV_MCP_PORT,
   browserSessions: false
 });
-const snapshot: BrowserSnapshotPacket = {
+const inspectResult: BrowserInspectResult = {
   status: 'ok',
   browserSessionId: 'browser-1',
   url: 'http://127.0.0.1:3000',
-  summary: 'Page snapshot',
-  refs: [],
-  artifacts: [],
-  warnings: [],
-  errors: [],
-  next: { actions: [] }
+  target: { input: null, kind: 'page', resolved: true },
+  artifacts: { inspect: 'inspections/0001/inspect.md' },
+  signals: { consoleErrors: 0, networkFailures: 0 },
+  refsOverlayEnabled: false
 };
 const runArtifacts: RunArtifacts = {
   journeyId: 'journey:type',
@@ -62,6 +60,6 @@ void toolName;
 void stackProvider;
 void devMcpConfig;
 void allocateTcpPort;
-void snapshot;
+void inspectResult;
 void runArtifacts;
 export type AdapterSubpathContract = StackSurface | DevMcpSurface | PlaywrightMcpSurface;

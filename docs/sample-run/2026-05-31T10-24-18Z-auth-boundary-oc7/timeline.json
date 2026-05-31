@@ -1,0 +1,10 @@
+[
+  {
+    "phaseId": "phase:smoke",
+    "stepId": "step:open-console",
+    "status": "passed",
+    "startedAt": "2026-05-31T18:35:20.013Z",
+    "endedAt": "2026-05-31T18:35:20.013Z",
+    "durationMs": 0
+  }
+]

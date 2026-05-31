@@ -35,7 +35,7 @@ In another terminal, discover the tools:
 mcporter list http://127.0.0.1:3766/mcp --allow-http --schema --json
 ```
 
-Expected checkpoint: `"status": "ok"` and the Dev MCP tools, including `stack.start`, `stack.list`, `stack.logs`, `stack.capability.list`, `stack.capability.run`, `run.begin`, `browser.open`, `browser.find`, `browser.wait`, `browser.get`, `browser.console`, `browser.network`, `browser.eval`, `browser.playwright`, `journey.step`, `artifact.read`, `cleanup.plan`, `run.teardown`, and `stack.stop`.
+Expected checkpoint: `"status": "ok"` and the Dev MCP tools, including `stack.start`, `stack.list`, `stack.logs`, `stack.capability.list`, `stack.capability.run`, `run.begin`, `browser.open`, `browser.sessions`, `browser.inspect`, `browser.refs`, `browser.act`, `browser.wait`, `browser.eval`, `browser.playwright`, `browser.close`, `journey.step`, `cleanup.plan`, `run.teardown`, and `stack.stop`.
 
 Discover the provider-owned stack capability surface:
 
@@ -98,19 +98,17 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.o
 
 Expected checkpoint: `"status": "open"` and a `browserSessionId`.
 
-Capture a snapshot, resolve the button with `browser.find`, then click the fresh find ref:
+Inspect the page, optionally enable the refs overlay, then act on the button ref:
 
 ```sh
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.snapshot --args '{"browserSessionId":"<browserSessionId>"}' --output json
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.find --args '{"browserSessionId":"<browserSessionId>","by":"role","value":"button","name":"Create proof note"}' --output json
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.act --args '{"browserSessionId":"<browserSessionId>","ref":"@f1","action":"click"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.inspect --args '{"browserSessionId":"<browserSessionId>"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.refs --args '{"browserSessionId":"<browserSessionId>","enabled":true}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.act --args '{"browserSessionId":"<browserSessionId>","ref":"@e1","action":"click"}' --output json
 mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.wait --args '{"browserSessionId":"<browserSessionId>","until":{"kind":"text","text":"Proof note persisted"},"timeoutMs":5000}' --output json
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.get --args '{"browserSessionId":"<browserSessionId>","selector":"body","kind":"text"}' --output json
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.console --args '{"browserSessionId":"<browserSessionId>","since":0}' --output json
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.network --args '{"browserSessionId":"<browserSessionId>","since":0,"urlIncludes":"api/notes"}' --output json
+mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool browser.inspect --args '{"browserSessionId":"<browserSessionId>"}' --output json
 ```
 
-Expected checkpoints: `"title": "Proof Notes Showcase"`, a returned `@f1` button ref, `"action": "click"`, a successful wait with `durationMs`, targeted text that includes the created note, and cursor-based console/network packets.
+Expected checkpoints: first `browser.inspect` returns `{ status, url, title, artifacts, signals }` with `signals.consoleErrors: 0`; `browser.refs` confirms overlay enabled; `browser.act` confirms click; `browser.wait` returns successful with `durationMs`; second `browser.inspect` shows post-action state with `signals.consoleErrors: 0`. Open the written `inspect.md` artifact for full page detail.
 
 Run the proof step:
 
@@ -128,13 +126,14 @@ mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool stack.cap
 
 Expected checkpoint: `"toolId": "notes.list"` and `"output"` includes the browser-created proof note.
 
-Read the debug packet:
+Read the step report artifact path returned in the `journey.step` response:
 
 ```sh
-mcporter call --http-url http://127.0.0.1:3766/mcp --allow-http --tool artifact.read --args '{"path":"<step_feedback_artifact.path>"}' --output json
+# The step-report.json path is returned in the journey.step response as step_report_artifact.path
+# Read it directly from the filesystem or open it in the runs/<runId>/journeys/... directory
 ```
 
-Expected checkpoint: `"content": { "status": "passed" }` and `"consoleErrors": 0`.
+Expected checkpoint: `step-report.json` has `"status": "passed"` and `"signals": { "consoleErrors": 0 }`.
 
 Preview and delete owned resources:
 
@@ -189,26 +188,31 @@ npm run compose:down --workspace @agent-e2e/showcase
 
 ## Artifacts
 
-Interactive artifacts are generated under `.agents-e2e/artifacts/<journey>/<run>/`:
+Run artifacts are generated under a timestamp-first run directory:
 
 ```text
-.agents-e2e/artifacts/showcase-proof-notes/showcase-dev/
-  seed-manifest.json
-  result.json
-  timeline.json
-  metrics.json
-  owned-resources.json
-  cleanup-plan.json
-  cleanup.json
-  forensics/browser-snapshot-*.json
-  01-phase-phase-proof-notes/01-step-step-create-proof-note/
-    before.png
-    after.png
-    console.json
-    network.json
-    result.json
-    step-feedback.json
+runs/
+  latest -> <runId>                 # local convenience symlink only
+  <runId>/
+    run-report.md                   # human entry point — open this first
+    run-report.json                 # whole-run verdict + index
+    seed-manifest.json
+    timeline.json
+    metrics.json
+    owned-resources.json
+    inspections/<seq>/
+      inspect.md
+      inspect.json
+      screenshot.png
+    journeys/showcase:proof-notes/phases/phase:proof-notes/steps/step:create-proof-note/
+      before.png
+      after.png
+      inspect.md
+      inspect.json
+      step-report.json
 ```
+
+There is no separate `result.json`, `index.json`, `latest.json`, `console.json`, `network.json`, or `step-feedback.json`. `run-report.md` and `run-report.json` are the whole-run entry points. `step-report.json` is the single agent-facing per-step report. Console and network facts are signals inside inspect artifacts (`signals.consoleErrors`, `signals.networkFailures`).
 
 Verify suite reports are generated under `.agents-e2e/artifacts/_suites/<suite-id>/`:
 
