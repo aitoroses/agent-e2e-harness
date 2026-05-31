@@ -17,18 +17,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
-## [1.4.1] - 2026-05-31
+## [2.0.0] - 2026-05-31
 
 ### Added
 
 - Preferred **Stack Capability** language for provider-declared stack tools. Dev MCP now exposes `stack.capability.list` and `stack.capability.run` for stack-specific inspection, preparation, and controlled local mutation such as database reads, seed helpers, feature flags, or setup-token minting. The API makes the adopter mental model explicit: `stack.*` owns lifecycle/status/logs, `journey.*` owns deterministic state progression, `browser.*` owns UI interaction, and `stack.capability.*` owns product-specific stack capabilities.
-- Public TypeScript aliases for the same model: `defineStackCapability`, `defineStackCapabilities`, `StackCapabilityDefinition`, `StackCapabilityDescriptor`, `StackCapabilityExecutionClient`, and related `StackCapability*` type aliases. `StackProvider.capabilities` is the preferred provider field, and verify-time journey execution now exposes `execution.stack.capability.run(...)`.
+- Public TypeScript surface for the same model: `defineStackCapability`, `defineStackCapabilities`, `StackCapabilityDefinition`, `StackCapabilityDescriptor`, and `StackCapabilityExecutionClient`. `StackProvider.capabilities` is the provider field, and verify-time journey execution exposes `execution.stack.capability.run(...)`.
 - Preferred **Runtime Capability** language for Runtime Target tools. Dev MCP now exposes `runtime.capability.list` and `runtime.capability.run`, and `RuntimeTarget.capabilities`, `defineRuntimeCapability`, and `defineRuntimeCapabilities` are the preferred TypeScript surface.
 
-### Deprecated
+### Removed
 
-- `stack.explore.list`, `stack.explore.run`, `defineStackExploreTools`, `defineStackExploreTool`, `StackProvider.explore`, and `execution.stack.explore.run(...)` remain fully functional compatibility aliases, but new adopters should use the `capability` names. The old names are kept for 1.4.x compatibility and to avoid breaking existing consumers.
-- `runtime.explore.list`, `runtime.explore.run`, `defineRuntimeExploreTool`, and `RuntimeTarget.explore` remain fully functional compatibility aliases.
+- Removed `stack.explore.list`, `stack.explore.run`, `defineStackExploreTools`, `defineStackExploreTool`, `StackProvider.explore`, and `execution.stack.explore.run(...)`.
+- Removed `runtime.explore.list`, `runtime.explore.run`, `defineRuntimeExploreTool`, and `RuntimeTarget.explore`.
 
 ## [1.4.0] - 2026-05-30
 

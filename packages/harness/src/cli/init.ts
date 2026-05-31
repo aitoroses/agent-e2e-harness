@@ -218,7 +218,7 @@ function printInitReport(
     '       agent-e2e call journey.step    \'{"runId":"<from run.begin>","phaseId":"phase:home","stepId":"step:title"}\'',
     "",
     "  Add a stackProvider for managed infra (then stack.start/stack.status), and use",
-    "  the browser.* tools to explore the UI. See the README for the full Dev MCP loop.",
+    "  the browser.* tools to inspect the UI. See the README for the full Dev MCP loop.",
   );
 
   stdout.write(`${lines.join("\n")}\n`);

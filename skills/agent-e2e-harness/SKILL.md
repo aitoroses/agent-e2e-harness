@@ -65,8 +65,6 @@ runtime.logs
 runtime.access.status
 runtime.capability.list
 runtime.capability.run
-runtime.explore.list
-runtime.explore.run
 ```
 
 Attached Runtime Mode does not own infrastructure lifecycle. Start and stop the external runtime through product commands. `runtime.logs` requires `tail` and may accept `serviceId` plus best-effort `level`. Access Context status and Access Resolvers must not expose secret material in agent-visible responses; automatic `browser.open` authentication wiring is not part of this v1 attached runtime path unless product code supplies it.
@@ -85,13 +83,11 @@ stack.stop
 stack.logs
 stack.capability.list
 stack.capability.run
-stack.explore.list
-stack.explore.run
 ```
 
 `stack.start` returns a `stackId`; pass that id to `stack.status`, `run.begin`, `stack.logs`, `stack.capability.run`, and `stack.stop`. Use `stack.list` to recover running Stack Instances after compaction or to compare two live stacks during a multi-stack investigation. `run.begin` requires a valid `stackId` when a stack provider exists, creates the run's Run Stack Binding, and rejects `stackId` when no provider exists. `stack.status` is the unified stack-state packet. `StackStatusPacket.services` is the journey-facing runtime contract for dynamic URLs, service ids, endpoints, checks, warnings, errors, artifacts, and next actions. Do not invent native `stack.services`, `stack.health`, or `stack.env` tools for v1.
 
-`stack.logs` is live diagnostics. It requires a `stackId`, one `serviceId`, a required `tail`, and optional `stream: "stdout" | "stderr" | "combined"`. `stack.logs` and `stack.capability.run` accept optional `runId` only to capture artifacts, and reject capture when the run is bound to a different `stackId`. `stack.explore.list` and `stack.explore.run` remain compatibility aliases.
+`stack.logs` is live diagnostics. It requires a `stackId`, one `serviceId`, a required `tail`, and optional `stream: "stdout" | "stderr" | "combined"`. `stack.logs` and `stack.capability.run` accept optional `runId` only to capture artifacts, and reject capture when the run is bound to a different `stackId`.
 
 Stack providers should use **StackStartContext** and **Named Stack Allocations** as the default stack-provider pattern. In `start(ctx)`, use `ctx.stackId`, `ctx.mode`, `ctx.workerIndex`, `ctx.workerCount`, `ctx.suiteId`, and `ctx.artifactScope` to name resources. Allocate dynamic ports with `await ctx.allocatePort(name)` and stack-scoped files or directories with `ctx.allocateArtifactPath(name, { kind: "file" | "directory" })`. These allocations make parallel Dev MCP checks and worker-scoped verify reports explainable without replacing `StackStatusPacket.services` as the data journeys use.
 
@@ -104,7 +100,7 @@ Provider-declared `stack.capability.*` tools must have:
 - mandatory Zod `input` and `output` schemas
 - a handler that receives `{ input, handle }`, where `handle` is the selected Stack Instance handle returned by `start`
 
-Only Verify Observation Tools can be used from journey execution during `agent-e2e verify`: `availableIn` includes `verify` and `risk` is exactly `none`. Dev-only tools must not fake product-visible behavior in CI. Mutations must come through the app path, seed, journey steps, reseed, or cleanup. Use `execution.stack.capability.run(...)` in new journeys; `execution.stack.explore.run(...)` is a compatibility alias.
+Only Verify Observation Tools can be used from journey execution during `agent-e2e verify`: `availableIn` includes `verify` and `risk` is exactly `none`. Dev-only tools must not fake product-visible behavior in CI. Mutations must come through the app path, seed, journey steps, reseed, or cleanup. Use `execution.stack.capability.run(...)`.
 
 ## Browser Workbench Surface
 

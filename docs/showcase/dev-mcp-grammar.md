@@ -24,7 +24,6 @@ The default Dev MCP grammar defines reusable Agent E2E Harness vocabulary for lo
 - `stack.logs` — reads recent live logs for one active service on one explicit `stackId`; requires `serviceId` and `tail`, with optional `stream`; optional `runId` captures artifacts only when the run is bound to the same `stackId`.
 - `stack.capability.list` — lists provider-declared stack capabilities with JSON Schemas derived from Zod input/output schemas.
 - `stack.capability.run` — runs one provider-declared stack capability against one explicit `stackId`; optional `runId` captures artifacts only when the run is bound to the same `stackId`.
-- `stack.explore.list` / `stack.explore.run` — backwards-compatible aliases for `stack.capability.*`.
 - `stack.stop` — stops one explicit Stack Instance.
 - `run.reseed` — cleans journey-owned resources, then applies Environment Seed.
 

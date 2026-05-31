@@ -132,8 +132,8 @@ Observed evidence:
 
 - `compose:up` built image `agent-e2e-showcase-compose:local` from `apps/showcase/Dockerfile`, using `.dockerignore` and `npm ci --ignore-scripts`; `postgres` became healthy and `showcase` started.
 - `agent-e2e attached --target showcase-compose` stayed running on alternate port `3777`, avoiding the default `agent-e2e dev` port at `3766`.
-- `mcporter list` discovered the attached Runtime Tool Surface, including `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.capability.list`, and `runtime.capability.run`; `runtime.explore.*` remains as a backwards-compatible alias.
-- `runtime.list` returned attached target `showcase-compose` with capabilities `status`, `logs`, `access`, `capability`, and `explore`.
+- `mcporter list` discovered the attached Runtime Tool Surface, including `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.capability.list`, and `runtime.capability.run`.
+- `runtime.list` returned attached target `showcase-compose` with capabilities `status`, `logs`, `access`, `capability`,.
 - `runtime.status` returned `ready` with service `showcase-web` at `http://127.0.0.1:3100`.
 - `runtime.access.status` returned the declared `compose-runtime-logs` Access Context without secret material.
 - `runtime.logs` returned structured Compose log entries with `truncated: false` and wrote `.agents-e2e/artifacts/_runtime/showcase-compose/runtime-logs-2026-05-18t12-36-00-693z.json`.

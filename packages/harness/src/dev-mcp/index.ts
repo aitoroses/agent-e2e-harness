@@ -113,8 +113,6 @@ export const DEV_MCP_TOOL_GRAMMAR = [
   "stack.logs",
   "stack.capability.list",
   "stack.capability.run",
-  "stack.explore.list",
-  "stack.explore.run",
   "stack.stop",
   "runtime.list",
   "runtime.status",
@@ -122,8 +120,6 @@ export const DEV_MCP_TOOL_GRAMMAR = [
   "runtime.access.status",
   "runtime.capability.list",
   "runtime.capability.run",
-  "runtime.explore.list",
-  "runtime.explore.run",
   "journey.list",
   "journey.inspect",
   "run.begin",
@@ -292,8 +288,6 @@ export interface AgentE2EDevMcpManifest {
     accessStatusTool: "runtime.access.status";
     capabilityListTool: "runtime.capability.list";
     capabilityRunTool: "runtime.capability.run";
-    exploreListTool: "runtime.explore.list";
-    exploreRunTool: "runtime.explore.run";
   };
   stack?: {
     startTool: "stack.start";
@@ -452,8 +446,6 @@ export async function startAgentE2EDevMcp<
             accessStatusTool: "runtime.access.status",
             capabilityListTool: "runtime.capability.list",
             capabilityRunTool: "runtime.capability.run",
-            exploreListTool: "runtime.explore.list",
-            exploreRunTool: "runtime.explore.run",
           },
         }
       : {}),
@@ -706,16 +698,14 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
             throw error;
           }
         }
-        case "stack.capability.list":
-        case "stack.explore.list": {
+        case "stack.capability.list": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
           return ok(name, {
             tools: await stackCapabilityDescriptors(options.stackProvider),
           });
         }
-        case "stack.capability.run":
-        case "stack.explore.run": {
+        case "stack.capability.run": {
           if (!options.stackProvider)
             return missingDependency(name, "stackProvider");
           const unexpectedKey = firstUnexpectedKey(args, ["stackId", "toolId", "input", "runId"]);
@@ -728,18 +718,11 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
               const incompatible = validateStackEvidenceBinding(name, args, stackId);
               if (incompatible) return incompatible;
             }
-            const result =
-              name === "stack.capability.run"
-                ? await stackInstances!.capabilityRun({
-                    toolId,
-                    input: args.input,
-                    ...(stackId ? { stackId } : {}),
-                  })
-                : await stackInstances!.exploreRun({
-                    toolId,
-                    input: args.input,
-                    ...(stackId ? { stackId } : {}),
-                  });
+            const result = await stackInstances!.capabilityRun({
+              toolId,
+              input: args.input,
+              ...(stackId ? { stackId } : {}),
+            });
             const artifact = stackId
               ? await captureStackEvidence(name, args, stackId, {
                   toolId: result.toolId,
@@ -807,19 +790,14 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           });
           return ok(name, { targetId: target.id, logs: { ...logs, artifacts: [...(logs.artifacts ?? []), artifact] }, artifact });
         }
-        case "runtime.capability.list":
-        case "runtime.explore.list": {
+        case "runtime.capability.list": {
           if (!runtimeRegistry)
             return missingDependency(name, "runtimeTargets");
           const target = resolveRuntimeTarget(runtimeRegistry, args, options.runtimeTargetId);
-          // Both the capability tool and its explore alias resolve the same merged
-          // definition set; runtimeExploreDescriptors is a passthrough kept only as a
-          // back-compat export. The alias tool name is preserved via `name` in ok(...).
           const tools = await runtimeCapabilityDescriptors(target);
           return ok(name, { targetId: target.id, tools });
         }
-        case "runtime.capability.run":
-        case "runtime.explore.run": {
+        case "runtime.capability.run": {
           if (!runtimeRegistry)
             return missingDependency(name, "runtimeTargets");
           const unexpectedKey = firstUnexpectedKey(args, ["targetId", "toolId", "input", "journeyId", "profileId", "runId"]);
@@ -829,9 +807,6 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
           const toolId = stringArg(args, "toolId");
           const gate = runtimeCapabilityRiskGate(name, runtimeRegistry, target, toolId, args, options.journeys);
           if (gate) return gate;
-          // runRuntimeExploreTool is a passthrough to runRuntimeCapability; call the
-          // capability implementation directly for both names. The alias tool name and
-          // its error-code prefix (via runtimeToolErrorCode) are still preserved.
           const output = await runRuntimeCapability(target, toolId, args.input);
           return ok(name, { targetId: target.id, toolId, output });
         }
@@ -1131,9 +1106,7 @@ export function createDevMcpToolRouter<TStackHandle = unknown>(
     });
     const artifactName = name === "stack.logs"
       ? "stack-logs"
-      : name === "stack.explore.run"
-        ? `stack-explore-${safePathSegment(optionalStringArg(args, "toolId") ?? "run")}`
-        : `stack-capability-${safePathSegment(optionalStringArg(args, "toolId") ?? "run")}`;
+      : `stack-capability-${safePathSegment(optionalStringArg(args, "toolId") ?? "run")}`;
     return await writeJsonArtifact(
       run,
       `stack-evidence/${artifactName}.json`,
@@ -1338,8 +1311,6 @@ function implementedToolNames(
       "stack.logs",
       "stack.capability.list",
       "stack.capability.run",
-      "stack.explore.list",
-      "stack.explore.run",
       "stack.stop",
     );
 
@@ -1351,8 +1322,6 @@ function implementedToolNames(
       "runtime.access.status",
       "runtime.capability.list",
       "runtime.capability.run",
-      "runtime.explore.list",
-      "runtime.explore.run",
     );
 
   if (options.harness)
@@ -1394,8 +1363,6 @@ function summaryFor(name: DevMcpToolName): string {
     "stack.logs": "Read live managed stack service logs.",
     "stack.capability.list": "List provider-declared stack capabilities.",
     "stack.capability.run": "Run one provider-declared stack capability.",
-    "stack.explore.list": "Deprecated alias for stack.capability.list.",
-    "stack.explore.run": "Deprecated alias for stack.capability.run.",
     "stack.stop": "Stop the managed development stack.",
     "runtime.list": "List configured Runtime Targets.",
     "runtime.status": "Read Runtime Target readiness and service status.",
@@ -1403,8 +1370,6 @@ function summaryFor(name: DevMcpToolName): string {
     "runtime.access.status": "Read secret-safe Runtime Target access status.",
     "runtime.capability.list": "List product-declared Runtime Capabilities.",
     "runtime.capability.run": "Run one product-declared Runtime Capability with risk gates.",
-    "runtime.explore.list": "Deprecated alias for runtime.capability.list.",
-    "runtime.explore.run": "Deprecated alias for runtime.capability.run.",
     "run.begin": "Begin a journey run.",
     "run.reseed":
       "Delete journey-owned resources and run environment seed again.",
@@ -1433,11 +1398,11 @@ function summaryFor(name: DevMcpToolName): string {
 }
 
 function stackToolErrorCode(name: DevMcpToolName, suffix: string): string {
-  return name.startsWith("stack.capability.") ? `stack-capability-${suffix}` : `stack-explore-${suffix}`;
+  return name.startsWith("stack.capability.") ? `stack-capability-${suffix}` : `stack-capability-${suffix}`;
 }
 
 function runtimeToolErrorCode(name: DevMcpToolName, suffix: string): string {
-  return name.startsWith("runtime.capability.") ? `runtime-capability-${suffix}` : `runtime-explore-${suffix}`;
+  return name.startsWith("runtime.capability.") ? `runtime-capability-${suffix}` : `runtime-capability-${suffix}`;
 }
 
 function inputSchemaForTool(
@@ -1457,7 +1422,6 @@ function inputSchemaForTool(
       };
     case "stack.list":
     case "stack.capability.list":
-    case "stack.explore.list":
     case "journey.list":
       return {};
     case "stack.status":
@@ -1466,11 +1430,10 @@ function inputSchemaForTool(
         stackId: stringId().describe("Stack Instance id returned by stack.start or stack.list."),
       };
     case "stack.capability.run":
-    case "stack.explore.run":
       return {
         stackId: stringId().describe("Stack Instance id returned by stack.start or stack.list."),
         runId: stringId().optional().describe("Optional run id used only to attach compatible stack evidence artifacts."),
-        toolId: stringId().describe(`Provider-declared tool id returned by ${name === "stack.capability.run" ? "stack.capability.list" : "stack.explore.list"}.`),
+        toolId: stringId().describe("Provider-declared capability id returned by stack.capability.list."),
         input: z.unknown().describe("Input parsed by the selected provider-declared tool schema."),
       };
     case "stack.logs":
@@ -1486,7 +1449,6 @@ function inputSchemaForTool(
     case "runtime.status":
     case "runtime.access.status":
     case "runtime.capability.list":
-    case "runtime.explore.list":
       return {
         targetId: stringId().optional().describe("Runtime Target id returned by runtime.list. Optional only when the server selected one target."),
       };
@@ -1498,10 +1460,9 @@ function inputSchemaForTool(
         level: stringId().optional().describe("Optional best-effort provider-specific log level filter."),
       };
     case "runtime.capability.run":
-    case "runtime.explore.run":
       return {
         targetId: stringId().optional().describe("Runtime Target id returned by runtime.list. Optional only when the server selected one target."),
-        toolId: stringId().describe(`Runtime Capability id returned by ${name === "runtime.capability.run" ? "runtime.capability.list" : "runtime.explore.list"}.`),
+        toolId: stringId().describe("Runtime Capability id returned by runtime.capability.list."),
         input: z.unknown().describe("Input parsed by the selected product-declared tool schema."),
         journeyId: stringId().optional().describe("Journey id used with profileId for runMutation opt-in checks."),
         profileId: stringId().optional().describe("Journey Profile id used for runMutation opt-in checks."),

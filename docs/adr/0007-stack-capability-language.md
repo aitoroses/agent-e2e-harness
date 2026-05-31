@@ -12,7 +12,7 @@ Dogfooding with Terrarium UI Validation showed that the word "explore" is too na
 
 ## Decision
 
-Use **Capability** as the preferred domain language for provider-declared stack and runtime tools.
+Use **Capability** as the domain language for provider-declared stack and runtime operations.
 
 Preferred MCP tools:
 
@@ -51,9 +51,9 @@ Capabilities still declare:
 
 Runtime capabilities keep the Runtime Target safety model: `observation` runs by default, `runMutation` requires Journey Profile opt-in, and `runtimeMutation` is blocked by default.
 
-## Compatibility
+## Breaking Change
 
-The old names remain as aliases through the 1.4.x line:
+Do not keep compatibility aliases. The following names are removed from the public surface:
 
 ```text
 stack.explore.list
@@ -69,7 +69,7 @@ defineRuntimeExploreTool(...)
 RuntimeTarget.explore
 ```
 
-New documentation and examples should use `capability`. Existing consumers do not need an immediate migration.
+New documentation and examples should use `capability`. Consumers on the older `explore` names must migrate as part of the 2.0.0 upgrade.
 
 ## Consequences
 

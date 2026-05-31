@@ -8,7 +8,7 @@ Accepted
 
 Agent E2E Harness now models where a journey runs or collects evidence as a **Runtime Target**. Managed local stacks remain harness-owned lifecycle targets exposed through `stack.*`. Attached Runtime Targets are externally owned runtimes, such as staging, production, preview deployments, Kubernetes namespaces, or Docker Compose, and are exposed through `agent-e2e attached --target <id>`.
 
-The shared Runtime Tool Surface is `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.capability.list`, and `runtime.capability.run`; `runtime.explore.*` remains as a backwards-compatible alias. Runtime Capabilities are product-owned, schema-declared, and risk-classed as `observation`, `runMutation`, or `runtimeMutation`.
+The shared Runtime Tool Surface is `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.capability.list`, and `runtime.capability.run`. Runtime Capabilities are product-owned, schema-declared, and risk-classed as `observation`, `runMutation`, or `runtimeMutation`.
 
 Runtime Targets are declared in `agent-e2e.config.ts` through typed helpers such as `managedRuntime(...)` and `attachedRuntime(...)`; a second targets file is not required. Journey Profiles select their Runtime Target with profile metadata. In v1, `run.begin` resolves the Runtime Target through the selected Journey Profile and does not accept a free `targetId` override.
 

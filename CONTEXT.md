@@ -134,7 +134,7 @@ The `agent-e2e attached --target <id>` MCP mode for inspecting and optionally ru
 _Avoid_: dev mode, one-shot production check
 
 **Runtime Tool Surface**:
-The `runtime.*` MCP family: `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.capability.list`, and `runtime.capability.run`; `runtime.explore.*` remains as a backwards-compatible alias.
+The `runtime.*` MCP family: `runtime.list`, `runtime.status`, `runtime.logs`, `runtime.access.status`, `runtime.capability.list`, and `runtime.capability.run`.
 _Avoid_: hiding attached runtimes under stack lifecycle tools
 
 **Runtime Tool Risk**:
@@ -170,7 +170,7 @@ An extension point that starts, inspects, and stops a **Managed Execution Stack*
 _Avoid_: hardcoded Docker logic, test helper, deployment adapter
 
 **Stack Runtime Tools**:
-Native MCP tools for stack-level runtime facts that most agents need during validation. The core set should stay small: `stack.start`, `stack.list`, `stack.status`, `stack.logs`, `stack.stop`, and `stack.capability.*` for provider-declared capabilities, with `stack.explore.*` retained as a compatibility alias and `stack.status` as the unified services/readiness/health packet for one stack instance.
+Native MCP tools for stack-level runtime facts that most agents need during validation. The core set should stay small: `stack.start`, `stack.list`, `stack.status`, `stack.logs`, `stack.stop`, and `stack.capability.*` for provider-declared capabilities and `stack.status` as the unified services/readiness/health packet for one stack instance.
 _Avoid_: provider-specific debug endpoint, generic diagnostic API, hidden service metadata
 
 **Exploration Surface**:

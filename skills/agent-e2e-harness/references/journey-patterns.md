@@ -176,7 +176,7 @@ export const stackProvider: StackProvider<{ appUrl: string; logPath: string }> =
 };
 ```
 
-`stack.start` should return service URLs through `status`: `StackStatusPacket.services` is the journey-facing runtime contract for browser/API targets. Named Stack Allocations make Dev MCP and worker-scoped verify reports explain which ports, logs, and paths belonged to each Stack Instance; they do not replace services. Optional `logs` should read live logs for stable service ids. `capabilities` should expose provider-owned tools with Zod schemas, `availableIn`, and `risk` (`explore` is the deprecated compatibility alias for the same field).
+`stack.start` should return service URLs through `status`: `StackStatusPacket.services` is the journey-facing runtime contract for browser/API targets. Named Stack Allocations make Dev MCP and worker-scoped verify reports explain which ports, logs, and paths belonged to each Stack Instance; they do not replace services. Optional `logs` should read live logs for stable service ids. `capabilities` should expose provider-owned tools with Zod schemas, `availableIn`, and `risk` .
 
 ## Config Template
 

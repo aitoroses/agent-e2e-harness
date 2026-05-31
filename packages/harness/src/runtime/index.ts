@@ -102,7 +102,7 @@ export interface RuntimeAccessStatus {
   guidance: readonly string[];
 }
 
-export interface RuntimeExploreToolDefinition<
+export interface RuntimeCapabilityDefinition<
   TInputSchema extends RuntimeZodSchema = RuntimeZodSchema,
   TOutputSchema extends RuntimeZodSchema = RuntimeZodSchema,
 > {
@@ -118,12 +118,8 @@ export interface RuntimeExploreToolDefinition<
     target: RuntimeTarget;
   }): MaybePromise<z.infer<TOutputSchema>>;
 }
-export type RuntimeCapabilityDefinition<
-  TInputSchema extends RuntimeZodSchema = RuntimeZodSchema,
-  TOutputSchema extends RuntimeZodSchema = RuntimeZodSchema,
-> = RuntimeExploreToolDefinition<TInputSchema, TOutputSchema>;
 
-export interface RuntimeExploreToolDescriptor {
+export interface RuntimeCapabilityDescriptor {
   id: string;
   title: string;
   description: string;
@@ -132,7 +128,6 @@ export interface RuntimeExploreToolDescriptor {
   inputSchema: unknown;
   outputSchema: unknown;
 }
-export type RuntimeCapabilityDescriptor = RuntimeExploreToolDescriptor;
 
 export interface RuntimeTargetConfig {
   id: string;
@@ -142,8 +137,6 @@ export interface RuntimeTargetConfig {
   logs?: (input: RuntimeLogsInput) => MaybePromise<RuntimeLogsOutput>;
   access?: readonly RuntimeAccessContextDefinition[];
   capabilities?: readonly RuntimeCapabilityDefinition<any, any>[];
-  /** @deprecated Use `capabilities`; kept for compatibility with 1.4.x consumers. */
-  explore?: readonly RuntimeExploreToolDefinition<any, any>[];
 }
 
 export interface RuntimeTarget extends RuntimeTargetConfig {
@@ -168,22 +161,13 @@ export function attachedRuntime(config: RuntimeTargetConfig): RuntimeTarget {
   return { ...config, kind: "attached", lifecycleOwner: "external" };
 }
 
-export function defineRuntimeExploreTool<
-  const TInputSchema extends RuntimeZodSchema,
-  const TOutputSchema extends RuntimeZodSchema,
->(
-  tool: RuntimeExploreToolDefinition<TInputSchema, TOutputSchema>,
-): RuntimeExploreToolDefinition<TInputSchema, TOutputSchema> {
-  return tool;
-}
-
 export function defineRuntimeCapability<
   const TInputSchema extends RuntimeZodSchema,
   const TOutputSchema extends RuntimeZodSchema,
 >(
   capability: RuntimeCapabilityDefinition<TInputSchema, TOutputSchema>,
 ): RuntimeCapabilityDefinition<TInputSchema, TOutputSchema> {
-  return defineRuntimeExploreTool(capability);
+  return capability;
 }
 
 export function defineRuntimeCapabilities<
@@ -243,7 +227,7 @@ export function summarizeRuntimeTarget(target: RuntimeTarget): RuntimeTargetSumm
   const capabilities = ["status"];
   if (target.logs) capabilities.push("logs");
   if ((target.access ?? []).length > 0) capabilities.push("access");
-  if (runtimeCapabilityDefinitions(target).length > 0) capabilities.push("capability", "explore");
+  if (runtimeCapabilityDefinitions(target).length > 0) capabilities.push("capability");
   return compactObject({
     id: target.id,
     kind: target.kind,
@@ -286,12 +270,6 @@ export async function runtimeAccessStatus(target: RuntimeTarget): Promise<Runtim
   return results;
 }
 
-export async function runtimeExploreDescriptors(
-  target: RuntimeTarget,
-): Promise<readonly RuntimeExploreToolDescriptor[]> {
-  return runtimeCapabilityDescriptors(target);
-}
-
 export async function runtimeCapabilityDescriptors(
   target: RuntimeTarget,
 ): Promise<readonly RuntimeCapabilityDescriptor[]> {
@@ -305,14 +283,6 @@ export async function runtimeCapabilityDescriptors(
     inputSchema: z.toJSONSchema(tool.input),
     outputSchema: z.toJSONSchema(tool.output),
   }));
-}
-
-export async function runRuntimeExploreTool(
-  target: RuntimeTarget,
-  toolId: string,
-  input: unknown,
-): Promise<unknown> {
-  return runRuntimeCapability(target, toolId, input);
 }
 
 export async function runRuntimeCapability(
@@ -335,16 +305,7 @@ export async function runRuntimeCapability(
 export function runtimeCapabilityDefinitions(
   target: RuntimeTarget,
 ): readonly RuntimeCapabilityDefinition<any, any>[] {
-  const capabilities = target.capabilities ?? [];
-  const explore = target.explore ?? [];
-  if (capabilities.length === 0) return explore;
-  if (explore.length === 0) return capabilities;
-
-  const seen = new Set(capabilities.map((capability) => capability.id));
-  return [
-    ...capabilities,
-    ...explore.filter((capability) => !seen.has(capability.id)),
-  ];
+  return target.capabilities ?? [];
 }
 
 export async function writeRuntimeLogsArtifact(input: {

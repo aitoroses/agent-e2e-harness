@@ -113,7 +113,7 @@ describe("Runtime Tool Surface", () => {
     expect(router.listTools().map((tool) => tool.name)).not.toContain("runtime.list");
   });
 
-  it("describes runtime capabilities with product-owned schemas and keeps explore aliases", async () => {
+  it("describes runtime capabilities with product-owned schemas", async () => {
     const router = createDevMcpToolRouter({
       runtimeTargets: [
         attachedRuntime({
@@ -136,11 +136,6 @@ describe("Runtime Tool Surface", () => {
     await expect(router.callTool("runtime.capability.list", { targetId: "compose" })).resolves.toMatchObject({
       status: "ok",
       tool: "runtime.capability.list",
-      tools: [expect.objectContaining({ id: "compose.ps", risk: "observation" })],
-    });
-    await expect(router.callTool("runtime.explore.list", { targetId: "compose" })).resolves.toMatchObject({
-      status: "ok",
-      tool: "runtime.explore.list",
       tools: [expect.objectContaining({ id: "compose.ps", risk: "observation" })],
     });
   });
@@ -196,14 +191,14 @@ describe("Runtime Tool Surface", () => {
       output: { services: ["web", "db"] },
     });
     await expect(
-      router.callTool("runtime.explore.run", {
+      router.callTool("runtime.capability.run", {
         targetId: "compose",
         toolId: "compose.ps",
         input: { includeStopped: false },
       }),
     ).resolves.toMatchObject({
       status: "ok",
-      tool: "runtime.explore.run",
+      tool: "runtime.capability.run",
       output: { services: ["web"] },
     });
     await expect(

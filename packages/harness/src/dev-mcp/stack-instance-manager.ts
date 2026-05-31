@@ -106,11 +106,10 @@ export interface StackInstanceDisposeResult {
   errors: string[];
 }
 
-export interface StackExploreRunResult {
+export interface StackCapabilityRunResult {
   toolId: string;
   output: unknown;
 }
-export type StackCapabilityRunResult = StackExploreRunResult;
 
 export class StackInstanceManager<TStackHandle> {
   private readonly handles = new Map<string, TStackHandle>();
@@ -335,14 +334,6 @@ export class StackInstanceManager<TStackHandle> {
       );
     }
     return await this.provider.logs(handle, input);
-  }
-
-  async exploreRun(input: {
-    stackId?: string;
-    toolId: string;
-    input: unknown;
-  }): Promise<StackExploreRunResult> {
-    return this.runProviderCapability("stack.explore.run", "stack-explore", "Stack exploration tool", input);
   }
 
   async capabilityRun(input: {
