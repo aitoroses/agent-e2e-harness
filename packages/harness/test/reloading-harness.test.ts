@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -46,6 +46,28 @@ describe("reloading harness source (jiti in-process reload)", () => {
       expect((await listJourneys(await source.currentHarness())).journeys.map((j) => j.title)).toEqual(["V1"]);
       // Stable across repeated reads when nothing changed.
       expect((await listJourneys(await source.currentHarness())).journeys.map((j) => j.title)).toEqual(["V1"]);
+    } finally {
+      source.close();
+    }
+  });
+
+  it("does not reload when default run artifacts are written under runs/", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-e2e-reload-"));
+    await writeFile(join(dir, "journey.ts"), journeySource("V1", "Phase V1"), "utf8");
+    await writeFile(join(dir, "agent-e2e.config.ts"), CONFIG_SOURCE, "utf8");
+
+    const source = createReloadingHarnessSource({ configPath: join(dir, "agent-e2e.config.ts") });
+    try {
+      const before = await source.currentHarness();
+      await mkdir(join(dir, "runs", "2026-06-01t10-24-18z-abc"), { recursive: true });
+      await writeFile(
+        join(dir, "runs", "2026-06-01t10-24-18z-abc", "run-report.json"),
+        JSON.stringify({ status: "running" }),
+        "utf8",
+      );
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(await source.currentHarness()).toBe(before);
     } finally {
       source.close();
     }

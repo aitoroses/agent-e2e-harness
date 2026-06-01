@@ -15,6 +15,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
+## [3.0.2] - 2026-06-01
+
+### Fixed
+
+- Dev MCP hot-reload now ignores the default `runs/` artifact directory. In v3.0.0/v3.0.1, `run.begin` wrote `runs/<runId>/run-report.json`, the config-directory watcher treated that JSON as a source edit, and the next journey call could lose the in-memory run state.
+
 ## [3.0.1] - 2026-06-01
 
 ### Fixed

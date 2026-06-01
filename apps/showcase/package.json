@@ -21,7 +21,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@agent-e2e/harness": "^3.0.1",
+    "@agent-e2e/harness": "^3.0.2",
     "next": "^16.2.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
