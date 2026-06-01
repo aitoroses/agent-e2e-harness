@@ -15,6 +15,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
+## [3.0.1] - 2026-06-01
+
+### Fixed
+
+- Generated interactive run ids are now lowercase (`2026-06-01t...z-...`) so the id returned by `run.begin` can be passed straight into later MCP calls such as `journey.untilPhase`. This preserves timestamp-first sorting while avoiding case-sensitive client/tooling mismatches.
+
 ## [3.0.0] - 2026-06-01
 
 ### Added

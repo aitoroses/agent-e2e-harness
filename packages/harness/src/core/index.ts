@@ -927,13 +927,13 @@ function deriveRunId<TTypes extends AnyHarnessTypes>(
 /**
  * Mint a unique, timestamp-first, human-readable run id for an interactive run
  * that the caller did not name explicitly. Shape:
- * `<utc-timestamp>Z-[<label>-]<suffix>`, e.g.
- * `2026-05-31T10-24-18Z-auth-boundary-oc7`. The timestamp (seconds precision,
+ * `<utc-timestamp>z-[<label>-]<suffix>`, e.g.
+ * `2026-05-31t10-24-18z-auth-boundary-oc7`. The timestamp (seconds precision,
  * `:` replaced with `-`) orders runs by start time; an optional human label and
  * a short suffix disambiguate runs that begin within the same second.
  */
 export function generateRunId(date: Date = new Date(), label?: string): string {
-  const timestamp = date.toISOString().replace(/\.\d+Z$/, 'Z').replace(/:/g, '-');
+  const timestamp = date.toISOString().replace(/\.\d+Z$/, 'Z').replace(/:/g, '-').toLowerCase();
   const suffix = Math.random().toString(36).slice(2, 5).padEnd(3, '0');
   const labelSegment = label
     ? `${label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}-`

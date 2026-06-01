@@ -148,6 +148,10 @@ describe("interactive run artifact contract", () => {
     expect(first.status).toBe("ok");
     expect(second.status).toBe("ok");
     expect(first.runId).not.toEqual(second.runId);
+    expect(String(first.runId)).toMatch(/^[a-z0-9._-]+$/);
+
+    const phase = await server.callTool("runPhase", { runId: String(first.runId), phaseId: "phase:one" });
+    expect(phase).toMatchObject({ status: "ok" });
 
     // Each run is its own directory directly under the artifact root; `latest`
     // is a symlink (not a directory), so it is not counted.

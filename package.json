@@ -1,6 +1,6 @@
 {
   "name": "agent-e2e-harness",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "private": true,
   "description": "Reusable E2E harness for agent-driven proof loops, MCP tooling, artifacts, and CI verification.",
   "keywords": [
