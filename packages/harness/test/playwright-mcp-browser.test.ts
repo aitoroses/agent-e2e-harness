@@ -3,12 +3,15 @@ import { existsSync, readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { createPlaywrightMcpBrowserSessionManager } from '@agent-e2e/harness/playwright-mcp';
 
 // Must match FORENSICS_OVERLAY_CONTAINER_ID in src/forensics/browser-script.ts.
 const OVERLAY_ID = 'agent-e2e-refs-overlay';
 
 const managers: Array<ReturnType<typeof createPlaywrightMcpBrowserSessionManager>> = [];
+const servers: Server[] = [];
 
 function dataUrl(html: string): string {
   return `data:text/html,${encodeURIComponent(html)}`;
@@ -19,6 +22,9 @@ describe('Playwright MCP browser session manager', () => {
     for (const manager of managers.splice(0)) {
       for (const session of manager.list()) await manager.close(session.browserSessionId);
     }
+    await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve, reject) => {
+      server.close((error) => error ? reject(error) : resolve());
+    })));
   });
 
   it('inspect returns a compact path-oriented index and writes inspection artifacts', async () => {
@@ -160,6 +166,51 @@ describe('Playwright MCP browser session manager', () => {
     expect(out.output).toBe('created');
   });
 
+  it('writes signal details into inspect artifacts when console or network failures occur', async () => {
+    const server = createServer((req, res) => {
+      if (req.url === '/missing') {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('missing');
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<!doctype html><title>Signals</title>
+        <h1>Signals</h1>
+        <script>
+          console.error('setup failed visibly');
+          fetch('/missing').catch(() => {});
+        </script>`);
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    servers.push(server);
+
+    const manager = createPlaywrightMcpBrowserSessionManager();
+    managers.push(manager);
+    const port = (server.address() as AddressInfo).port;
+    const open = await manager.open({ headed: false, targetUrl: `http://127.0.0.1:${port}/` });
+
+    await manager.wait({
+      browserSessionId: open.browserSessionId,
+      until: { kind: 'function', code: 'return performance.getEntriesByName(location.origin + "/missing").length > 0;' },
+      timeoutMs: 2_000,
+    });
+    const inspected = await manager.inspect({ browserSessionId: open.browserSessionId });
+
+    expect(inspected.signals.consoleErrors).toBeGreaterThanOrEqual(1);
+    expect(inspected.signals.networkFailures).toBe(1);
+    expect(inspected.signals.consoleErrorDetails?.some((entry) => entry.text.includes('setup failed visibly'))).toBe(true);
+    expect(inspected.signals.networkFailureDetails?.[0]).toMatchObject({ kind: 'response', statusCode: 404 });
+
+    const json = JSON.parse(readFileSync(inspected.artifacts.inspectJson!, 'utf8'));
+    expect(json.signals.consoleErrorDetails.some((entry: { text: string }) => entry.text.includes('setup failed visibly'))).toBe(true);
+    expect(json.signals.networkFailureDetails[0]).toMatchObject({ statusCode: 404 });
+
+    const md = readFileSync(inspected.artifacts.inspect!, 'utf8');
+    expect(md).toContain('## Signals');
+    expect(md).toContain('setup failed visibly');
+    expect(md).toContain('/missing');
+  });
+
   it('fails cleanly when acting on a stale or retired ref and does not reuse retired ref ids', async () => {
     const manager = createPlaywrightMcpBrowserSessionManager();
     managers.push(manager);
@@ -275,7 +326,11 @@ describe('Playwright MCP browser session manager', () => {
 
     await expect(
       manager.evaluate({ browserSessionId: open.browserSessionId, code: "return { title: document.title, label: input.label };", input: { label: 'e2e' } }),
-    ).resolves.toMatchObject({ status: 'ok', output: { title: 'Code', label: 'e2e' } });
+    ).resolves.toMatchObject({
+      status: 'ok',
+      output: { title: 'Code', label: 'e2e' },
+      next: { actions: [{ tool: 'browser.inspect' }] },
+    });
 
     const inspected = await manager.inspect({ browserSessionId: open.browserSessionId });
     const runRef = JSON.parse(readFileSync(inspected.artifacts.inspectJson!, 'utf8')).interactive.find((n: { name?: string }) => n.name === 'Run').ref;
@@ -286,7 +341,11 @@ describe('Playwright MCP browser session manager', () => {
         input: { ref: runRef },
         refs: [runRef],
       }),
-    ).resolves.toMatchObject({ status: 'ok', output: { ref: runRef } });
+    ).resolves.toMatchObject({
+      status: 'ok',
+      output: { ref: runRef },
+      next: { actions: [{ tool: 'browser.inspect' }] },
+    });
   });
 
   it('reports missing sessions as actionable inspect failures', async () => {

@@ -144,6 +144,17 @@ export interface InspectTarget {
 export interface InspectSignals {
   consoleErrors: number;
   networkFailures: number;
+  consoleErrorDetails?: Array<{
+    text: string;
+    location?: { url?: string; lineNumber?: number; columnNumber?: number };
+  }>;
+  networkFailureDetails?: Array<{
+    kind: string;
+    method?: string;
+    url: string;
+    statusCode?: number;
+    failureText?: string;
+  }>;
 }
 
 // Structural subset of Playwright's Page used here, so this module stays free of
@@ -300,6 +311,21 @@ export function renderInspectMarkdown(
   lines.push(`Signals: ${signals.consoleErrors} console errors · ${signals.networkFailures} network failures`);
   if (facts.overlayEnabled) lines.push("Overlay: refs enabled");
   lines.push("");
+
+  if ((signals.consoleErrorDetails?.length ?? 0) > 0 || (signals.networkFailureDetails?.length ?? 0) > 0) {
+    lines.push("## Signals");
+    lines.push("");
+    for (const event of signals.consoleErrorDetails ?? []) {
+      const location = event.location?.url ? ` (${displayUrl(event.location.url)})` : "";
+      lines.push(`- console error: ${truncate(event.text, 180)}${location}`);
+    }
+    for (const event of signals.networkFailureDetails ?? []) {
+      const status = event.statusCode ? ` ${event.statusCode}` : "";
+      const failure = event.failureText ? ` ${event.failureText}` : "";
+      lines.push(`- network ${event.kind}${status}: ${displayUrl(event.url)}${failure}`);
+    }
+    lines.push("");
+  }
 
   // --- Headings -------------------------------------------------------------
   const headingNodes = tree.filter((node) => /^h[1-6]$/.test(node.tag) || node.role === "heading");
