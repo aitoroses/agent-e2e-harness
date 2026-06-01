@@ -153,7 +153,7 @@ export async function writeStepArtifacts<TTypes extends AnyHarnessTypes>(input: 
       inspectMd = await writeTextArtifact(
         run,
         stepRelativePath(journey, phaseId, stepId, "inspect.md"),
-        renderInspectMarkdown(capture, target, signals, input.terminalScreenshot?.path, inspectJson.path),
+        renderInspectMarkdown(capture, target, signals),
         { name: "inspect", kind: "markdown", description: "Agent-facing OC-grade inspect view captured at step end." },
       );
       output.push(inspectJson, inspectMd);

@@ -64,6 +64,7 @@ export interface TreeNodeStyle {
   border?: string;
   borderRadius?: string;
   padding?: string;
+  shadow?: string;
 }
 
 // A node in the OC-grade UI forensics tree: factual geometry / visibility /
@@ -160,7 +161,6 @@ export function asInspectPage(page: unknown): InspectPage {
 }
 
 const MD_TREE_CAP = 120;
-const MD_INTERACTIVE_CAP = 40;
 const GLOBAL = FORENSICS_SINGLETON_GLOBAL;
 
 /**
@@ -270,189 +270,209 @@ export async function writeInspection(input: {
   const md = await writeTextArtifact(
     run,
     `${dirRelative}/inspect.md`,
-    renderInspectMarkdown(capture, target, signals, screenshot.path, json.path),
-    { kind: "markdown", name: "inspect", description: "Agent-facing inspect view: where am I, summary, visible state, what can I act on, signals, artifacts, and an OC-grade UI forensics tree." },
+    renderInspectMarkdown(capture, target, signals),
+    { kind: "markdown", name: "inspect", description: "Agent-facing inspect view in Terrarium OC dom-ui-forensics format: header, headings, by-role, interactive refs, a compact UI tree, selectors, and a snippet." },
   );
   return { md, json, screenshot };
 }
 
+// Render inspect.md in Terrarium OC's compact `dom-ui-forensics` shape: a
+// scannable header, Headings, By role, Interactive (DOM order), a shorthand
+// Tree (no inline selectors), a Selectors block, and a Snippet. The richer
+// per-node data lives in inspect.json; the markdown optimizes agent UX + tokens.
 export function renderInspectMarkdown(
   capture: ForensicsCapture,
-  target: InspectTarget,
+  _target: InspectTarget,
   signals: InspectSignals,
-  screenshotPath: string | undefined,
-  jsonPath: string | undefined,
 ): string {
-  const { facts, nodes, tree, truncated } = capture;
+  const { facts, nodes, tree } = capture;
+  const labels = assignDisplayLabels(tree);
   const lines: string[] = [];
-  lines.push("# Inspect");
+
+  // --- Header ---------------------------------------------------------------
+  lines.push("# UI Snapshot");
+  lines.push("");
+  lines.push(`URL: ${displayUrl(facts.url)}`);
+  if (facts.title) lines.push(`Title: ${facts.title}`);
+  lines.push(`Viewport: ${facts.viewport.width}×${facts.viewport.height}${facts.viewport.devicePixelRatio && facts.viewport.devicePixelRatio !== 1 ? ` @${facts.viewport.devicePixelRatio}x` : ""}`);
+  const depth = tree.reduce((max, node) => Math.max(max, node.depth), 0);
+  lines.push(`Stats: ${tree.length} nodes · ${nodes.length} interactive · depth ${depth}`);
+  lines.push(`Signals: ${signals.consoleErrors} console errors · ${signals.networkFailures} network failures`);
+  if (facts.overlayEnabled) lines.push("Overlay: refs enabled");
   lines.push("");
 
-  // --- Where am I -----------------------------------------------------------
-  lines.push("## Where am I");
-  lines.push("");
-  lines.push(`- **URL:** ${facts.url}`);
-  if (facts.title) lines.push(`- **Title:** ${facts.title}`);
-  lines.push(`- **Viewport:** ${facts.viewport.width}x${facts.viewport.height}${facts.viewport.devicePixelRatio ? ` (dpr ${facts.viewport.devicePixelRatio})` : ""}`);
-  if (facts.document) lines.push(`- **Document:** ${facts.document.width}x${facts.document.height} (scroll ${facts.document.scrollX},${facts.document.scrollY})`);
-  if (facts.primaryHeading) lines.push(`- **Primary heading:** ${facts.primaryHeading}`);
-  if (facts.activeLandmark) lines.push(`- **Active landmark:** ${facts.activeLandmark}`);
-  lines.push(`- **Target:** ${target.input ?? "current page"} (${target.kind}, ${target.resolved ? "resolved" : "unresolved"})`);
-  lines.push(`- **Refs overlay:** ${facts.overlayEnabled ? "enabled" : "disabled"}`);
-  lines.push("");
-
-  // --- Summary --------------------------------------------------------------
-  const summary = facts.summary;
-  if (summary) {
-    lines.push("## Summary");
+  // --- Headings -------------------------------------------------------------
+  const headingNodes = tree.filter((node) => /^h[1-6]$/.test(node.tag) || node.role === "heading");
+  if (headingNodes.length > 0) {
+    lines.push("## Headings");
     lines.push("");
-    lines.push(`- Interactive elements: ${summary.interactive}`);
-    lines.push(`- Landmarks: ${summary.landmarks.length}${summary.landmarks.length ? ` (${summary.landmarks.map((l) => l.role).join(", ")})` : ""}`);
-    const headingHist = Object.entries(summary.headings).sort().map(([tag, count]) => `${tag}×${count}`).join(", ");
-    lines.push(`- Headings: ${headingHist || "none"}`);
-    lines.push(`- Alerts/status: ${summary.alerts}`);
-    lines.push(`- Dialogs: ${summary.dialogs}`);
-    lines.push(`- Forms: ${summary.forms} (${summary.formControls} controls)`);
-    lines.push(`- Tables: ${summary.tables}`);
-    lines.push(`- Images: ${summary.images} (${summary.imagesMissingAlt} missing alt)`);
-    lines.push("");
-  }
-
-  // --- Current visible state ------------------------------------------------
-  lines.push("## Current visible state");
-  lines.push("");
-  if (facts.headings.length > 0) {
-    for (const heading of facts.headings) lines.push(`- ${"#".repeat(heading.level)} ${heading.text}`);
-  } else {
-    lines.push("- (no visible headings)");
-  }
-  if (facts.alerts.length > 0) {
-    lines.push("");
-    lines.push("**Alerts / errors:**");
-    for (const alert of facts.alerts) lines.push(`- ${alert}`);
-  }
-  if (facts.dialogs.length > 0) {
-    lines.push("");
-    lines.push("**Dialogs / modals:**");
-    for (const dialog of facts.dialogs) lines.push(`- ${dialog}`);
-  }
-  if (facts.visibleText && facts.visibleText.length > 0) {
-    lines.push("");
-    lines.push("**Visible text (top):**");
-    for (const text of facts.visibleText) lines.push(`- ${text}`);
-  }
-  if (facts.loading) {
-    lines.push("");
-    lines.push("- Loading indicators present.");
-  }
-  lines.push("");
-
-  // --- What can I act on (table) -------------------------------------------
-  lines.push("## What can I act on");
-  lines.push("");
-  if (nodes.length === 0) {
-    lines.push("- (no referencable nodes)");
-  } else {
-    lines.push("| ref | role | name | tag | box | state |");
-    lines.push("| --- | --- | --- | --- | --- | --- |");
-    for (const node of nodes.slice(0, MD_INTERACTIVE_CAP)) {
-      const tag = node.selector.startsWith("#") || node.selector.startsWith("[") ? "" : node.selector.split(">").at(-1)?.trim().split(/[:.\[]/)[0] ?? "";
-      lines.push(`| ${node.ref} | ${cell(node.role)} | ${cell(node.name)} | ${cell(tag)} | ${box(node.rect)} | ${node.disabled ? "disabled" : "visible"} |`);
+    for (const node of headingNodes.slice(0, 20)) {
+      lines.push(`- ${node.tag} "${truncate(node.name ?? "", 60)}" [${labels.get(node)}]`);
     }
-    if (nodes.length > MD_INTERACTIVE_CAP) lines.push(`\n_+${nodes.length - MD_INTERACTIVE_CAP} more interactive nodes (see inspect.json)._`);
+    lines.push("");
   }
+
+  // --- By role --------------------------------------------------------------
+  const byRole = new Map<string, string[]>();
+  for (const node of tree) {
+    const role = node.role && node.role !== node.tag ? node.role : node.tag;
+    if (!NOTABLE_ROLES.has(role)) continue;
+    const label = labels.get(node);
+    if (!label) continue;
+    (byRole.get(role) ?? byRole.set(role, []).get(role)!).push(label);
+  }
+  if (byRole.size > 0) {
+    lines.push("## By role");
+    lines.push("");
+    for (const [role, ids] of byRole) {
+      const shown = ids.slice(0, 16).join(", ");
+      lines.push(`- ${role}: ${shown}${ids.length > 16 ? `, +${ids.length - 16}` : ""}`);
+    }
+    lines.push("");
+  }
+
+  // --- Interactive (DOM order) — real action targets only -------------------
+  lines.push("## Interactive (DOM order)");
+  lines.push("");
+  lines.push(nodes.length > 0 ? nodes.map((node) => node.ref).join(" ") : "(none)");
   lines.push("");
 
-  // --- Signals --------------------------------------------------------------
-  lines.push("## Signals");
-  lines.push("");
-  lines.push(`- Console errors: ${signals.consoleErrors}`);
-  lines.push(`- Network failures: ${signals.networkFailures}`);
-  lines.push("");
-
-  // --- Artifacts ------------------------------------------------------------
-  lines.push("## Artifacts");
-  lines.push("");
-  if (screenshotPath) lines.push(`- [screenshot](${leaf(screenshotPath)})`);
-  if (jsonPath) lines.push(`- [inspect.json](${leaf(jsonPath)})`);
-  lines.push("");
-
-  // --- UI tree (hierarchical) ----------------------------------------------
-  lines.push("## UI tree");
+  // --- Tree (compact shorthand, no inline selectors) ------------------------
+  lines.push("## Tree");
   lines.push("");
   if (tree.length === 0) {
-    lines.push("- (no significant nodes)");
+    lines.push("(no significant nodes)");
   } else {
-    for (const node of tree.slice(0, MD_TREE_CAP)) lines.push(treeLine(node));
-    if (truncated || tree.length > MD_TREE_CAP) {
-      lines.push(`${"  ".repeat(0)}- … tree capped (${tree.length} nodes shown${truncated ? "; collection also capped" : ""}; full data in inspect.json)`);
-    }
+    for (const node of tree.slice(0, MD_TREE_CAP)) lines.push(treeLine(node, labels));
+    if (tree.length > MD_TREE_CAP) lines.push(`… +${tree.length - MD_TREE_CAP} more nodes (see inspect.json)`);
   }
+  lines.push("");
+
+  // --- Selectors (refs → selector; DOM paths live here, never in the tree) --
+  const selectorLines: string[] = [];
+  for (const node of tree.slice(0, MD_TREE_CAP)) {
+    const label = labels.get(node);
+    if (label && node.selector) selectorLines.push(`${label} → ${node.selector}`);
+  }
+  if (selectorLines.length > 0) {
+    lines.push("## Selectors");
+    lines.push("");
+    lines.push(...selectorLines);
+    lines.push("");
+  }
+
+  // --- Snippet --------------------------------------------------------------
+  lines.push("## Snippet");
+  lines.push("");
+  const snippet = (facts.visibleText ?? []).slice(0, 16).map((text) => text.replace(/\s+/g, " ").trim()).filter(Boolean).join(" · ");
+  lines.push(snippet || "(no visible text)");
+
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
-// One compact, factual line per tree node. Segments are pipe-separated and only
-// present when meaningful, so the tree stays readable but layout/visibility/
-// scroll/style facts are right there for reasoning. No diagnosis language.
-function treeLine(node: ForensicsTreeNode): string {
+// Roles surfaced in `## By role` — landmarks, controls, and notable structure.
+// Generic containers (div/span/label/listitem/paragraph/figure) are excluded.
+const NOTABLE_ROLES = new Set<string>([
+  "banner", "navigation", "main", "complementary", "contentinfo", "region", "search", "form",
+  "button", "link", "textbox", "searchbox", "combobox", "checkbox", "radio", "switch", "tab", "menuitem", "option", "slider", "spinbutton",
+  "heading", "alert", "status", "dialog", "alertdialog", "table", "list", "img", "article", "section",
+]);
+
+// Actionable nodes keep their real `@eN` (the overlay/act ref); structural and
+// heading tree nodes get markdown-local `@sN` / `@hN` labels for cross-reference.
+function assignDisplayLabels(tree: readonly ForensicsTreeNode[]): Map<ForensicsTreeNode, string> {
+  const labels = new Map<ForensicsTreeNode, string>();
+  let structural = 0;
+  let heading = 0;
+  for (const node of tree) {
+    if (node.ref) labels.set(node, node.ref);
+    else if (/^h[1-6]$/.test(node.tag) || node.role === "heading") labels.set(node, `@h${++heading}`);
+    else labels.set(node, `@s${++structural}`);
+  }
+  return labels;
+}
+
+// One compact OC-style tree line: `<indent>[@id] tag role=X "name" ⊞ x,y w×h
+// <flags> <layout> <scroll> <style>` — no inline selectors.
+function treeLine(node: ForensicsTreeNode, labels: Map<ForensicsTreeNode, string>): string {
   const indent = "  ".repeat(Math.min(node.depth, 12));
-  const segments: string[] = [];
-  const tagRole = node.role && node.role !== node.tag ? `${node.tag}[${node.role}]` : node.tag;
-  const refPart = node.ref ? `\`${node.ref}\` ` : "";
-  segments.push(`${refPart}${tagRole}${node.name ? ` "${truncate(node.name, 48)}"` : ""}`);
-  segments.push(box(node.rect));
-  const flags: string[] = [];
-  // A node is flagged `hidden:<reason>` whether it failed the visibility check
-  // or is laid out but off-screen / aria-hidden, so the marker is consistent.
-  if (!node.visible) flags.push(`hidden:${node.hidden ?? "yes"}`);
-  else if (node.hidden) flags.push(`hidden:${node.hidden}`);
-  if (node.disabled) flags.push("disabled");
-  if (flags.length) segments.push(flags.join(","));
-  if (node.layout) segments.push(layoutText(node.layout));
-  if (node.scroll?.scrollable) segments.push(`scroll ${node.scroll.scrollTop}/${node.scroll.scrollHeight} (${node.scroll.overflowY})`);
-  if (node.style) {
-    const styleBits = styleText(node.style);
-    if (styleBits) segments.push(styleBits);
-  }
-  const selectorPart = node.selector ? ` \`${node.selector}\`` : "";
-  return `${indent}- ${segments.filter(Boolean).join(" | ")}${selectorPart}`;
+  const tokens: string[] = [`[${labels.get(node)}]`, node.tag];
+  if (node.role && node.role !== node.tag) tokens.push(`role=${node.role}`);
+  if (node.name) tokens.push(`"${truncate(node.name, 40)}"`);
+  tokens.push(`⊞ ${box(node.rect)}`);
+  if (!node.visible) tokens.push(`hidden:${node.hidden ?? "yes"}`);
+  else if (node.hidden) tokens.push(`hidden:${node.hidden}`);
+  if (node.disabled) tokens.push("disabled");
+  if (node.layout) tokens.push(...layoutShort(node.layout));
+  if (node.scroll?.scrollable) tokens.push(`scroll-y(${node.scroll.scrollTop}/${node.scroll.scrollHeight})`);
+  if (node.style) tokens.push(...styleShort(node.style));
+  return `${indent}${tokens.join(" ")}`;
 }
 
-function layoutText(layout: TreeNodeLayout): string {
+function layoutShort(layout: TreeNodeLayout): string[] {
+  const out: string[] = [];
   if (layout.display === "flex" || layout.display === "inline-flex") {
-    return `flex ${layout.flexDirection ?? "row"}${layout.gap ? ` gap:${layout.gap}` : ""}`;
+    out.push(layout.flexDirection && layout.flexDirection.startsWith("col") ? "flex-col" : "flex-row");
+    if (layout.gap) out.push(`gap:${stripPx(layout.gap)}`);
+  } else if (layout.display === "grid" || layout.display === "inline-grid") {
+    out.push("grid");
+    if (layout.gap) out.push(`gap:${stripPx(layout.gap)}`);
   }
-  if (layout.display === "grid" || layout.display === "inline-grid") {
-    return `grid${layout.gap ? ` gap:${layout.gap}` : ""}`;
-  }
-  if (layout.position && layout.position !== "static") return `${layout.display} ${layout.position}`;
-  return layout.display;
+  if (layout.position && layout.position !== "static") out.push(layout.position);
+  return out;
 }
 
-function styleText(style: TreeNodeStyle): string {
-  const bits: string[] = [];
-  if (style.fontSize) bits.push(`${style.fontSize}/${style.fontWeight ?? "?"}`);
-  if (style.color) bits.push(style.color);
-  if (style.background) bits.push(`bg:${style.background}`);
-  if (style.border) bits.push(`border:${style.border}`);
-  return bits.join(" ");
+function styleShort(style: TreeNodeStyle): string[] {
+  const out: string[] = [];
+  if (style.background) out.push(`bg:${hex(style.background)}`);
+  if (style.padding) out.push(`p:${style.padding.split(/\s+/).map(stripPx).join(",")}`);
+  if (style.borderRadius) out.push(`r:${stripPx(style.borderRadius.split(/\s+/)[0] ?? "")}`);
+  if (style.border) out.push(`bd:${stripPx(style.border.split(/\s+/)[0] ?? "")}`);
+  if (style.shadow) out.push(`sh:${shadowBucket(style.shadow)}`);
+  if (style.fontSize) out.push(`f:${stripPx(style.fontSize)}/${style.fontWeight ?? "400"}`);
+  return out;
+}
+
+// Bucket a raw `box-shadow` into OC's compact size vocabulary by its largest px
+// length (blur/spread/offset proxy). Factual size hint, not a judgement.
+function shadowBucket(shadow: string): string {
+  const lengths = [...shadow.matchAll(/(-?\d+(?:\.\d+)?)px/g)].map((m) => Math.abs(Number(m[1])));
+  const max = lengths.length ? Math.max(...lengths) : 0;
+  if (max <= 2) return "xs";
+  if (max <= 6) return "sm";
+  if (max <= 16) return "md";
+  return "lg";
+}
+
+// `rgb(17, 24, 39)` -> `#111827`; alpha is dropped for a compact hint. Non-rgb
+// inputs (named colors, already-hex) pass through unchanged.
+function hex(color: string): string {
+  const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (!match) return color;
+  const toHex = (value: string) => Number(value).toString(16).padStart(2, "0");
+  return `#${toHex(match[1]!)}${toHex(match[2]!)}${toHex(match[3]!)}`;
+}
+
+function stripPx(value: string): string {
+  return value.replace(/px$/i, "");
 }
 
 function box(rect: ForensicsRect): string {
-  return `${rect.x},${rect.y} ${rect.width}x${rect.height}`;
-}
-
-function cell(value: string | undefined): string {
-  return (value ?? "").replace(/\|/g, "/").replace(/\n/g, " ").slice(0, 60) || "—";
+  return `${rect.x},${rect.y} ${rect.width}×${rect.height}`;
 }
 
 function truncate(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
 
-// Inspect artifacts share a folder, so links between them are just the leaf name.
-function leaf(path: string): string {
-  return path.split("/").at(-1) ?? path;
+// Markdown never exposes a local filesystem path: a `file://` capture is shown
+// as `fixture://<basename>`. The real URL is preserved in inspect.json.
+function displayUrl(url: string): string {
+  if (url.startsWith("file://")) {
+    const base = url.split(/[?#]/)[0]!.split("/").filter(Boolean).at(-1) ?? "page";
+    return `fixture://${base}`;
+  }
+  return url;
 }
 
 function emptyFacts(): PageFacts {

@@ -73,13 +73,19 @@ describe('Playwright MCP browser session manager', () => {
     const refIds = new Set(json.interactive.map((n: { ref: string }) => n.ref));
     expect(json.tree.some((n: { ref?: string }) => n.ref && refIds.has(n.ref))).toBe(true);
 
-    // inspect.md is the agent-iteration view, not a raw dump.
+    // inspect.md follows the compact Terrarium OC dom-ui-forensics format.
     const md = readFileSync(result.artifacts.inspect!, 'utf8');
-    expect(md).toContain('## Where am I');
-    expect(md).toContain('## Summary');
-    expect(md).toContain('## What can I act on');
-    expect(md).toContain('| ref | role | name | tag | box | state |');
-    expect(md).toContain('## UI tree');
+    expect(md).toContain('# UI Snapshot');
+    expect(md).toContain('## Headings');
+    expect(md).toContain('## By role');
+    expect(md).toContain('## Interactive (DOM order)');
+    expect(md).toContain('## Tree');
+    expect(md).toContain('## Selectors');
+    expect(md).toContain('## Snippet');
+    // No verbose sections / inline tables, and no inline selectors in tree lines.
+    expect(md).not.toContain('## Where am I');
+    expect(md).not.toContain('| ref | role | name |');
+    expect(md).toContain('⊞ ');
 
     await rm(tmpRoot, { recursive: true, force: true });
   });
@@ -122,12 +128,15 @@ describe('Playwright MCP browser session manager', () => {
     const disabledRef = (json.interactive as Array<{ ref: string; name?: string }>).find((n) => n.name === 'Bulk delete');
     expect(disabledRef).toBeTruthy();
 
-    // The markdown tree exposes the same facts for human/agent reading.
+    // The markdown tree exposes the same facts in OC compact shorthand.
     const md = readFileSync(result.artifacts.inspect!, 'utf8');
-    expect(md).toMatch(/scroll \d+\/\d+/);
+    expect(md).toMatch(/scroll-y\(\d+\/\d+\)/);
     expect(md).toContain('grid');
     expect(md).toContain('disabled');
     expect(md).toMatch(/hidden:/);
+    // Selectors live in their own block, never inlined on tree lines.
+    expect(md).toContain('## Selectors');
+    expect(md.split('## Selectors')[0]).not.toContain('[data-ui=');
   });
 
   it('acts on a ref from inspect and resolves through the shared registry', async () => {

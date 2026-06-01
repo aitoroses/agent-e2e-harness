@@ -8,8 +8,8 @@
   "ran": {
     "phaseId": "phase:review",
     "stepId": "step:open-console",
-    "startedAt": "2026-05-31T19:53:30.794Z",
-    "endedAt": "2026-05-31T19:53:30.794Z",
+    "startedAt": "2026-06-01T07:38:22.242Z",
+    "endedAt": "2026-06-01T07:38:22.242Z",
     "durationMs": 0
   },
   "artifacts": {

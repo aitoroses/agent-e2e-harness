@@ -9,8 +9,8 @@
     "remainingSteps": 0
   },
   "crystallized": false,
-  "completedAt": "2026-05-31T19:53:30.854Z",
-  "startedAt": "2026-05-31T19:53:30.734Z",
+  "completedAt": "2026-06-01T07:38:22.299Z",
+  "startedAt": "2026-06-01T07:38:22.193Z",
   "report": "run-report.json",
   "humanReport": "run-report.md",
   "journeyId": "journey:daemons-console",
@@ -34,8 +34,8 @@
       "phaseId": "phase:review",
       "stepId": "step:open-console",
       "status": "passed",
-      "startedAt": "2026-05-31T19:53:30.794Z",
-      "endedAt": "2026-05-31T19:53:30.794Z",
+      "startedAt": "2026-06-01T07:38:22.242Z",
+      "endedAt": "2026-06-01T07:38:22.242Z",
       "durationMs": 0
     }
   ],
@@ -44,7 +44,7 @@
       "id": "artifact:2026-05-31t10-24-18z-daemons-console-oc7:journeys-journey-daemons-console-phases-phase-review-steps-step-open-console-before.png",
       "kind": "screenshot",
       "name": "before",
-      "uri": "file:///Users/aitoroses/repositories/agent-e2e-worktrees/codex-browser-inspect-refs/runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/before.png",
+      "uri": "file://runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/before.png",
       "path": "runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/before.png",
       "description": "Visual state before the step."
     },
@@ -52,7 +52,7 @@
       "id": "artifact:2026-05-31t10-24-18z-daemons-console-oc7:journeys-journey-daemons-console-phases-phase-review-steps-step-open-console-after.png",
       "kind": "screenshot",
       "name": "after",
-      "uri": "file:///Users/aitoroses/repositories/agent-e2e-worktrees/codex-browser-inspect-refs/runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/after.png",
+      "uri": "file://runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/after.png",
       "path": "runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/after.png",
       "description": "Visual state after the step."
     },
@@ -60,7 +60,7 @@
       "id": "artifact:2026-05-31t10-24-18z-daemons-console-oc7:journeys-journey-daemons-console-phases-phase-review-steps-step-open-console-inspect.json",
       "kind": "json",
       "name": "inspect",
-      "uri": "file:///Users/aitoroses/repositories/agent-e2e-worktrees/codex-browser-inspect-refs/runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/inspect.json",
+      "uri": "file://runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/inspect.json",
       "path": "runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/inspect.json",
       "description": "Structured UI forensics: summary, refs with bounding boxes, and a hierarchical tree captured at step end."
     },
@@ -68,7 +68,7 @@
       "id": "artifact:2026-05-31t10-24-18z-daemons-console-oc7:journeys-journey-daemons-console-phases-phase-review-steps-step-open-console-inspect.md",
       "kind": "markdown",
       "name": "inspect",
-      "uri": "file:///Users/aitoroses/repositories/agent-e2e-worktrees/codex-browser-inspect-refs/runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/inspect.md",
+      "uri": "file://runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/inspect.md",
       "path": "runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/inspect.md",
       "description": "Agent-facing OC-grade inspect view captured at step end."
     },
@@ -76,7 +76,7 @@
       "id": "artifact:2026-05-31t10-24-18z-daemons-console-oc7:journeys-journey-daemons-console-phases-phase-review-steps-step-open-console-step-report.json",
       "kind": "json",
       "name": "step-report",
-      "uri": "file:///Users/aitoroses/repositories/agent-e2e-worktrees/codex-browser-inspect-refs/runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/step-report.json",
+      "uri": "file://runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/step-report.json",
       "path": "runs/2026-05-31T10-24-18Z-daemons-console-oc7/journeys/journey-daemons-console/phases/phase-review/steps/step-open-console/step-report.json",
       "description": "Single agent-facing step report: status, artifact paths, signals, failure info, and raw execution payload."
     },
@@ -84,7 +84,7 @@
       "id": "artifact:2026-05-31t10-24-18z-daemons-console-oc7:timeline.json",
       "kind": "json",
       "name": "timeline",
-      "uri": "file:///Users/aitoroses/repositories/agent-e2e-worktrees/codex-browser-inspect-refs/runs/2026-05-31T10-24-18Z-daemons-console-oc7/timeline.json",
+      "uri": "file://runs/2026-05-31T10-24-18Z-daemons-console-oc7/timeline.json",
       "path": "runs/2026-05-31T10-24-18Z-daemons-console-oc7/timeline.json",
       "description": "Compact phase/step status and timing timeline."
     },
@@ -92,7 +92,7 @@
       "id": "artifact:2026-05-31t10-24-18z-daemons-console-oc7:metrics.json",
       "kind": "json",
       "name": "metrics",
-      "uri": "file:///Users/aitoroses/repositories/agent-e2e-worktrees/codex-browser-inspect-refs/runs/2026-05-31T10-24-18Z-daemons-console-oc7/metrics.json",
+      "uri": "file://runs/2026-05-31T10-24-18Z-daemons-console-oc7/metrics.json",
       "path": "runs/2026-05-31T10-24-18Z-daemons-console-oc7/metrics.json",
       "description": "Per-step and aggregate run timing metrics."
     }

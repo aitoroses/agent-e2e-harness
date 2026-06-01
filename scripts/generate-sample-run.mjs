@@ -2,7 +2,7 @@
 // runs/<runId>/ layout: run-report.md/json, one ad-hoc inspection, and one
 // journey step with step-report.json. Run with:
 //   node scripts/generate-sample-run.mjs
-import { rm, cp, mkdir, readdir } from "node:fs/promises";
+import { rm, cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium } from "playwright";
@@ -58,12 +58,36 @@ async function main() {
   await server.callTool("runStep", { runId: RUN_ID, phaseId: "phase:review", stepId: "step:open-console" });
   await browser.close();
 
-  // 3) Copy into docs/sample-run for committing.
-  await rm(DOCS_DIR, { recursive: true, force: true });
+  // 3) Copy into docs/sample-run for committing. The fixture is loaded over
+  //    file:// locally, so neutralize the captured URL in the committed sample
+  //    (markdown is already neutralized by the renderer) to avoid leaking the
+  //    developer's filesystem path. The live tool keeps the real URL.
+  // Only replace this run's subdir — never the whole docs/sample-run dir (it
+  // holds the committed README).
   await mkdir(DOCS_DIR, { recursive: true });
+  await rm(resolve(DOCS_DIR, RUN_ID), { recursive: true, force: true });
   await cp(resolve(ARTIFACT_ROOT, RUN_ID), resolve(DOCS_DIR, RUN_ID), { recursive: true });
+  await neutralizeUrls(resolve(DOCS_DIR, RUN_ID));
   const tree = await listTree(resolve(DOCS_DIR, RUN_ID));
   console.log("\nSample run tree:\n" + tree.join("\n"));
+}
+
+// Strip the developer's absolute repo path from every committed JSON artifact
+// (artifact `uri` fields are `file://<abs>/...`), and present the fixture capture
+// URL as a neutral `fixture://` URL, so the sample never exposes a local path.
+async function neutralizeUrls(dir) {
+  const cwd = process.cwd();
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const full = resolve(dir, entry.name);
+    if (entry.isDirectory()) {
+      await neutralizeUrls(full);
+    } else if (entry.name.endsWith(".json")) {
+      const sanitized = (await readFile(full, "utf8"))
+        .split(`${cwd}/`).join("")
+        .split("file://packages/harness/test/fixtures/console-app.html").join("fixture://console-app.html");
+      await writeFile(full, sanitized, "utf8");
+    }
+  }
 }
 
 async function listTree(dir, prefix = "") {

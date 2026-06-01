@@ -1,5 +1,5 @@
 {
-  "url": "file:///Users/aitoroses/repositories/agent-e2e-worktrees/codex-browser-inspect-refs/packages/harness/test/fixtures/console-app.html",
+  "url": "fixture://console-app.html",
   "title": "Developer Run Console",
   "viewport": {
     "width": 1280,
@@ -24,7 +24,7 @@
     "networkFailures": 0
   },
   "summary": {
-    "interactive": 34,
+    "interactive": 15,
     "landmarks": [
       {
         "role": "banner"
@@ -118,19 +118,6 @@
   "interactive": [
     {
       "ref": "@e1",
-      "role": "banner",
-      "name": "Terrarium ⌘K Theme",
-      "selector": "[data-ui=\"topbar\"]",
-      "sig": "ui:topbar",
-      "rect": {
-        "x": 0,
-        "y": 0,
-        "width": 1280,
-        "height": 56
-      }
-    },
-    {
-      "ref": "@e2",
       "role": "link",
       "name": "Terrarium",
       "selector": "[data-ui=\"brand\"]",
@@ -143,7 +130,7 @@
       }
     },
     {
-      "ref": "@e3",
+      "ref": "@e2",
       "role": "textbox",
       "name": "Search daemons",
       "selector": "[data-ui=\"search\"]",
@@ -156,7 +143,7 @@
       }
     },
     {
-      "ref": "@e4",
+      "ref": "@e3",
       "role": "button",
       "name": "Open command palette",
       "selector": "[data-ui=\"command-palette\"]",
@@ -169,7 +156,7 @@
       }
     },
     {
-      "ref": "@e5",
+      "ref": "@e4",
       "role": "button",
       "name": "Switch theme",
       "selector": "[data-ui=\"theme-toggle\"]",
@@ -183,20 +170,7 @@
       "disabled": true
     },
     {
-      "ref": "@e6",
-      "role": "navigation",
-      "name": "Primary",
-      "selector": "[data-ui=\"sidebar\"]",
-      "sig": "ui:sidebar",
-      "rect": {
-        "x": 0,
-        "y": 56,
-        "width": 220,
-        "height": 820
-      }
-    },
-    {
-      "ref": "@e7",
+      "ref": "@e5",
       "role": "link",
       "name": "Daemons",
       "selector": "[data-ui=\"nav-daemons\"]",
@@ -209,7 +183,7 @@
       }
     },
     {
-      "ref": "@e8",
+      "ref": "@e6",
       "role": "link",
       "name": "Sessions",
       "selector": "[data-ui=\"nav-sessions\"]",
@@ -222,7 +196,7 @@
       }
     },
     {
-      "ref": "@e9",
+      "ref": "@e7",
       "role": "link",
       "name": "Credentials",
       "selector": "[data-ui=\"nav-credentials\"]",
@@ -235,7 +209,7 @@
       }
     },
     {
-      "ref": "@e10",
+      "ref": "@e8",
       "role": "link",
       "name": "Settings",
       "selector": "[data-ui=\"nav-settings\"]",
@@ -248,176 +222,7 @@
       }
     },
     {
-      "ref": "@e11",
-      "role": "main",
-      "name": "Daemons Routing hosts for users, sessions, and credentials Active12 Pending3 Failed1 Seed warning: one daemon failed its",
-      "selector": "[data-ui=\"content\"]",
-      "sig": "ui:content",
-      "rect": {
-        "x": 220,
-        "y": 56,
-        "width": 1060,
-        "height": 820
-      }
-    },
-    {
-      "ref": "@e12",
-      "role": "section",
-      "name": "Daemons Routing hosts for users, sessions, and credentials",
-      "selector": "[data-ui=\"overview\"]",
-      "sig": "ui:overview",
-      "rect": {
-        "x": 244,
-        "y": 80,
-        "width": 1012,
-        "height": 129
-      }
-    },
-    {
-      "ref": "@e13",
-      "role": "heading",
-      "name": "Daemons",
-      "selector": "body > [data-ui=\"overview\"] > h1:nth-of-type(1)",
-      "sig": "role:heading|name:Daemons",
-      "rect": {
-        "x": 244,
-        "y": 101,
-        "width": 1012,
-        "height": 38
-      }
-    },
-    {
-      "ref": "@e14",
-      "role": "heading",
-      "name": "Routing hosts for users, sessions, and credentials",
-      "selector": "body > [data-ui=\"overview\"] > h2:nth-of-type(1)",
-      "sig": "role:heading|name:Routing hosts for users, sessions, and credentials",
-      "rect": {
-        "x": 244,
-        "y": 161,
-        "width": 1012,
-        "height": 28
-      }
-    },
-    {
-      "ref": "@e15",
-      "role": "div",
-      "name": "Active12 Pending3 Failed1",
-      "selector": "[data-ui=\"metrics\"]",
-      "sig": "ui:metrics",
-      "rect": {
-        "x": 244,
-        "y": 229,
-        "width": 1012,
-        "height": 90
-      }
-    },
-    {
-      "ref": "@e16",
-      "role": "article",
-      "name": "Active12",
-      "selector": "[data-ui=\"card-active\"]",
-      "sig": "ui:card-active",
-      "rect": {
-        "x": 244,
-        "y": 229,
-        "width": 327,
-        "height": 90
-      }
-    },
-    {
-      "ref": "@e17",
-      "role": "heading",
-      "name": "Active",
-      "selector": "body > [data-ui=\"card-active\"] > h3:nth-of-type(1)",
-      "sig": "role:heading|name:Active",
-      "rect": {
-        "x": 261,
-        "y": 246,
-        "width": 293,
-        "height": 17
-      }
-    },
-    {
-      "ref": "@e18",
-      "role": "article",
-      "name": "Pending3",
-      "selector": "[data-ui=\"card-pending\"]",
-      "sig": "ui:card-pending",
-      "rect": {
-        "x": 587,
-        "y": 229,
-        "width": 327,
-        "height": 90
-      }
-    },
-    {
-      "ref": "@e19",
-      "role": "heading",
-      "name": "Pending",
-      "selector": "body > [data-ui=\"card-pending\"] > h3:nth-of-type(1)",
-      "sig": "role:heading|name:Pending",
-      "rect": {
-        "x": 604,
-        "y": 246,
-        "width": 293,
-        "height": 17
-      }
-    },
-    {
-      "ref": "@e20",
-      "role": "article",
-      "name": "Failed1",
-      "selector": "[data-ui=\"card-failed\"]",
-      "sig": "ui:card-failed",
-      "rect": {
-        "x": 929,
-        "y": 229,
-        "width": 327,
-        "height": 90
-      }
-    },
-    {
-      "ref": "@e21",
-      "role": "heading",
-      "name": "Failed",
-      "selector": "body > [data-ui=\"card-failed\"] > h3:nth-of-type(1)",
-      "sig": "role:heading|name:Failed",
-      "rect": {
-        "x": 946,
-        "y": 246,
-        "width": 293,
-        "height": 17
-      }
-    },
-    {
-      "ref": "@e22",
-      "role": "alert",
-      "name": "Seed warning: one daemon failed its last health check.",
-      "selector": "[data-ui=\"seed-alert\"]",
-      "sig": "ui:seed-alert",
-      "rect": {
-        "x": 244,
-        "y": 339,
-        "width": 1012,
-        "height": 40
-      }
-    },
-    {
-      "ref": "@e23",
-      "role": "form",
-      "name": "Display name Runtime Local Docker runtime Remote runtime Start daemon Auto restart Bulk delete",
-      "selector": "[data-ui=\"create-form\"]",
-      "sig": "ui:create-form",
-      "rect": {
-        "x": 244,
-        "y": 399,
-        "width": 1012,
-        "height": 136
-      }
-    },
-    {
-      "ref": "@e24",
+      "ref": "@e9",
       "role": "textbox",
       "name": "Display name",
       "selector": "[data-ui=\"daemon-name\"]",
@@ -430,7 +235,7 @@
       }
     },
     {
-      "ref": "@e25",
+      "ref": "@e10",
       "role": "combobox",
       "name": "Runtime",
       "selector": "[data-ui=\"runtime\"]",
@@ -443,7 +248,7 @@
       }
     },
     {
-      "ref": "@e26",
+      "ref": "@e11",
       "role": "button",
       "name": "Start daemon",
       "selector": "[data-ui=\"create-daemon\"]",
@@ -456,7 +261,7 @@
       }
     },
     {
-      "ref": "@e27",
+      "ref": "@e12",
       "role": "checkbox",
       "name": "Auto restart",
       "selector": "[data-ui=\"auto-restart\"]",
@@ -469,7 +274,7 @@
       }
     },
     {
-      "ref": "@e28",
+      "ref": "@e13",
       "role": "button",
       "name": "Bulk delete",
       "selector": "[data-ui=\"bulk-delete\"]",
@@ -483,59 +288,7 @@
       "disabled": true
     },
     {
-      "ref": "@e29",
-      "role": "div",
-      "name": "Recent events",
-      "selector": "[data-ui=\"log-scroll\"]",
-      "sig": "ui:log-scroll",
-      "rect": {
-        "x": 244,
-        "y": 555,
-        "width": 1012,
-        "height": 140
-      }
-    },
-    {
-      "ref": "@e30",
-      "role": "table",
-      "name": "NameRuntimeStatus daemon-01dockeractive daemon-03dockerfailed daemon-04remoteactive",
-      "selector": "[data-ui=\"daemons-table\"]",
-      "sig": "ui:daemons-table",
-      "rect": {
-        "x": 244,
-        "y": 715,
-        "width": 1012,
-        "height": 137
-      }
-    },
-    {
-      "ref": "@e31",
-      "role": "div",
-      "name": "Offscreen helper text (not visible)",
-      "selector": "[data-ui=\"offscreen-hint\"]",
-      "sig": "ui:offscreen-hint",
-      "rect": {
-        "x": -9999,
-        "y": 0,
-        "width": 243,
-        "height": 18
-      }
-    },
-    {
-      "ref": "@e32",
-      "role": "dialog",
-      "name": "Confirm delete",
-      "selector": "[data-ui=\"confirm-dialog\"]",
-      "sig": "ui:confirm-dialog",
-      "rect": {
-        "x": 426,
-        "y": 876,
-        "width": 428,
-        "height": 126
-      }
-    },
-    {
-      "ref": "@e33",
+      "ref": "@e14",
       "role": "button",
       "name": "Cancel",
       "selector": "[data-ui=\"confirm-cancel\"]",
@@ -548,7 +301,7 @@
       }
     },
     {
-      "ref": "@e34",
+      "ref": "@e15",
       "role": "button",
       "name": "Delete",
       "selector": "[data-ui=\"confirm-delete\"]",
@@ -565,7 +318,6 @@
     {
       "depth": 0,
       "tag": "header",
-      "ref": "@e1",
       "role": "banner",
       "name": "Terrarium ⌘K Theme",
       "selector": "[data-ui=\"topbar\"]",
@@ -594,7 +346,7 @@
     {
       "depth": 1,
       "tag": "a",
-      "ref": "@e2",
+      "ref": "@e1",
       "role": "link",
       "name": "Terrarium",
       "selector": "[data-ui=\"brand\"]",
@@ -619,7 +371,7 @@
     {
       "depth": 1,
       "tag": "input",
-      "ref": "@e3",
+      "ref": "@e2",
       "role": "textbox",
       "name": "Search daemons",
       "selector": "[data-ui=\"search\"]",
@@ -648,7 +400,7 @@
     {
       "depth": 1,
       "tag": "button",
-      "ref": "@e4",
+      "ref": "@e3",
       "name": "Open command palette",
       "selector": "[data-ui=\"command-palette\"]",
       "dataUi": "command-palette",
@@ -676,7 +428,7 @@
     {
       "depth": 1,
       "tag": "button",
-      "ref": "@e5",
+      "ref": "@e4",
       "name": "Switch theme",
       "selector": "[data-ui=\"theme-toggle\"]",
       "dataUi": "theme-toggle",
@@ -705,7 +457,6 @@
     {
       "depth": 0,
       "tag": "nav",
-      "ref": "@e6",
       "role": "navigation",
       "name": "Primary",
       "selector": "[data-ui=\"sidebar\"]",
@@ -732,7 +483,7 @@
     {
       "depth": 1,
       "tag": "a",
-      "ref": "@e7",
+      "ref": "@e5",
       "role": "link",
       "name": "Daemons",
       "selector": "[data-ui=\"nav-daemons\"]",
@@ -760,7 +511,7 @@
     {
       "depth": 1,
       "tag": "a",
-      "ref": "@e8",
+      "ref": "@e6",
       "role": "link",
       "name": "Sessions",
       "selector": "[data-ui=\"nav-sessions\"]",
@@ -787,7 +538,7 @@
     {
       "depth": 1,
       "tag": "a",
-      "ref": "@e9",
+      "ref": "@e7",
       "role": "link",
       "name": "Credentials",
       "selector": "[data-ui=\"nav-credentials\"]",
@@ -814,7 +565,7 @@
     {
       "depth": 1,
       "tag": "a",
-      "ref": "@e10",
+      "ref": "@e8",
       "role": "link",
       "name": "Settings",
       "selector": "[data-ui=\"nav-settings\"]",
@@ -841,7 +592,6 @@
     {
       "depth": 0,
       "tag": "main",
-      "ref": "@e11",
       "name": "Daemons Routing hosts for users, sessions, and credentials Active12 Pending3 Fai",
       "selector": "[data-ui=\"content\"]",
       "dataUi": "content",
@@ -868,7 +618,6 @@
     {
       "depth": 1,
       "tag": "section",
-      "ref": "@e12",
       "name": "Daemons Routing hosts for users, sessions, and credentials",
       "selector": "[data-ui=\"overview\"]",
       "dataUi": "overview",
@@ -892,10 +641,9 @@
     {
       "depth": 2,
       "tag": "h1",
-      "ref": "@e13",
       "role": "heading",
       "name": "Daemons",
-      "selector": "body > [data-ui=\"overview\"] > h1:nth-of-type(1)",
+      "selector": "[data-ui=\"overview\"] > h1:nth-of-type(1)",
       "rect": {
         "x": 244,
         "y": 101,
@@ -916,10 +664,9 @@
     {
       "depth": 2,
       "tag": "h2",
-      "ref": "@e14",
       "role": "heading",
       "name": "Routing hosts for users, sessions, and credentials",
-      "selector": "body > [data-ui=\"overview\"] > h2:nth-of-type(1)",
+      "selector": "[data-ui=\"overview\"] > h2:nth-of-type(1)",
       "rect": {
         "x": 244,
         "y": 161,
@@ -940,7 +687,6 @@
     {
       "depth": 1,
       "tag": "div",
-      "ref": "@e15",
       "name": "Active12 Pending3 Failed1",
       "selector": "[data-ui=\"metrics\"]",
       "dataUi": "metrics",
@@ -966,7 +712,6 @@
     {
       "depth": 2,
       "tag": "article",
-      "ref": "@e16",
       "name": "Active12",
       "selector": "[data-ui=\"card-active\"]",
       "dataUi": "card-active",
@@ -994,10 +739,9 @@
     {
       "depth": 3,
       "tag": "h3",
-      "ref": "@e17",
       "role": "heading",
       "name": "Active",
-      "selector": "body > [data-ui=\"card-active\"] > h3:nth-of-type(1)",
+      "selector": "[data-ui=\"card-active\"] > h3:nth-of-type(1)",
       "rect": {
         "x": 261,
         "y": 246,
@@ -1018,7 +762,6 @@
     {
       "depth": 2,
       "tag": "article",
-      "ref": "@e18",
       "name": "Pending3",
       "selector": "[data-ui=\"card-pending\"]",
       "dataUi": "card-pending",
@@ -1046,10 +789,9 @@
     {
       "depth": 3,
       "tag": "h3",
-      "ref": "@e19",
       "role": "heading",
       "name": "Pending",
-      "selector": "body > [data-ui=\"card-pending\"] > h3:nth-of-type(1)",
+      "selector": "[data-ui=\"card-pending\"] > h3:nth-of-type(1)",
       "rect": {
         "x": 604,
         "y": 246,
@@ -1070,7 +812,6 @@
     {
       "depth": 2,
       "tag": "article",
-      "ref": "@e20",
       "name": "Failed1",
       "selector": "[data-ui=\"card-failed\"]",
       "dataUi": "card-failed",
@@ -1098,10 +839,9 @@
     {
       "depth": 3,
       "tag": "h3",
-      "ref": "@e21",
       "role": "heading",
       "name": "Failed",
-      "selector": "body > [data-ui=\"card-failed\"] > h3:nth-of-type(1)",
+      "selector": "[data-ui=\"card-failed\"] > h3:nth-of-type(1)",
       "rect": {
         "x": 946,
         "y": 246,
@@ -1122,7 +862,6 @@
     {
       "depth": 1,
       "tag": "div",
-      "ref": "@e22",
       "role": "alert",
       "name": "Seed warning: one daemon failed its last health check.",
       "selector": "[data-ui=\"seed-alert\"]",
@@ -1151,7 +890,6 @@
     {
       "depth": 1,
       "tag": "form",
-      "ref": "@e23",
       "name": "Display name Runtime Local Docker runtime Remote runtime Start daemon Auto resta",
       "selector": "[data-ui=\"create-form\"]",
       "dataUi": "create-form",
@@ -1182,7 +920,7 @@
       "depth": 2,
       "tag": "label",
       "name": "Display name",
-      "selector": "body > [data-ui=\"create-form\"] > label:nth-of-type(1)",
+      "selector": "[data-ui=\"create-form\"] > label:nth-of-type(1)",
       "rect": {
         "x": 261,
         "y": 418,
@@ -1205,7 +943,7 @@
     {
       "depth": 3,
       "tag": "input",
-      "ref": "@e24",
+      "ref": "@e9",
       "role": "textbox",
       "name": "Display name",
       "selector": "[data-ui=\"daemon-name\"]",
@@ -1235,7 +973,7 @@
       "depth": 2,
       "tag": "label",
       "name": "Runtime Local Docker runtime Remote runtime",
-      "selector": "body > [data-ui=\"create-form\"] > label:nth-of-type(2)",
+      "selector": "[data-ui=\"create-form\"] > label:nth-of-type(2)",
       "rect": {
         "x": 693,
         "y": 416,
@@ -1258,7 +996,7 @@
     {
       "depth": 3,
       "tag": "select",
-      "ref": "@e25",
+      "ref": "@e10",
       "role": "combobox",
       "name": "Runtime",
       "selector": "[data-ui=\"runtime\"]",
@@ -1287,7 +1025,7 @@
     {
       "depth": 2,
       "tag": "button",
-      "ref": "@e26",
+      "ref": "@e11",
       "name": "Start daemon",
       "selector": "[data-ui=\"create-daemon\"]",
       "dataUi": "create-daemon",
@@ -1316,7 +1054,7 @@
       "depth": 2,
       "tag": "label",
       "name": "Auto restart",
-      "selector": "body > [data-ui=\"create-form\"] > label:nth-of-type(3)",
+      "selector": "[data-ui=\"create-form\"] > label:nth-of-type(3)",
       "rect": {
         "x": 261,
         "y": 499,
@@ -1340,7 +1078,7 @@
     {
       "depth": 3,
       "tag": "input",
-      "ref": "@e27",
+      "ref": "@e12",
       "role": "checkbox",
       "name": "Auto restart",
       "selector": "[data-ui=\"auto-restart\"]",
@@ -1365,7 +1103,7 @@
     {
       "depth": 2,
       "tag": "button",
-      "ref": "@e28",
+      "ref": "@e13",
       "name": "Bulk delete",
       "selector": "[data-ui=\"bulk-delete\"]",
       "dataUi": "bulk-delete",
@@ -1394,7 +1132,6 @@
     {
       "depth": 1,
       "tag": "div",
-      "ref": "@e29",
       "name": "Recent events",
       "selector": "[data-ui=\"log-scroll\"]",
       "dataUi": "log-scroll",
@@ -1434,7 +1171,7 @@
       "tag": "ul",
       "role": "list",
       "name": "daemon-01 starteddaemon-02 starteddaemon-03 health check failed daemon-04 starte",
-      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1)",
+      "selector": "[data-ui=\"log-scroll\"] > ul:nth-of-type(1)",
       "rect": {
         "x": 245,
         "y": 556,
@@ -1454,288 +1191,8 @@
       }
     },
     {
-      "depth": 3,
-      "tag": "li",
-      "role": "listitem",
-      "name": "daemon-01 started",
-      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(1)",
-      "rect": {
-        "x": 261,
-        "y": 564,
-        "width": 978,
-        "height": 18
-      },
-      "visible": true,
-      "layout": {
-        "display": "list-item",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 3,
-      "tag": "li",
-      "role": "listitem",
-      "name": "daemon-02 started",
-      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(2)",
-      "rect": {
-        "x": 261,
-        "y": 582,
-        "width": 978,
-        "height": 18
-      },
-      "visible": true,
-      "layout": {
-        "display": "list-item",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 3,
-      "tag": "li",
-      "role": "listitem",
-      "name": "daemon-03 health check failed",
-      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(3)",
-      "rect": {
-        "x": 261,
-        "y": 600,
-        "width": 978,
-        "height": 18
-      },
-      "visible": true,
-      "layout": {
-        "display": "list-item",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 3,
-      "tag": "li",
-      "role": "listitem",
-      "name": "daemon-04 started",
-      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(4)",
-      "rect": {
-        "x": 261,
-        "y": 618,
-        "width": 978,
-        "height": 18
-      },
-      "visible": true,
-      "layout": {
-        "display": "list-item",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 3,
-      "tag": "li",
-      "role": "listitem",
-      "name": "daemon-05 started",
-      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(5)",
-      "rect": {
-        "x": 261,
-        "y": 636,
-        "width": 978,
-        "height": 18
-      },
-      "visible": true,
-      "layout": {
-        "display": "list-item",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 3,
-      "tag": "li",
-      "role": "listitem",
-      "name": "daemon-06 stopped",
-      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(6)",
-      "rect": {
-        "x": 261,
-        "y": 654,
-        "width": 978,
-        "height": 18
-      },
-      "visible": true,
-      "layout": {
-        "display": "list-item",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 3,
-      "tag": "li",
-      "role": "listitem",
-      "name": "daemon-07 started",
-      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(7)",
-      "rect": {
-        "x": 261,
-        "y": 672,
-        "width": 978,
-        "height": 18
-      },
-      "visible": true,
-      "layout": {
-        "display": "list-item",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 3,
-      "tag": "li",
-      "role": "listitem",
-      "name": "daemon-08 started",
-      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(8)",
-      "rect": {
-        "x": 261,
-        "y": 690,
-        "width": 978,
-        "height": 18
-      },
-      "visible": true,
-      "layout": {
-        "display": "list-item",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 3,
-      "tag": "li",
-      "role": "listitem",
-      "name": "daemon-09 started",
-      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(9)",
-      "rect": {
-        "x": 261,
-        "y": 708,
-        "width": 978,
-        "height": 18
-      },
-      "visible": true,
-      "layout": {
-        "display": "list-item",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 3,
-      "tag": "li",
-      "role": "listitem",
-      "name": "daemon-10 started",
-      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(10)",
-      "rect": {
-        "x": 261,
-        "y": 726,
-        "width": 978,
-        "height": 18
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "list-item",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 3,
-      "tag": "li",
-      "role": "listitem",
-      "name": "daemon-11 started",
-      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(11)",
-      "rect": {
-        "x": 261,
-        "y": 744,
-        "width": 978,
-        "height": 18
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "list-item",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 3,
-      "tag": "li",
-      "role": "listitem",
-      "name": "daemon-12 started",
-      "selector": "body > [data-ui=\"log-scroll\"] > ul:nth-of-type(1) > li:nth-of-type(12)",
-      "rect": {
-        "x": 261,
-        "y": 762,
-        "width": 978,
-        "height": 18
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "list-item",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
       "depth": 1,
       "tag": "table",
-      "ref": "@e30",
       "name": "NameRuntimeStatus daemon-01dockeractive daemon-03dockerfailed daemon-04remoteact",
       "selector": "[data-ui=\"daemons-table\"]",
       "dataUi": "daemons-table",
@@ -1760,430 +1217,8 @@
       }
     },
     {
-      "depth": 2,
-      "tag": "thead",
-      "name": "NameRuntimeStatus",
-      "selector": "body > [data-ui=\"daemons-table\"] > thead:nth-of-type(1)",
-      "rect": {
-        "x": 245,
-        "y": 715,
-        "width": 1011,
-        "height": 34
-      },
-      "visible": true,
-      "layout": {
-        "display": "table-header-group",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 3,
-      "tag": "tr",
-      "name": "NameRuntimeStatus",
-      "selector": "body > [data-ui=\"daemons-table\"] > thead:nth-of-type(1) > tr:nth-of-type(1)",
-      "rect": {
-        "x": 245,
-        "y": 715,
-        "width": 1011,
-        "height": 34
-      },
-      "visible": true,
-      "layout": {
-        "display": "table-row",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 4,
-      "tag": "th",
-      "name": "Name",
-      "selector": "body > [data-ui=\"daemons-table\"] > thead:nth-of-type(1) > tr:nth-of-type(1) > th:nth-of-type(1)",
-      "rect": {
-        "x": 245,
-        "y": 715,
-        "width": 404,
-        "height": 34
-      },
-      "visible": true,
-      "layout": {
-        "display": "table-cell",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "14px",
-        "fontWeight": "700",
-        "color": "rgb(17, 24, 39)",
-        "padding": "8px 12px"
-      }
-    },
-    {
-      "depth": 4,
-      "tag": "th",
-      "name": "Runtime",
-      "selector": "body > [data-ui=\"daemons-table\"] > thead:nth-of-type(1) > tr:nth-of-type(1) > th:nth-of-type(2)",
-      "rect": {
-        "x": 648,
-        "y": 715,
-        "width": 327,
-        "height": 34
-      },
-      "visible": true,
-      "layout": {
-        "display": "table-cell",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "14px",
-        "fontWeight": "700",
-        "color": "rgb(17, 24, 39)",
-        "padding": "8px 12px"
-      }
-    },
-    {
-      "depth": 4,
-      "tag": "th",
-      "name": "Status",
-      "selector": "body > [data-ui=\"daemons-table\"] > thead:nth-of-type(1) > tr:nth-of-type(1) > th:nth-of-type(3)",
-      "rect": {
-        "x": 976,
-        "y": 715,
-        "width": 280,
-        "height": 34
-      },
-      "visible": true,
-      "layout": {
-        "display": "table-cell",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "14px",
-        "fontWeight": "700",
-        "color": "rgb(17, 24, 39)",
-        "padding": "8px 12px"
-      }
-    },
-    {
-      "depth": 2,
-      "tag": "tbody",
-      "name": "daemon-01dockeractive daemon-03dockerfailed daemon-04remoteactive",
-      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1)",
-      "rect": {
-        "x": 245,
-        "y": 749,
-        "width": 1011,
-        "height": 102
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "table-row-group",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 3,
-      "tag": "tr",
-      "name": "daemon-01dockeractive",
-      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(1)",
-      "rect": {
-        "x": 245,
-        "y": 749,
-        "width": 1011,
-        "height": 34
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "table-row",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 4,
-      "tag": "td",
-      "name": "daemon-01",
-      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1)",
-      "rect": {
-        "x": 245,
-        "y": 749,
-        "width": 404,
-        "height": 34
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "table-cell",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "14px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)",
-        "padding": "8px 12px"
-      }
-    },
-    {
-      "depth": 4,
-      "tag": "td",
-      "name": "docker",
-      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(2)",
-      "rect": {
-        "x": 648,
-        "y": 749,
-        "width": 327,
-        "height": 34
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "table-cell",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "14px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)",
-        "padding": "8px 12px"
-      }
-    },
-    {
-      "depth": 4,
-      "tag": "td",
-      "name": "active",
-      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(3)",
-      "rect": {
-        "x": 976,
-        "y": 749,
-        "width": 280,
-        "height": 34
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "table-cell",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "14px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)",
-        "padding": "8px 12px"
-      }
-    },
-    {
-      "depth": 3,
-      "tag": "tr",
-      "name": "daemon-03dockerfailed",
-      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(2)",
-      "rect": {
-        "x": 245,
-        "y": 783,
-        "width": 1011,
-        "height": 34
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "table-row",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 4,
-      "tag": "td",
-      "name": "daemon-03",
-      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(2) > td:nth-of-type(1)",
-      "rect": {
-        "x": 245,
-        "y": 783,
-        "width": 404,
-        "height": 34
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "table-cell",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "14px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)",
-        "padding": "8px 12px"
-      }
-    },
-    {
-      "depth": 4,
-      "tag": "td",
-      "name": "docker",
-      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(2) > td:nth-of-type(2)",
-      "rect": {
-        "x": 648,
-        "y": 783,
-        "width": 327,
-        "height": 34
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "table-cell",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "14px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)",
-        "padding": "8px 12px"
-      }
-    },
-    {
-      "depth": 4,
-      "tag": "td",
-      "name": "failed",
-      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(2) > td:nth-of-type(3)",
-      "rect": {
-        "x": 976,
-        "y": 783,
-        "width": 280,
-        "height": 34
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "table-cell",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "14px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)",
-        "padding": "8px 12px"
-      }
-    },
-    {
-      "depth": 3,
-      "tag": "tr",
-      "name": "daemon-04remoteactive",
-      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(3)",
-      "rect": {
-        "x": 245,
-        "y": 817,
-        "width": 1011,
-        "height": 34
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "table-row",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)"
-      }
-    },
-    {
-      "depth": 4,
-      "tag": "td",
-      "name": "daemon-04",
-      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(3) > td:nth-of-type(1)",
-      "rect": {
-        "x": 245,
-        "y": 817,
-        "width": 404,
-        "height": 34
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "table-cell",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "14px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)",
-        "padding": "8px 12px"
-      }
-    },
-    {
-      "depth": 4,
-      "tag": "td",
-      "name": "remote",
-      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(3) > td:nth-of-type(2)",
-      "rect": {
-        "x": 648,
-        "y": 817,
-        "width": 327,
-        "height": 34
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "table-cell",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "14px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)",
-        "padding": "8px 12px"
-      }
-    },
-    {
-      "depth": 4,
-      "tag": "td",
-      "name": "active",
-      "selector": "body > [data-ui=\"daemons-table\"] > tbody:nth-of-type(1) > tr:nth-of-type(3) > td:nth-of-type(3)",
-      "rect": {
-        "x": 976,
-        "y": 817,
-        "width": 280,
-        "height": 34
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "table-cell",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "14px",
-        "fontWeight": "400",
-        "color": "rgb(17, 24, 39)",
-        "padding": "8px 12px"
-      }
-    },
-    {
       "depth": 1,
       "tag": "div",
-      "ref": "@e31",
       "name": "Offscreen helper text (not visible)",
       "selector": "[data-ui=\"offscreen-hint\"]",
       "dataUi": "offscreen-hint",
@@ -2208,7 +1243,6 @@
     {
       "depth": 0,
       "tag": "dialog",
-      "ref": "@e32",
       "name": "Confirm delete",
       "selector": "[data-ui=\"confirm-dialog\"]",
       "dataUi": "confirm-dialog",
@@ -2231,36 +1265,14 @@
         "background": "rgb(255, 255, 255)",
         "border": "1px solid rgb(229, 231, 235)",
         "borderRadius": "12px",
-        "padding": "20px"
-      }
-    },
-    {
-      "depth": 1,
-      "tag": "p",
-      "name": "Delete the selected daemon? This cannot be undone.",
-      "selector": "body > [data-ui=\"confirm-dialog\"] > p:nth-of-type(1)",
-      "rect": {
-        "x": 447,
-        "y": 913,
-        "width": 386,
-        "height": 18
-      },
-      "visible": true,
-      "hidden": "offscreen",
-      "layout": {
-        "display": "block",
-        "position": "static"
-      },
-      "style": {
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "color": "rgb(0, 0, 0)"
+        "padding": "20px",
+        "shadow": "rgba(0, 0, 0, 0.15) 0px 10px 30px 0px"
       }
     },
     {
       "depth": 1,
       "tag": "button",
-      "ref": "@e33",
+      "ref": "@e14",
       "name": "Cancel",
       "selector": "[data-ui=\"confirm-cancel\"]",
       "dataUi": "confirm-cancel",
@@ -2289,7 +1301,7 @@
     {
       "depth": 1,
       "tag": "button",
-      "ref": "@e34",
+      "ref": "@e15",
       "name": "Delete",
       "selector": "[data-ui=\"confirm-delete\"]",
       "dataUi": "confirm-delete",

@@ -31,17 +31,21 @@ export const FORENSICS_SINGLETON_GLOBAL = "__agentE2EForensics";
 export const FORENSICS_OVERLAY_CONTAINER_ID = "agent-e2e-refs-overlay";
 export const FORENSICS_REF_PREFIX = "@e";
 
-// Selector set that defines a "referencable" node — an act target. The overlay
-// paints exactly these; there is no separate kinds/filter taxonomy.
+// Selector set that defines a "referencable" node — a real, actionable act
+// target only (controls + actionable ARIA roles + contenteditable). The overlay
+// paints exactly these, and they are the only entries in "Interactive (DOM
+// order)". Landmarks/headings/containers are NOT here — they live in the tree.
 const REFERENCABLE_SELECTOR =
-  "a[href],button,input,textarea,select,summary,[role=button],[role=link],[role=textbox],[role=checkbox],[role=radio],[role=combobox],[role=menuitem],[role=tab],[role=switch],[role=option],[data-testid],[data-ui],[data-note-id],[contenteditable='true'],h1,h2,h3";
+  "a[href],button,input,textarea,select,summary,[role=button],[role=link],[role=textbox],[role=checkbox],[role=radio],[role=combobox],[role=menuitem],[role=tab],[role=switch],[role=option],[contenteditable='true'],[data-note-id]";
 
 // Broader set of structurally significant nodes included in the layout tree for
-// reasoning (landmarks, sections, lists, tables, media, scroll containers). These
-// are NOT painted by the overlay; they give the agent layout/visibility context.
+// reasoning (landmarks, sections, forms, tables, lists, media, headings, scroll
+// containers). These are NOT painted by the overlay. Noisy leaves (table rows /
+// cells, list items, paragraphs) are intentionally pruned to keep the tree
+// scannable; the table/list still appears as a single container node.
 const SIGNIFICANT_SELECTOR =
   REFERENCABLE_SELECTOR +
-  ",header,nav,main,aside,footer,form,section,article,fieldset,table,thead,tbody,tr,th,td,ul,ol,li,dl,dialog,figure,img,h4,h5,h6,p,label,[role],[data-ui],[data-testid]";
+  ",header,nav,main,aside,footer,form,section,article,fieldset,table,ul,ol,dialog,figure,img,h1,h2,h3,h4,h5,h6,label,[role],[data-ui],[data-testid]";
 
 export const FORENSICS_BROWSER_SOURCE = `(() => {
   const GLOBAL = ${JSON.stringify(FORENSICS_SINGLETON_GLOBAL)};
@@ -149,15 +153,18 @@ export const FORENSICS_BROWSER_SOURCE = `(() => {
       parts.unshift(nthOfType(current));
       current = current.parentElement;
     }
-    return "body > " + parts.join(" > ");
+    return parts.join(" > ");
   }
 
+  // Selector priority (stable first): data-ui, data-testid, id, data-note-id,
+  // then a DOM-path fallback. The fallback only appears in the Selectors block,
+  // never inline in the tree.
   function selectorFor(el) {
-    if (el.id) return "#" + CSS.escape(el.id);
     const ui = el.getAttribute("data-ui");
     if (ui) return '[data-ui="' + CSS.escape(ui) + '"]';
     const testId = el.getAttribute("data-testid");
     if (testId) return '[data-testid="' + CSS.escape(testId) + '"]';
+    if (el.id) return "#" + CSS.escape(el.id);
     const noteId = el.getAttribute("data-note-id");
     if (noteId) return '[data-note-id="' + CSS.escape(noteId) + '"]';
     return cssPath(el);
@@ -260,6 +267,7 @@ export const FORENSICS_BROWSER_SOURCE = `(() => {
     if (border) out.border = border;
     if (style.borderTopLeftRadius && style.borderTopLeftRadius !== "0px") out.borderRadius = style.borderRadius;
     if (style.paddingTop && style.paddingTop !== "0px") out.padding = style.padding;
+    if (style.boxShadow && style.boxShadow !== "none") out.shadow = style.boxShadow;
     return out;
   }
 
