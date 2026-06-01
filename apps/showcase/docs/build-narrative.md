@@ -22,9 +22,9 @@ The current launch proof loop is:
 2. `mcporter list http://127.0.0.1:3766/mcp --allow-http --schema --json`
 3. `stack.start` returns a `stackId` plus ready `showcase-next-dev` and `postgres` services.
 4. `run.begin` applies the baseline workspace/user seed.
-5. `browser.open`, `browser.snapshot`, `browser.find`, `browser.act`, `browser.wait`, and `browser.get` create and inspect the proof note through the UI.
-6. `journey.step` captures the browser-created proof note as run-owned and verifies persistence.
-7. `artifact.read` opens `step-feedback.json` so the agent can debug from artifacts instead of terminal scrollback.
+5. `browser.open`, `browser.inspect`, `browser.refs` (optional overlay), `browser.act`, `browser.wait`, and a second `browser.inspect` create and capture evidence for the proof note through the UI. Console errors and network failures surface as `signals` in each inspect result; detail lives in the written `inspect.md` and `inspect.json` artifacts under `runs/<runId>/inspections/<seq>/`.
+6. `journey.step` captures the browser-created proof note as run-owned and verifies persistence. The step uses the same inspect machinery as `browser.inspect`; per-step artifacts land under `runs/<runId>/journeys/<journeyId>/phases/<phaseId>/steps/<stepId>/` including `step-report.json`.
+7. Open `step-report.json` from the artifact path returned in the `journey.step` response to debug from artifacts instead of terminal scrollback.
 8. `cleanup.plan` and `run.teardown` delete the owned proof note.
 9. `stack.stop` with the explicit `stackId` tears down Next.js and PostgreSQL.
 

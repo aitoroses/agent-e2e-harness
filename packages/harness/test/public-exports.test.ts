@@ -24,7 +24,7 @@ describe('public package exports', () => {
   });
 
   it('loads the artifact utilities through the /artifacts subpath export', () => {
-    expect(DEFAULT_AGENT_E2E_ARTIFACT_ROOT).toBe('.agents-e2e/artifacts');
+    expect(DEFAULT_AGENT_E2E_ARTIFACT_ROOT).toBe('runs');
   });
 
   it('loads verify utilities through the /verify subpath export', () => {

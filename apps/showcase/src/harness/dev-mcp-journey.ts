@@ -146,8 +146,7 @@ export function createShowcaseMcpJourney() {
                   errors: [`Browser-created proof note for run ${runId} was not found.`],
                   guidance: [
                     { type: "inspect", label: "Open headed browser", target: "browser.open" },
-                    { type: "inspect", label: "Capture browser snapshot", target: "browser.snapshot" },
-                    { type: "inspect", label: "Resolve Create proof note button", target: "browser.find" },
+                    { type: "inspect", label: "Capture UI state and refs", target: "browser.inspect" },
                     { type: "continue", label: "Click Create proof note", target: "browser.act" },
                     { type: "inspect", label: "Wait for persisted status", target: "browser.wait" },
                   ],

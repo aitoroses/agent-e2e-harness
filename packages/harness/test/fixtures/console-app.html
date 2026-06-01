@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Developer Run Console</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, sans-serif; color: #111827; background: #f8fafc; }
+      .app { display: grid; grid-template-columns: 220px 1fr; grid-template-rows: 56px 1fr; min-height: 100vh; }
+      header.topbar {
+        grid-column: 1 / 3; display: flex; align-items: center; gap: 16px;
+        padding: 0 20px; background: #ffffff; border-bottom: 1px solid #e5e7eb;
+      }
+      header.topbar .brand { font-weight: 700; color: #b45309; text-decoration: none; }
+      header.topbar .spacer { flex: 1; }
+      nav.sidebar { background: #0f172a; color: #e2e8f0; padding: 16px 12px; }
+      nav.sidebar a { display: block; padding: 8px 10px; color: #cbd5e1; text-decoration: none; border-radius: 6px; }
+      nav.sidebar a[aria-current="page"] { background: #1e293b; color: #fff; }
+      main.content { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+      .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+      .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
+      .card h3 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+      .card .metric { font-size: 28px; font-weight: 700; }
+      form.create { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end;
+        background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
+      label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+      input, select { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+      button { padding: 8px 14px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; font-size: 14px; cursor: pointer; }
+      button.primary { background: #b45309; color: #fff; border-color: #b45309; }
+      button[disabled], input[disabled] { opacity: 0.5; cursor: not-allowed; }
+      .alert { background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; border-radius: 8px; padding: 10px 14px; }
+      .scroll-region { height: 140px; overflow: auto; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+      .scroll-region ul { margin: 0; padding: 8px 16px; }
+      table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; }
+      th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+      dialog { border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
+      .offscreen { position: absolute; left: -9999px; top: 0; }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar" data-ui="topbar">
+        <a class="brand" href="#home" data-ui="brand">Terrarium</a>
+        <input type="search" aria-label="Search daemons" placeholder="Search…" data-ui="search" />
+        <span class="spacer"></span>
+        <button data-ui="command-palette" aria-label="Open command palette">⌘K</button>
+        <button data-ui="theme-toggle" aria-label="Switch theme" disabled>Theme</button>
+      </header>
+
+      <nav class="sidebar" data-ui="sidebar" aria-label="Primary">
+        <a href="#daemons" aria-current="page" data-ui="nav-daemons">Daemons</a>
+        <a href="#sessions" data-ui="nav-sessions">Sessions</a>
+        <a href="#credentials" data-ui="nav-credentials">Credentials</a>
+        <a href="#settings" data-ui="nav-settings">Settings</a>
+      </nav>
+
+      <main class="content" data-ui="content">
+        <section data-ui="overview">
+          <h1>Daemons</h1>
+          <h2>Routing hosts for users, sessions, and credentials</h2>
+        </section>
+
+        <div class="cards" data-ui="metrics">
+          <article class="card" data-ui="card-active"><h3>Active</h3><div class="metric">12</div></article>
+          <article class="card" data-ui="card-pending"><h3>Pending</h3><div class="metric">3</div></article>
+          <article class="card" data-ui="card-failed"><h3>Failed</h3><div class="metric">1</div></article>
+        </div>
+
+        <div class="alert" role="alert" data-ui="seed-alert">Seed warning: one daemon failed its last health check.</div>
+
+        <form class="create" data-ui="create-form">
+          <label>Display name
+            <input type="text" aria-label="Display name" placeholder="Generated if omitted" data-ui="daemon-name" />
+          </label>
+          <label>Runtime
+            <select aria-label="Runtime" data-ui="runtime">
+              <option value="docker">Local Docker runtime</option>
+              <option value="remote">Remote runtime</option>
+            </select>
+          </label>
+          <button type="submit" class="primary" data-ui="create-daemon">Start daemon</button>
+          <label style="flex-direction:row;align-items:center;gap:6px">
+            <input type="checkbox" aria-label="Auto restart" data-ui="auto-restart" /> Auto restart
+          </label>
+          <button type="button" disabled data-ui="bulk-delete" aria-label="Bulk delete">Bulk delete</button>
+        </form>
+
+        <div class="scroll-region" data-ui="log-scroll" aria-label="Recent events">
+          <ul>
+            <li>daemon-01 started</li><li>daemon-02 started</li><li>daemon-03 health check failed</li>
+            <li>daemon-04 started</li><li>daemon-05 started</li><li>daemon-06 stopped</li>
+            <li>daemon-07 started</li><li>daemon-08 started</li><li>daemon-09 started</li>
+            <li>daemon-10 started</li><li>daemon-11 started</li><li>daemon-12 started</li>
+          </ul>
+        </div>
+
+        <table data-ui="daemons-table">
+          <thead><tr><th>Name</th><th>Runtime</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>daemon-01</td><td>docker</td><td>active</td></tr>
+            <tr><td>daemon-03</td><td>docker</td><td>failed</td></tr>
+            <tr><td>daemon-04</td><td>remote</td><td>active</td></tr>
+          </tbody>
+        </table>
+
+        <div class="offscreen" data-ui="offscreen-hint" aria-hidden="true">Offscreen helper text (not visible)</div>
+      </main>
+    </div>
+
+    <dialog open data-ui="confirm-dialog" aria-label="Confirm delete">
+      <p>Delete the selected daemon? This cannot be undone.</p>
+      <button data-ui="confirm-cancel">Cancel</button>
+      <button class="primary" data-ui="confirm-delete">Delete</button>
+    </dialog>
+  </body>
+</html>

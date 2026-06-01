@@ -105,25 +105,24 @@ stack.status
 stack.logs
 run.begin
 browser.open
-browser.snapshot
-browser.find
+browser.inspect          # standard evidence path: compact index + artifacts
+browser.refs             # optional: toggle live overlay to correlate pixels to @eN refs
 browser.act
 browser.wait
-browser.get
-browser.console
-browser.network
+browser.inspect          # capture post-action state
 journey.step
 stack.capability.run
-artifact.read
 cleanup.plan
 run.reseed
 browser.close
 stack.stop
 ```
 
+The `browser.inspect` → `browser.act` → `browser.wait` → `browser.inspect` loop is the standard agent interaction pattern. Use `browser.refs({ enabled: true })` before inspect when you want the overlay painted in the screenshot. Use `browser.eval` or `browser.playwright` only when standard tools are insufficient.
+
 For multi-step journeys, use `journey.phase` or `journey.untilPhase` when appropriate, or `journey.untilStep` to land the managed state exactly at a single step (`{ runId, phaseId, stepId }`) when you want to inspect one visual frame.
 
-The call sequence is the development Trajectory. It can include false starts, debugging probes, Browser Workbench reads, and stack capabilities. Keep it as evidence while learning the app, then promote only the stable user path into reviewed Journey code before CI depends on it.
+The call sequence is the development Trajectory. It can include false starts, debugging probes, and stack capabilities. Keep it as evidence while learning the app, then promote only the stable user path into reviewed Journey code before CI depends on it.
 
 ## Evidence To Capture
 
@@ -139,42 +138,43 @@ Capture these facts before changing implementation again:
 - `stack.capability.run` with `stackId` can run at least one concrete provider tool.
 - `run.begin` with `stackId` returns seed `status: "passed"` or `"warning"`, `canRunSteps: true`, and the run's Run Stack Binding.
 - `browser.open` returns a browser session id.
-- `browser.snapshot` shows expected app state and no visible runtime error.
-- `browser.find` resolves semantic targets when a role, label, text, placeholder, test id, or selector is clearer than a snapshot ref.
-- `browser.act` uses a fresh snapshot/find ref or clear CSS selector and performs exactly one UI mutation.
+- `browser.inspect` returns a compact index (`{ status, url, title, target, artifacts, signals, refsOverlayEnabled }`); `signals.consoleErrors` and `signals.networkFailures` are zero for a healthy page; the written `inspect.md` shows expected app state and no visible runtime error.
+- `browser.inspect` artifacts are written to `runs/<runId>/inspections/<seq>/{inspect.md,inspect.json,screenshot.png}`.
+- `browser.act` uses a `@eN` ref from the UI forensics registry or a CSS selector and performs exactly one UI mutation.
 - `browser.wait` waits for explicit page state instead of sleeping.
-- `browser.get` reads targeted text/value/HTML/attribute/title/URL/count when the agent needs a small observation.
-- `browser.console` and `browser.network` can be read with cursors when diagnosing runtime errors, failed requests, or unexpected behavior.
+- `browser.refs` toggles the overlay without altering layout or intercepting clicks; it is captured in the next inspect screenshot.
 - `journey.step` or `journey.phase` returns `status: "passed"`.
-- `artifact.read` can read the primary step feedback or result artifact.
+- Step artifacts are written to `runs/<runId>/journeys/<journeyId>/phases/<phaseId>/steps/<stepId>/`; `step-report.json` is the single agent-facing per-step report.
 - `cleanup.plan` contains only resources owned by this run.
 - `run.reseed` cleans owned resources and returns a ready seed.
 - `stack.stop` with `stackId` stops managed services.
 
 ## Artifact Layout
 
-Interactive run artifacts live under:
+Run artifacts live under a timestamp-first run directory:
 
 ```text
-.agents-e2e/artifacts/<journey>/<run>/
-  seed-manifest.json
-  result.json
-  timeline.json
-  metrics.json
-  owned-resources.json
-  cleanup-plan.json
-  cleanup.json
-  forensics/
-    browser-snapshot-*.json
-    screenshot-*.png
-  01-phase-<phase-id>/01-step-<step-id>/
-    before.png
-    after.png
-    failure.png
-    console.json
-    network.json
-    result.json
-    step-feedback.json
+runs/
+  latest -> <runId>                 # local convenience symlink only
+  <runId>/
+    run-report.md                   # human entry point — open this first
+    run-report.json                 # whole-run verdict + index
+    seed-manifest.json
+    timeline.json
+    metrics.json
+    owned-resources.json
+    inspections/<seq>/
+      inspect.md
+      inspect.json
+      screenshot.png
+    journeys/<journeyId>/phases/<phaseId>/steps/<stepId>/
+      before.png
+      after.png | failure.png | skipped.png
+      inspect.md
+      inspect.json
+      step-report.json
 ```
 
-Use artifacts for time travel: answer what happened from seed, snapshots, screenshots, console/network logs, step feedback, owned resources, cleanup, and metrics before editing again.
+There is no separate `result.json`, `index.json`, `latest.json`, `console.json`, `network.json`, or `step-feedback.json`. `run-report.md` and `run-report.json` are the whole-run entry points. `step-report.json` is the single agent-facing per-step report. Console and network facts are signals inside inspect artifacts.
+
+Use artifacts for time travel: answer what happened from seed, inspect artifacts, screenshots, step reports, owned resources, cleanup, and metrics before editing again.

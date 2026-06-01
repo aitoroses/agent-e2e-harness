@@ -104,31 +104,68 @@ Only Verify Observation Tools can be used from journey execution during `agent-e
 
 ## Browser Workbench Surface
 
-The fixed browser MCP grammar is:
+The complete frozen browser MCP grammar is:
 
 ```text
 browser.open
 browser.sessions
-browser.snapshot
-browser.find
+browser.inspect
+browser.refs
 browser.act
 browser.wait
-browser.get
 browser.eval
 browser.playwright
-browser.console
-browser.network
-browser.screenshot
 browser.close
 ```
 
-Use `browser.snapshot` first to read visible state and receive `@eN` refs. Use `browser.find` when a semantic locator is clearer than a snapshot ref; it returns `@fN` refs for role, text, label, placeholder, test id, or selector queries.
+Removed tools with no aliases or compatibility names: `browser.snapshot`, `browser.find`, `browser.get`, `browser.screenshot`, `browser.console`, `browser.network`, `artifact.read`. Do not present them as available or suggest workarounds using their names.
 
-Use `browser.act` for one UI mutation at a time. It accepts refs or CSS selectors and supports click, fill, press, hover, focus, check, uncheck, select, and scroll. It does not take screenshots automatically; call `browser.screenshot` explicitly when visual evidence is useful.
+### inspect → act loop
 
-Use `browser.wait` instead of sleep. Wait conditions can target a ref, selector, text, URL pattern, load state, or page-context function and return `durationMs` plus `timeoutMs`.
+Use `browser.inspect` as the standard evidence path. It runs the UI forensics pass, writes `runs/<runId>/inspections/<seq>/{inspect.md,inspect.json,screenshot.png}`, captures console errors and network failures as signals, and returns a compact index: `{ status, url, title, target, artifacts, signals, refsOverlayEnabled }`. Read the written artifacts for detail; the tool response is an index, not a dump.
 
-Use `browser.get` for targeted reads. Use `browser.console` and `browser.network` for cursor-based signal buffers. Use `browser.eval` or `browser.playwright` only when the standard workbench tools are too small for the exploration step; both require JSON input/output and report timeout feedback.
+The standard loop is:
+
+```text
+browser.open   → navigate to the app
+browser.inspect → read compact index; open inspect.md for detail; note @eN refs
+browser.act    → perform one user-like action using a @eN ref or selector
+browser.wait   → wait for explicit page state (ref, selector, text, URL, load state)
+browser.inspect → capture post-action state
+```
+
+Use `browser.refs({ enabled: true })` optionally to toggle the live overlay that paints the referenceable nodes from the UI forensics registry. The overlay has `pointer-events:none` and never alters layout. It is captured in inspect screenshots when enabled. Disable with `browser.refs({ enabled: false })`.
+
+`browser.act` accepts `@eN` refs from the UI forensics registry or CSS selectors. It supports click, fill, press, hover, focus, check, uncheck, select, and scroll. It does not take screenshots automatically; inspect already captures a screenshot.
+
+Use `browser.wait` instead of sleep. Wait conditions target a ref, selector, text, URL pattern, load state, or page-context function and return `durationMs` plus `timeoutMs`.
+
+Use `browser.eval` or `browser.playwright` only when the standard workbench tools are insufficient for the exploration step; both accept JSON `input` separately from `code`, execute an async function body, and report timeout feedback. After either runs, inspect refs may be stale — run `browser.inspect` again before ref-based actions.
+
+### inspect target forms
+
+- Omit `target`: inspect the current page.
+- `"@<ref>"`: UI forensics mode — inspect the node at that ref.
+- Any other string: treated as a selector or locator-compatible target.
+
+### inspect signals
+
+Console errors and network failures are captured as `signals.consoleErrors` and `signals.networkFailures` inside every `browser.inspect` result. There are no separate console or network tools.
+
+## Agent UX Principles
+
+These principles govern the design of MCP tools and the browser workbench surface. Follow them when proposing tool additions, evaluating whether a capability needs a dedicated tool, or documenting the harness for a new consumer.
+
+- **Simple tools, smart agents.** Tools expose facts and perform atomic actions. Agents reason, plan, and sequence.
+- **Few generic tools over many narrow wrappers.** A narrow tool that duplicates what `browser.eval` or `browser.playwright` already expresses adds cognitive surface without adding capability.
+- **Tools observe facts; agents reason.** A tool should return raw evidence — a compact index, a signal count, a status — not a diagnosis or a synthesized interpretation.
+- **Tool output should be a compact index, not a dump.** Inline payloads bloat the context window. Details live in artifacts; the tool response names where to find them.
+- **Details live in artifacts.** `inspect.md`, `inspect.json`, `screenshot.png`, `step-report.json` are the debugging surface. Tool responses point to them.
+- **Tool names should be obvious and single-purpose.** `browser.inspect` does one thing. `browser.act` does one thing. Names that describe exactly what the tool does are always preferred.
+- **No legacy aliases; no compatibility names that teach two ways to do one thing.** Removed tools are gone without aliases.
+- **If a capability is cleanly expressible via `browser.eval` or `browser.playwright`, do not add a narrow tool.**
+- **`browser.inspect` exists because it packages a costly, repeated evidence pattern.** Running the UI forensics pass, writing artifacts, and capturing signals is a multi-step sequence agents run on every meaningful state transition.
+- **`browser.refs` exists because it connects live pixels to the UI forensics ref system.** The overlay lets agents correlate what they see with the `@eN` refs they use in `browser.inspect` and `browser.act`.
 
 ## Adoption Flow
 
@@ -177,7 +214,7 @@ Before claiming adoption works, prove:
 - The app has `@agent-e2e/harness` installed and scripts for `agent-e2e dev` and `agent-e2e verify`.
 - `agent-e2e.config.ts` loads journeys, stack provider, resources, and verify defaults.
 - At least one journey proves a real app behavior from seed.
-- The MCP loop can start the stack, begin a run, open/snapshot/find/act/wait/get in a browser, inspect console/network signals when useful, run a journey step or phase, read artifacts, cleanup/reseed, close the browser, and stop the stack.
+- The MCP loop can start the stack, begin a run, open/inspect/refs/act/wait in a browser, read inspect signals and artifact files, run a journey step or phase, read step-report artifacts, cleanup/reseed, close the browser, and stop the stack.
 - Stack capability surface is proven: `stack.status`, `stack.logs`, `stack.capability.list`, and at least one `stack.capability.run` call work against concrete app tools.
 - `agent-e2e verify` runs from config and writes suite reports under `.agents-e2e/artifacts/_suites/<suite-id>/`.
 - Final evidence includes commands run, MCP URL, selected journey/profile, artifact paths, cleanup result, stack stop result, and CI/verify status.

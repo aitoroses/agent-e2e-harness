@@ -233,7 +233,7 @@ export default defineAgentE2EConfig({
 });
 ```
 
-Pass `browserSessions: false` to disable the Browser Workbench entirely (no Playwright launch). `DevMcpBrowserSessionController` method parameters are typed against the shared public input shapes (`BrowserActInput`, `BrowserFindInput`, …) so a custom controller gets full call-site type-safety too.
+Pass `browserSessions: false` to disable the Browser Workbench entirely (no Playwright launch). `DevMcpBrowserSessionController` method parameters are typed against the shared public input shapes (`BrowserActInput`, `BrowserInspectInput`, …) so a custom controller gets full call-site type-safety too.
 
 ## Proof Loop
 
@@ -260,25 +260,60 @@ stack.capability.list
 stack.capability.run
 run.begin
 browser.open
-browser.snapshot
-browser.find
+browser.sessions
+browser.inspect
+browser.refs
 browser.act
 browser.wait
-browser.get
-browser.console
-browser.network
 browser.eval
 browser.playwright
-browser.screenshot
+browser.close
 journey.step
 journey.untilStep
 journey.phase
 journey.untilPhase
-artifact.read
 cleanup.plan
 run.reseed
 stack.stop
 ```
+
+### Browser Workbench
+
+The Browser Workbench (`browser.*`) is the browser-side exploration surface. `browser.inspect` is the standard evidence path: one call captures a compact path-oriented index, a screenshot, and console/network signals, and writes everything to `runs/<runId>/inspections/<seq>/{inspect.md,inspect.json,screenshot.png}`. It accepts `{ browserSessionId, target?, depth?, maxNodes? }` — omit `target` for the current page, pass `"@<ref>"` for UI forensics ref targeting, or pass a selector. Returns a compact index only; no inline tree or diagnosis.
+
+`browser.refs({ enabled })` toggles a live overlay that paints exactly the referencable nodes from the UI forensics tree — the same registry `browser.inspect` and `browser.act` use. The overlay is pointer-events:none, updates on DOM mutation/scroll/resize, never alters layout, and is captured in inspect screenshots when enabled. It is removed completely on disable, close, or teardown.
+
+`browser.act` accepts a `@ref` address or selector. Refs are best-effort stable per session (`@e1`, `@e2`, …); retired refs are not reused, and `browser.act("@ref")` fails cleanly when a ref is stale. `browser.wait` handles explicit conditions. `browser.eval` and `browser.playwright` cover anything that needs custom page or Playwright code. Console and network facts come from `browser.inspect` signals — there are no separate console or network tools.
+
+Run artifact layout (all under `runs/<runId>/`):
+
+```text
+runs/
+  latest -> <runId>                 # local convenience symlink only
+  <runId>/
+    run-report.md
+    run-report.json                 # whole-run verdict + index
+    seed-manifest.json
+    timeline.json
+    metrics.json
+    owned-resources.json
+    cleanup-plan.json
+    cleanup.json
+    inspections/<seq>/
+      inspect.md
+      inspect.json
+      screenshot.png
+    journeys/<journeyId>/phases/<phaseId>/steps/<stepId>/
+      before.png
+      after.png | failure.png | skipped.png
+      inspect.md
+      inspect.json
+      step-report.json              # single agent-facing per-step report
+```
+
+`run-report.json` is the whole-run verdict and artifact index; there is no separate `result.json`, `index.json`, or `latest.json`. `step-report.json` is the single agent-facing per-step report (status, artifact paths, signals, failure info, raw payload under `execution`); it replaces the former `step-feedback.json`. Journey steps share the same `browser.inspect` evidence machinery as standalone inspections.
+
+**Agent UX principles.** The tool surface follows a small set of design rules: few generic tools over many narrow wrappers; tools observe facts, agents reason; tool output is a compact index and details live in artifacts; tool names are obvious and single-purpose; no legacy aliases. If a capability is cleanly expressible via `browser.eval` or `browser.playwright`, no narrow tool is added. `browser.inspect` exists because it packages a costly, repeated evidence pattern into one idempotent call. `browser.refs` exists because it connects live pixels to the UI forensics ref system that `browser.inspect` and `browser.act` share.
 
 The journey time-travel grammar is `journey.step` (one step), `journey.untilStep` (a phase up to and including a target step), `journey.phase` / `journey.untilPhase` (a whole phase to its boundary). The UI-validation model treats each step as a distinct visual frame, so `journey.untilStep` makes every frame individually addressable: it runs a phase from its first step up to **and including** the target step and parks the managed state there, mirroring `journey.untilPhase`'s envelope (`results[]`, landed step at `results.at(-1)`). A step is addressed by its stable `stepId` within a `phaseId` (`{ runId, phaseId, stepId }`, the same address `journey.step` uses) — never a positional ordinal — and an unknown journey/phase/step returns the same coherent not-found envelope as the other journey tools.
 

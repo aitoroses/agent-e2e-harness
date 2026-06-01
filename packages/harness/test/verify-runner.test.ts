@@ -151,7 +151,7 @@ describe("verify runner", () => {
     });
     expect(deleted).toEqual(["record:1"]);
     expect(report.artifactDir).toContain("_suites/verify-2026-05-14t12-00-00-000z-unit");
-    expect(report.runs[0]?.artifactDir).toContain("_suites/verify-2026-05-14t12-00-00-000z-unit/runs/notes-create/default");
+    expect(report.runs[0]?.artifactDir).toContain("_suites/verify-2026-05-14t12-00-00-000z-unit/notes-create-default-");
     expect(existsSync(join(report.artifactDir, "report.json"))).toBe(true);
     expect(await readFile(join(report.artifactDir, "report.md"), "utf8")).toContain("# Agent E2E Verify Report");
   });

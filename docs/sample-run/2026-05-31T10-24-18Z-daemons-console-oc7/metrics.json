@@ -1,0 +1,14 @@
+{
+  "runId": "2026-05-31T10-24-18Z-daemons-console-oc7",
+  "journeyId": "journey:daemons-console",
+  "stepCount": 1,
+  "totalDurationMs": 0,
+  "steps": [
+    {
+      "phaseId": "phase:review",
+      "stepId": "step:open-console",
+      "status": "passed",
+      "durationMs": 0
+    }
+  ]
+}

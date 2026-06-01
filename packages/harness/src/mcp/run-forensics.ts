@@ -4,9 +4,17 @@ import {
   artifactRef,
   stepRelativePath,
   writeJsonArtifact,
+  writeTextArtifact,
   type RunArtifactRecorder,
   type RunArtifacts,
 } from "../artifacts/index.js";
+import {
+  asInspectPage,
+  buildInspectJson,
+  deriveForensics,
+  renderInspectMarkdown,
+  type InspectTarget,
+} from "../forensics/inspect-capture.js";
 import type {
   AnyHarnessTypes,
   ArtifactRef,
@@ -34,6 +42,7 @@ export interface RunSignalSlice {
 
 interface PageLike {
   screenshot?: (options: { path: string; fullPage?: boolean }) => Promise<unknown>;
+  evaluate?: (...args: unknown[]) => Promise<unknown>;
   on?: (event: string, callback: (...args: unknown[]) => void) => unknown;
 }
 
@@ -84,7 +93,7 @@ export async function captureStepScreenshot<TTypes extends AnyHarnessTypes>(
   execution: unknown,
   phaseId: string,
   stepId: string,
-  name: "before" | "after" | "failure",
+  name: "before" | "after" | "failure" | "skipped",
 ): Promise<ArtifactRef | undefined> {
   const page = pageFromExecution(execution);
   if (!page?.screenshot) return undefined;
@@ -97,47 +106,76 @@ export async function captureStepScreenshot<TTypes extends AnyHarnessTypes>(
     name,
     description: name === "failure"
       ? "Visual state at failure time. Read first on failures."
-      : `Visual state ${name === "before" ? "before" : "after"} the step.`,
+      : `Visual state ${name === "before" ? "before" : name} the step.`,
   });
 }
 
+/**
+ * Record one journey step's evidence through the SAME inspect machinery as
+ * `browser.inspect`: when the step ran against a browser page, derive the UI
+ * forensics tree and write `inspect.json` + `inspect.md` into the step dir, then
+ * emit a single agent-facing `step-report.json` (raw payload nested under
+ * `execution`). There is no second evidence system and no `step-feedback.json`.
+ */
 export async function writeStepArtifacts<TTypes extends AnyHarnessTypes>(input: {
   artifacts: RunArtifactRecorder<TTypes>;
   run: JourneyRun<TTypes>;
   result: StepRunResult<TTypes>;
+  execution: unknown;
   beforeArtifact?: ArtifactRef | undefined;
   terminalScreenshot?: ArtifactRef | undefined;
   signalSlice: RunSignalSlice;
 }): Promise<ArtifactRef[]> {
+  const run = input.artifacts.run;
+  const journey = input.run.journey;
+  const { phaseId, stepId } = input.result;
   const output: ArtifactRef[] = [];
   if (input.beforeArtifact) output.push(input.beforeArtifact);
   if (input.terminalScreenshot) output.push(input.terminalScreenshot);
-  output.push(await writeJsonArtifact(
-    input.artifacts.run,
-    stepRelativePath(input.run.journey, input.result.phaseId, input.result.stepId, "console.json"),
-    { messages: input.signalSlice.console },
-    { name: "console", kind: "console-log" },
-  ));
-  output.push(await writeJsonArtifact(
-    input.artifacts.run,
-    stepRelativePath(input.run.journey, input.result.phaseId, input.result.stepId, "network.json"),
-    { requests: input.signalSlice.network },
-    { name: "network", kind: "network-log" },
-  ));
-  const resultArtifact = stepArtifactRef(input.artifacts.run, input.run.journey, input.result, "result.json", "result");
-  const feedbackRef = stepArtifactRef(input.artifacts.run, input.run.journey, input.result, "step-feedback.json", "step-feedback");
-  const allArtifacts = uniqueArtifacts([...input.result.artifacts, ...output, resultArtifact, feedbackRef]);
-  const feedbackArtifact = await writeJsonArtifact(
-    input.artifacts.run,
-    stepRelativePath(input.run.journey, input.result.phaseId, input.result.stepId, "step-feedback.json"),
-    stepFeedback(input.result, allArtifacts, input.signalSlice),
-    { name: "step-feedback", kind: "json" },
+
+  let inspectMd: ArtifactRef | undefined;
+  let inspectJson: ArtifactRef | undefined;
+  const page = pageFromExecution(input.execution);
+  if (page?.evaluate && page.screenshot) {
+    try {
+      const capture = await deriveForensics(asInspectPage(page));
+      const target: InspectTarget = { input: null, kind: "page", resolved: true };
+      const signals = {
+        consoleErrors: input.signalSlice.signals.consoleErrors,
+        networkFailures: input.signalSlice.signals.networkErrors,
+      };
+      inspectJson = await writeJsonArtifact(
+        run,
+        stepRelativePath(journey, phaseId, stepId, "inspect.json"),
+        buildInspectJson(capture, target, signals),
+        { name: "inspect", kind: "json", description: "Structured UI forensics: summary, refs with bounding boxes, and a hierarchical tree captured at step end." },
+      );
+      inspectMd = await writeTextArtifact(
+        run,
+        stepRelativePath(journey, phaseId, stepId, "inspect.md"),
+        renderInspectMarkdown(capture, target, signals),
+        { name: "inspect", kind: "markdown", description: "Agent-facing OC-grade inspect view captured at step end." },
+      );
+      output.push(inspectJson, inspectMd);
+    } catch {
+      // Page may be closed/navigated; the step-report below is still written.
+    }
+  }
+
+  const paths = {
+    before: input.beforeArtifact?.path,
+    terminal: input.terminalScreenshot?.path,
+    inspect: inspectMd?.path,
+    inspectJson: inspectJson?.path,
+  };
+  const report = stepReport(input.result, paths, input.signalSlice);
+  const reportArtifact = await writeJsonArtifact(
+    run,
+    stepRelativePath(journey, phaseId, stepId, "step-report.json"),
+    report,
+    { name: "step-report", kind: "json", description: "Single agent-facing step report: status, artifact paths, signals, failure info, and raw execution payload." },
   );
-  const writtenResultArtifact = await input.artifacts.writeStep({
-    ...input.result,
-    artifacts: allArtifacts,
-  } as StepRunResult<TTypes>);
-  return uniqueArtifacts([...output, writtenResultArtifact, feedbackArtifact]) as ArtifactRef[];
+  return uniqueArtifacts([...output, reportArtifact]) as ArtifactRef[];
 }
 
 export function uniqueArtifacts(artifacts: readonly ArtifactRef[]): readonly ArtifactRef[] {
@@ -154,44 +192,36 @@ export function emptySignalSlice(): RunSignalSlice {
   return { console: [], network: [], signals: { consoleErrors: 0, consoleWarnings: 0, networkErrors: 0 } };
 }
 
-function stepArtifactRef<TTypes extends AnyHarnessTypes>(
-  run: RunArtifacts,
-  journey: ExecutableJourney<TTypes>,
+function stepReport<TTypes extends AnyHarnessTypes>(
   result: StepRunResult<TTypes>,
-  filename: string,
-  name: string,
-): ArtifactRef {
-  return artifactRef(
-    run,
-    resolve(run.absDir, stepRelativePath(journey, result.phaseId, result.stepId, filename)),
-    { kind: "json", name },
-  );
-}
-
-function stepFeedback<TTypes extends AnyHarnessTypes>(
-  result: StepRunResult<TTypes>,
-  artifacts: readonly ArtifactRef[],
+  paths: { before?: string | undefined; terminal?: string | undefined; inspect?: string | undefined; inspectJson?: string | undefined },
   signals: RunSignalSlice,
 ): Record<string, unknown> {
-  const primaryNames = result.status === "passed" ? ["after", "result", "step-feedback"] : ["failure", "result", "console", "network", "step-feedback"];
-  const primary = artifacts.filter((artifact) => artifact.name && primaryNames.includes(artifact.name));
+  const failed = result.status === "failed" || result.status === "error";
   return {
-    ids: {
-      runId: result.runId,
-      phaseId: result.phaseId,
-      stepId: result.stepId,
-    },
+    ids: { runId: result.runId, phaseId: result.phaseId, stepId: result.stepId },
     status: result.status,
-    observed: result.observed,
-    proofs: result.proofs,
-    warnings: result.warnings,
-    errors: result.errors,
-    signals: signals.signals,
+    ran: { phaseId: result.phaseId, stepId: result.stepId, startedAt: result.startedAt, endedAt: result.endedAt, durationMs: result.durationMs },
     artifacts: {
-      primary: primary.length > 0 ? primary : artifacts.slice(0, 5),
-      secondary: artifacts.filter((artifact) => !primary.some((candidate) => candidate.path === artifact.path)),
+      ...(paths.before ? { before: paths.before } : {}),
+      ...(paths.terminal ? { terminal: paths.terminal } : {}),
+      ...(paths.inspect ? { inspect: paths.inspect } : {}),
+      ...(paths.inspectJson ? { inspectJson: paths.inspectJson } : {}),
     },
-    next: result.guidance,
+    signals: signals.signals,
+    ...(failed ? { failure: { errors: result.errors, warnings: result.warnings } } : {}),
+    guidance: result.guidance,
+    // Raw execution payload: the full step result plus the console/network slice.
+    execution: {
+      observed: result.observed,
+      proofs: result.proofs,
+      ownedResources: result.ownedResources,
+      feedback: result.feedback,
+      warnings: result.warnings,
+      errors: result.errors,
+      console: signals.console,
+      network: signals.network,
+    },
   };
 }
 

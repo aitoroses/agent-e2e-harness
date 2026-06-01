@@ -1,5 +1,5 @@
 import type { Browser, Page } from "playwright";
-import type { BrowserRefTarget } from "./refs.js";
+import type { ForensicsNode } from "./refs.js";
 
 export interface BrowserCodeRunInput {
   browserSessionId: string;
@@ -22,7 +22,7 @@ export interface BrowserCodeRunResult {
 export interface BrowserPlaywrightRunContext {
   browser: Browser;
   page: Page;
-  refs: BrowserRefTarget[];
+  refs: ForensicsNode[];
 }
 
 const DEFAULT_CODE_TIMEOUT_MS = 5_000;
@@ -120,14 +120,13 @@ function toJsonSerializable(output: unknown): unknown {
   return JSON.parse(text) as unknown;
 }
 
-function serializableRef(ref: BrowserRefTarget): Record<string, unknown> {
+function serializableRef(ref: ForensicsNode): Record<string, unknown> {
   return {
     ref: ref.ref,
-    source: ref.source,
-    ...(ref.selector ? { selector: ref.selector } : {}),
+    selector: ref.selector,
     ...(ref.role ? { role: ref.role } : {}),
     ...(ref.name ? { name: ref.name } : {}),
-    locator: ref.locator,
+    rect: ref.rect,
   };
 }
 

@@ -24,7 +24,7 @@ afterEach(async () => {
 });
 
 describe("run artifact layout", () => {
-  it("uses flat journey/run scoped directories with numbered phase and step segments", async () => {
+  it("nests journey/phase/step evidence inside the run directory under journeys/.../phases/.../steps/", async () => {
     const root = await tempRoot();
     const journey = defineJourney({
       id: "journey:artifact-layout",
@@ -48,29 +48,33 @@ describe("run artifact layout", () => {
 
     const artifact = await writeJsonArtifact(
       recorder.run,
-      stepRelativePath(journey, "phase:artifact-layout", "step:record-artifact", "result.json"),
+      stepRelativePath(journey, "phase:artifact-layout", "step:record-artifact", "step-report.json"),
       { status: "passed" },
-      { name: "result" },
+      { name: "step-report" },
     );
 
-    expect(recorder.run.relDir).toContain("journey-artifact-layout/run-artifacts");
-    expect(artifact.path).toContain("journey-artifact-layout/run-artifacts/01-phase-phase-artifact-layout/01-step-step-record-artifact/result.json");
-    expect(artifact.path).not.toContain("ui-e2e");
-    expect(artifact.path).not.toContain("/steps/");
+    // The run id is the only path prefix; the journey nests inside the run.
+    expect(recorder.run.relDir).toContain("run-artifacts");
+    expect(recorder.run.relDir).not.toContain("journey-artifact-layout");
+    expect(artifact.path).toContain(
+      "run-artifacts/journeys/journey-artifact-layout/phases/phase-artifact-layout/steps/step-record-artifact/step-report.json",
+    );
+    expect(artifact.path).not.toContain("01-phase-");
     expect(existsSync(artifact.uri.replace("file://", ""))).toBe(true);
   });
 
   it("reads only artifacts under the configured root", async () => {
     const root = await tempRoot();
     const recorder = createRunArtifactRecorder({ artifactRoot: root, journeyId: "journey:read", runId: "run-read" });
-    const artifact = await writeJsonArtifact(recorder.run, "result.json", { status: "ok" }, { name: "result" });
+    const artifact = await writeJsonArtifact(recorder.run, "run-report.json", { status: "ok" }, { name: "run-report" });
 
     await expect(readArtifact(root, artifact.path ?? "")).resolves.toMatchObject({
       status: "ok",
       content: { status: "ok" },
     });
+    // The default-root marker (`runs/`) resolves under the configured root.
     await expect(
-      readArtifact(root, ".agents-e2e/artifacts/journey-read/run-read/result.json"),
+      readArtifact(root, "runs/run-read/run-report.json"),
     ).resolves.toMatchObject({
       status: "ok",
       content: { status: "ok" },

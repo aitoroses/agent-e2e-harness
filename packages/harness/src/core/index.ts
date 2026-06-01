@@ -925,15 +925,20 @@ function deriveRunId<TTypes extends AnyHarnessTypes>(
 }
 
 /**
- * Mint a unique, lexicographically sortable run id for an interactive run that
- * the caller did not name explicitly. Shape: `run-<utc-timestamp>-<suffix>`,
- * e.g. `run-2026-05-30t12-00-00-000z-a1b2c`. The timestamp orders runs by start
- * time; the suffix disambiguates runs that begin within the same millisecond.
+ * Mint a unique, timestamp-first, human-readable run id for an interactive run
+ * that the caller did not name explicitly. Shape:
+ * `<utc-timestamp>Z-[<label>-]<suffix>`, e.g.
+ * `2026-05-31T10-24-18Z-auth-boundary-oc7`. The timestamp (seconds precision,
+ * `:` replaced with `-`) orders runs by start time; an optional human label and
+ * a short suffix disambiguate runs that begin within the same second.
  */
-export function generateRunId(date: Date = new Date()): string {
-  const timestamp = date.toISOString().toLowerCase().replace(/[:.]/g, '-');
-  const suffix = Math.random().toString(36).slice(2, 7).padEnd(5, '0');
-  return `run-${timestamp}-${suffix}`;
+export function generateRunId(date: Date = new Date(), label?: string): string {
+  const timestamp = date.toISOString().replace(/\.\d+Z$/, 'Z').replace(/:/g, '-');
+  const suffix = Math.random().toString(36).slice(2, 5).padEnd(3, '0');
+  const labelSegment = label
+    ? `${label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}-`
+    : '';
+  return `${timestamp}-${labelSegment}${suffix}`;
 }
 
 function findJourneyStep<TTypes extends AnyHarnessTypes>(

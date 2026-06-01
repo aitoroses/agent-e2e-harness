@@ -1,0 +1,10 @@
+[
+  {
+    "phaseId": "phase:review",
+    "stepId": "step:open-console",
+    "status": "passed",
+    "startedAt": "2026-06-01T07:38:22.242Z",
+    "endedAt": "2026-06-01T07:38:22.242Z",
+    "durationMs": 0
+  }
+]

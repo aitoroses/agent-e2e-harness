@@ -95,18 +95,18 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           executableRun.execution,
           result.phaseId,
           result.stepId,
-          result.status === 'passed' ? 'after' : 'failure'
+          terminalScreenshotName(result.status)
         )
       : undefined;
     const signalSlice = signals && mark ? signals.slice(mark) : emptySignalSlice();
     const generatedArtifacts = artifacts
-      ? await writeStepArtifacts({ artifacts, run: executableRun, result, beforeArtifact, terminalScreenshot, signalSlice })
+      ? await writeStepArtifacts({ artifacts, run: executableRun, result, execution: executableRun.execution, beforeArtifact, terminalScreenshot, signalSlice })
       : [];
     const enhancedResult = {
       ...result,
       artifacts: uniqueArtifacts([...result.artifacts, ...generatedArtifacts]),
-      stepFeedbackArtifact: generatedArtifacts.find((artifact) => artifact.name === 'step-feedback')
-    } as StepRunResult<TTypes> & { stepFeedbackArtifact?: ArtifactRef };
+      stepReportArtifact: generatedArtifacts.find((artifact) => artifact.name === 'step-report')
+    } as StepRunResult<TTypes> & { stepReportArtifact?: ArtifactRef };
     rememberStepArtifacts(emittedArtifacts, enhancedResult);
     if (artifacts) {
       for (const artifact of generatedArtifacts) emittedArtifacts.set(artifact.id, artifact);
@@ -128,9 +128,8 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
         timelineArtifact,
         metricsArtifact
       ], runMetadata.get(run.id));
-      const resultArtifact = await artifacts.writeResult(runResultPayload);
-      const runIndex = await artifacts.writeRunIndex(runResultPayload);
-      for (const artifact of [timelineArtifact, metricsArtifact, resultArtifact, runIndex.index, runIndex.humanIndex, runIndex.latest]) emittedArtifacts.set(artifact.id, artifact);
+      const runReport = await artifacts.writeRunReport(runResultPayload);
+      for (const artifact of [timelineArtifact, metricsArtifact, runReport.report, runReport.humanReport, runReport.latest]) emittedArtifacts.set(artifact.id, artifact);
     }
     return enhancedResult;
   }
@@ -227,18 +226,17 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           runSignals.set(result.run.id, attachRunSignals(result.run.execution));
           const seedArtifact = await artifacts.writeSeed(result.seedGate);
           const runResultPayload = runProgress(result.run, [], artifacts.run.relDir, [seedArtifact], metadata);
-          const resultArtifact = await artifacts.writeResult(runResultPayload);
-          const runIndex = await artifacts.writeRunIndex(runResultPayload);
+          const runReport = await artifacts.writeRunReport(runResultPayload);
           for (const artifact of result.seedGate.manifest.artifacts) emittedArtifacts.set(artifact.id, artifact);
-          for (const artifact of [seedArtifact, resultArtifact, runIndex.index, runIndex.humanIndex, runIndex.latest]) emittedArtifacts.set(artifact.id, artifact);
+          for (const artifact of [seedArtifact, runReport.report, runReport.humanReport, runReport.latest]) emittedArtifacts.set(artifact.id, artifact);
           return {
             status: 'ok',
             runId: result.run.id,
             ...runMetadataResponse(metadata),
             artifactDir: artifacts.run.relDir,
-            index: runIndex.humanIndex.path,
+            report: runReport.humanReport.path,
             seedGate: result.seedGate,
-            artifacts: [seedArtifact, resultArtifact, runIndex.index, runIndex.humanIndex],
+            artifacts: [seedArtifact, runReport.report, runReport.humanReport],
             guidance: result.seedGate.guidance
           };
         }
@@ -298,17 +296,16 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           // the first call rather than only after the next step.
           runTimelines.set(result.run.id, []);
           const reseedResultPayload = runProgress(result.run, [], artifacts.run.relDir, [cleanupArtifact, seedArtifact, ownedArtifact], runMetadata.get(result.run.id));
-          const reseedResultArtifact = await artifacts.writeResult(reseedResultPayload);
-          const reseedIndex = await artifacts.writeRunIndex(reseedResultPayload);
+          const reseedReport = await artifacts.writeRunReport(reseedResultPayload);
           for (const artifact of result.seedGate.manifest.artifacts) emittedArtifacts.set(artifact.id, artifact);
-          for (const artifact of [cleanupArtifact, seedArtifact, ownedArtifact, reseedResultArtifact, reseedIndex.index, reseedIndex.humanIndex, reseedIndex.latest]) emittedArtifacts.set(artifact.id, artifact);
+          for (const artifact of [cleanupArtifact, seedArtifact, ownedArtifact, reseedReport.report, reseedReport.humanReport, reseedReport.latest]) emittedArtifacts.set(artifact.id, artifact);
           return {
             status: 'ok',
             runId: result.run.id,
             artifactDir: artifacts.run.relDir,
             cleanup: result.cleanup,
             seedGate: result.seedGate,
-            artifacts: [cleanupArtifact, seedArtifact, ownedArtifact, reseedResultArtifact, reseedIndex.index, reseedIndex.humanIndex],
+            artifacts: [cleanupArtifact, seedArtifact, ownedArtifact, reseedReport.report, reseedReport.humanReport],
             guidance: result.guidance
           };
         }
@@ -378,13 +375,12 @@ export function createMcpHarnessServer<TTypes extends AnyHarnessTypes = AnyHarne
           const artifacts = runArtifacts.get(run.id);
           const artifact = artifacts ? await artifacts.writeTeardown(result, 'cleanup') : undefined;
           if (artifact) emittedArtifacts.set(artifact.id, artifact);
-          // Refresh result.json + index so the just-written cleanup.json is
-          // linked from the run's status path (teardown is often the last call).
+          // Refresh run-report so the just-written cleanup.json is linked from
+          // the run's status path (teardown is often the last call).
           if (artifacts) {
             const teardownPayload = runProgress(run, runTimelines.get(run.id) ?? [], artifacts.run.relDir, artifact ? [artifact] : [], runMetadata.get(run.id));
-            const resultArtifact = await artifacts.writeResult(teardownPayload);
-            const teardownIndex = await artifacts.writeRunIndex(teardownPayload);
-            for (const ref of [resultArtifact, teardownIndex.index, teardownIndex.humanIndex, teardownIndex.latest]) emittedArtifacts.set(ref.id, ref);
+            const teardownReport = await artifacts.writeRunReport(teardownPayload);
+            for (const ref of [teardownReport.report, teardownReport.humanReport, teardownReport.latest]) emittedArtifacts.set(ref.id, ref);
           }
           return { status: 'ok', artifactDir: artifacts?.run.relDir, result, artifact };
         }
@@ -428,9 +424,9 @@ function runProgress<TTypes extends AnyHarnessTypes>(
     ...(completion.status === 'running' ? {} : { completedAt: new Date().toISOString() }),
     startedAt: run.startedAt,
     // Self-describing pointers to the operator entry points written alongside
-    // this result by writeRunIndex (relative to artifactDir).
-    index: 'index.json',
-    humanIndex: 'index.md',
+    // this report by writeRunReport (relative to artifactDir).
+    report: 'run-report.json',
+    humanReport: 'run-report.md',
     ...runMetadataResponse(metadata),
     journeyId: run.journey.id,
     profileId: run.profile.id,
@@ -504,6 +500,12 @@ function rememberStepArtifacts<TTypes extends AnyHarnessTypes>(
   result: StepRunResult<TTypes>
 ): void {
   for (const artifact of result.artifacts) emittedArtifacts.set(artifact.id, artifact);
+}
+
+function terminalScreenshotName(status: string): 'after' | 'failure' | 'skipped' {
+  if (status === 'passed' || status === 'warning') return 'after';
+  if (status === 'skipped') return 'skipped';
+  return 'failure';
 }
 
 function notFound(subject: string): McpToolResponse {

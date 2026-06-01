@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync, mkdirSync } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import type {
@@ -8,7 +8,6 @@ import type {
   ExecutableJourney,
   JourneyRun,
   SeedGateResult,
-  StepRunResult,
   TeardownResult,
 } from "../core/index.js";
 
@@ -40,39 +39,38 @@ export interface ArtifactReadResult {
 export interface RunArtifactRecorder<TTypes extends AnyHarnessTypes = AnyHarnessTypes> {
   readonly run: RunArtifacts;
   writeSeed(seedGate: SeedGateResult<TTypes>): Promise<ArtifactRef>;
-  writeStep(result: StepRunResult<TTypes>): Promise<ArtifactRef>;
   writeCleanupPlan(plan: CleanupPlan<TTypes>): Promise<ArtifactRef>;
   writeTeardown(result: TeardownResult<TTypes>, name?: string): Promise<ArtifactRef>;
   writeOwnedResources(run: JourneyRun<TTypes>): Promise<ArtifactRef>;
-  writeResult(result: Record<string, unknown>): Promise<ArtifactRef>;
   /**
-   * Build the operator-facing run index by SCANNING the run directory, so every
-   * file produced for this run (including forensics written by other modules)
-   * is linked even if it never passed through this recorder. Writes machine
-   * `index.json` + human `index.md`, and refreshes the journey-level
-   * `latest.json` pointer so an operator can open the newest run without
-   * knowing its run id. Returns the refs it wrote.
+   * Build the operator-facing run report by SCANNING the run directory, so every
+   * file produced for this run (inspections, journey step reports) is linked
+   * even if it never passed through this recorder. Writes machine
+   * `run-report.json` (the whole-run verdict + index) + human `run-report.md`,
+   * and refreshes the `latest` symlink so an operator can open the newest run
+   * without knowing its run id. Returns the refs it wrote.
    */
-  writeRunIndex(runResult: Record<string, unknown>): Promise<RunIndexArtifacts>;
-  forensicsDir(): string;
+  writeRunReport(runResult: Record<string, unknown>): Promise<RunReportArtifacts>;
 }
 
-export interface RunIndexArtifacts {
-  index: ArtifactRef;
-  humanIndex: ArtifactRef;
+export interface RunReportArtifacts {
+  report: ArtifactRef;
+  humanReport: ArtifactRef;
   latest: ArtifactRef;
 }
 
-export const DEFAULT_AGENT_E2E_ARTIFACT_ROOT = ".agents-e2e/artifacts";
+// All run artifacts live under `runs/<runId>/`. The run id is timestamp-first
+// and globally unique, so a run directory needs no journey/profile path prefix —
+// journey-scoped evidence nests *inside* the run under `journeys/<journeyId>/...`.
+// Suite (verify) runs share one suite folder.
+export const DEFAULT_AGENT_E2E_ARTIFACT_ROOT = "runs";
 
 export function createRunArtifacts(scope: RunArtifactScope): RunArtifacts {
   const root = resolve(scope.artifactRoot ?? DEFAULT_AGENT_E2E_ARTIFACT_ROOT);
-  const journeySegment = safePathSegment(scope.journeyId);
-  const profileSegment = safePathSegment(scope.profileId ?? "default");
-  const runSegment = safePathSegment(scope.runId);
+  const runSegment = safeRunSegment(scope.runId);
   const absDir = scope.suiteId
-    ? resolve(root, "_suites", safePathSegment(scope.suiteId), "runs", journeySegment, profileSegment, runSegment)
-    : resolve(root, journeySegment, runSegment);
+    ? resolve(root, "_suites", safePathSegment(scope.suiteId), runSegment)
+    : resolve(root, runSegment);
   return {
     journeyId: scope.journeyId,
     runId: scope.runId,
@@ -84,7 +82,7 @@ export function createRunArtifacts(scope: RunArtifactScope): RunArtifacts {
 
 export function createRunArtifactRecorder<TTypes extends AnyHarnessTypes>(
   scope: RunArtifactScope,
-  journey?: ExecutableJourney<TTypes>,
+  _journey?: ExecutableJourney<TTypes>,
 ): RunArtifactRecorder<TTypes> {
   const run = createRunArtifacts(scope);
 
@@ -96,17 +94,6 @@ export function createRunArtifactRecorder<TTypes extends AnyHarnessTypes>(
         description:
           "Seed manifest for this run: profile, checked/created/forbidden environment state, warnings, and errors.",
       }),
-    writeStep: (result) =>
-      writeJsonArtifact(
-        run,
-        `${phaseSegment(journey, result.phaseId)}/${stepSegment(journey, result.phaseId, result.stepId)}/result.json`,
-        result,
-        {
-          name: "result",
-          description:
-            "Step result with status, observed data, owned resources, proofs, timings, warnings, errors, and peer artifacts.",
-        },
-      ),
     writeCleanupPlan: (plan) =>
       writeJsonArtifact(run, "cleanup-plan.json", plan, {
         name: "cleanup-plan",
@@ -125,18 +112,11 @@ export function createRunArtifactRecorder<TTypes extends AnyHarnessTypes>(
         description:
           "Resources this run owns. Cleanup and reseed must only delete resources recorded here.",
       }),
-    writeResult: (result) =>
-      writeJsonArtifact(run, "result.json", result, {
-        name: "result",
-        description:
-          "Run progress summary: current status, phase/step progress, artifact directory, and next actions.",
-      }),
-    writeRunIndex: (runResult) => writeRunIndex(run, runResult),
-    forensicsDir: () => resolve(run.absDir, "forensics"),
+    writeRunReport: (runResult) => writeRunReport(run, runResult),
   };
 }
 
-const RUN_INDEX_FILENAMES = new Set(["index.json", "index.md"]);
+const RUN_REPORT_FILENAMES = new Set(["run-report.json", "run-report.md"]);
 
 /**
  * Scan the run directory and emit the operator entry points: `index.json`
@@ -145,53 +125,49 @@ const RUN_INDEX_FILENAMES = new Set(["index.json", "index.md"]);
  * `forensics/` screenshots from the Playwright MCP) are linked without this
  * recorder having to know about them.
  */
-export async function writeRunIndex(
+export async function writeRunReport(
   run: RunArtifacts,
   runResult: Record<string, unknown>,
-): Promise<RunIndexArtifacts> {
+): Promise<RunReportArtifacts> {
   await mkdir(run.absDir, { recursive: true });
   const files = await scanRunFiles(run.absDir);
   const grouped = groupRunFiles(files);
-  const status = typeof runResult.status === "string" ? runResult.status : "running";
-  const summary = typeof runResult.summary === "string" ? runResult.summary : undefined;
 
-  const index = {
+  // run-report.json is the single entry point: the whole-run verdict merged with
+  // a scanned index of inspections and journey step reports. There is no
+  // separate result.json — the verdict lives here.
+  const report = {
+    ...runResult,
     runId: run.runId,
     journeyId: run.journeyId,
-    profileId: runResult.profileId,
-    status,
-    summary,
-    completion: runResult.completion,
-    crystallized: runResult.crystallized ?? false,
-    startedAt: runResult.startedAt,
-    completedAt: runResult.completedAt,
     artifactDir: run.relDir,
+    report: "run-report.json",
+    humanReport: "run-report.md",
     headline: grouped.headline,
-    phases: runResult.phases ?? [],
+    inspections: grouped.inspections,
     steps: grouped.steps,
-    forensics: grouped.forensics,
     files: files.map((file) => ({ path: file, ...classifyRunFile(file) })),
   };
 
-  const indexRef = await writeJsonArtifact(run, "index.json", index, {
-    name: "index",
+  const reportRef = await writeJsonArtifact(run, "run-report.json", report, {
+    name: "run-report",
     kind: "json",
     description:
-      "Run index: headline proof, per-step artifacts, and forensics for this run. Open index.md for the human view.",
+      "Run report: whole-run verdict, ad-hoc inspections, and per-step reports for this run. Open run-report.md for the human view.",
   });
-  const humanRef = await writeTextArtifact(run, "index.md", renderRunIndexMarkdown(index, grouped), {
-    name: "index",
+  const humanRef = await writeTextArtifact(run, "run-report.md", renderRunReportMarkdown(report, grouped), {
+    name: "run-report",
     kind: "markdown",
-    description: "Human-readable run index. Open this first to discover headline proof and artifacts.",
+    description: "Human-readable run report. Open this first to discover the verdict, inspections, and step reports.",
   });
-  const latestRef = await writeLatestPointer(run, index);
-  return { index: indexRef, humanIndex: humanRef, latest: latestRef };
+  const latestRef = await writeLatestSymlink(run);
+  return { report: reportRef, humanReport: humanRef, latest: latestRef };
 }
 
 interface GroupedRunFiles {
   headline: Record<string, string | null>;
   steps: Array<{ dir: string; artifacts: Record<string, string> }>;
-  forensics: Array<{ path: string; kind: string; name: string }>;
+  inspections: Array<{ dir: string; artifacts: Record<string, string> }>;
 }
 
 async function scanRunFiles(absDir: string): Promise<string[]> {
@@ -204,13 +180,17 @@ async function scanRunFiles(absDir: string): Promise<string[]> {
       ?? absDir;
     files.push(toPortablePath(relative(absDir, join(parent, entry.name))));
   }
-  return files.filter((file) => !RUN_INDEX_FILENAMES.has(file)).sort();
+  return files.filter((file) => !RUN_REPORT_FILENAMES.has(file)).sort();
 }
+
+// Step directory shape: journeys/<journeyId>/phases/<phaseId>/steps/<stepId>/...
+const STEP_DIR_PATTERN = /^journeys\/[^/]+\/phases\/[^/]+\/steps\/[^/]+$/;
+// Inspection directory shape: inspections/<seq>/...
+const INSPECTION_DIR_PATTERN = /^inspections\/[^/]+$/;
 
 function groupRunFiles(files: readonly string[]): GroupedRunFiles {
   const has = (name: string) => (files.includes(name) ? name : null);
   const headline: Record<string, string | null> = {
-    result: has("result.json"),
     timeline: has("timeline.json"),
     metrics: has("metrics.json"),
     seed: has("seed-manifest.json"),
@@ -219,27 +199,23 @@ function groupRunFiles(files: readonly string[]): GroupedRunFiles {
     cleanupPlan: has("cleanup-plan.json"),
   };
   const stepDirs = new Map<string, Record<string, string>>();
-  const forensics: Array<{ path: string; kind: string; name: string }> = [];
+  const inspectionDirs = new Map<string, Record<string, string>>();
   for (const file of files) {
-    const segments = file.split("/");
-    if (segments[0] === "forensics" && segments.length === 2) {
-      const meta = classifyRunFile(file);
-      forensics.push({ path: file, kind: meta.kind, name: meta.name });
-      continue;
-    }
-    const phaseSeg = segments[0];
-    const stepSeg = segments[1];
-    if (segments.length >= 3 && phaseSeg && stepSeg && /^\d\d-phase-/.test(phaseSeg) && /^\d\d-step-/.test(stepSeg)) {
-      const dir = `${phaseSeg}/${stepSeg}`;
+    const dir = file.split("/").slice(0, -1).join("/");
+    if (STEP_DIR_PATTERN.test(dir)) {
       const bucket = stepDirs.get(dir) ?? {};
       bucket[classifyRunFile(file).name] = file;
       stepDirs.set(dir, bucket);
+    } else if (INSPECTION_DIR_PATTERN.test(dir)) {
+      const bucket = inspectionDirs.get(dir) ?? {};
+      bucket[classifyRunFile(file).name] = file;
+      inspectionDirs.set(dir, bucket);
     }
   }
   return {
     headline,
     steps: [...stepDirs.entries()].map(([dir, artifacts]) => ({ dir, artifacts })),
-    forensics,
+    inspections: [...inspectionDirs.entries()].map(([dir, artifacts]) => ({ dir, artifacts })),
   };
 }
 
@@ -248,25 +224,22 @@ function classifyRunFile(file: string): { kind: string; name: string } {
   const ext = extname(leaf).replace(/^\./, "").toLowerCase();
   const name = leaf.replace(/\.[^.]+$/, "");
   if (ext === "png") return { kind: "screenshot", name };
-  if (file.startsWith("forensics/") && name.includes("snapshot")) return { kind: "browser-snapshot", name };
-  if (name === "console") return { kind: "console-log", name };
-  if (name === "network") return { kind: "network-log", name };
   if (ext === "md") return { kind: "markdown", name };
   if (ext === "json") return { kind: "json", name };
   return { kind: ext || "text", name };
 }
 
-function renderRunIndexMarkdown(index: Record<string, unknown>, grouped: GroupedRunFiles): string {
+function renderRunReportMarkdown(report: Record<string, unknown>, grouped: GroupedRunFiles): string {
   const lines: string[] = [];
-  const status = String(index.status ?? "running");
-  lines.push(`# Run ${index.runId}`);
+  const status = String(report.status ?? "running");
+  lines.push(`# Run ${report.runId}`);
   lines.push("");
-  lines.push(`- **Journey:** ${index.journeyId}`);
-  if (index.profileId) lines.push(`- **Profile:** ${index.profileId}`);
-  lines.push(`- **Status:** ${status}${index.summary ? ` — ${index.summary}` : ""}`);
-  lines.push(`- **Crystallized:** ${index.crystallized ? "yes" : "no (interactive dev run)"}`);
-  if (index.startedAt) lines.push(`- **Started:** ${index.startedAt}`);
-  if (index.completedAt) lines.push(`- **Completed:** ${index.completedAt}`);
+  lines.push(`- **Journey:** ${report.journeyId}`);
+  if (report.profileId) lines.push(`- **Profile:** ${report.profileId}`);
+  lines.push(`- **Status:** ${status}${report.summary ? ` — ${report.summary}` : ""}`);
+  lines.push(`- **Crystallized:** ${report.crystallized ? "yes" : "no (interactive dev run)"}`);
+  if (report.startedAt) lines.push(`- **Started:** ${report.startedAt}`);
+  if (report.completedAt) lines.push(`- **Completed:** ${report.completedAt}`);
   lines.push("");
   lines.push("## Headline proof");
   lines.push("");
@@ -285,44 +258,56 @@ function renderRunIndexMarkdown(index: Record<string, unknown>, grouped: Grouped
       lines.push("");
     }
   }
-  if (grouped.forensics.length > 0) {
-    lines.push("## Forensics");
+  if (grouped.inspections.length > 0) {
+    lines.push("## Inspections");
     lines.push("");
-    for (const item of grouped.forensics) lines.push(`- [${item.name}](${item.path}) (${item.kind})`);
-    lines.push("");
+    for (const inspection of grouped.inspections) {
+      lines.push(`### ${inspection.dir}`);
+      for (const [name, file] of Object.entries(inspection.artifacts)) {
+        lines.push(`- [${name}](${file})`);
+      }
+      lines.push("");
+    }
   }
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
-async function writeLatestPointer(run: RunArtifacts, index: Record<string, unknown>): Promise<ArtifactRef> {
-  // The journey directory is the parent of the run directory for interactive
-  // runs (`<root>/<journey>/<run>/`). A `latest.json` there lets an operator
-  // jump to the newest run without scanning timestamps.
-  const journeyDir = dirname(run.absDir);
+/**
+ * Refresh the `latest` convenience pointer next to the run directory:
+ * `<root>/latest -> <runId>` (or `<root>/_suites/<suiteId>/latest -> <runId>`).
+ * Local convenience only — durable references should use the real run id. Falls
+ * back to a small text file holding the run id when symlinks are unavailable.
+ */
+async function writeLatestSymlink(run: RunArtifacts): Promise<ArtifactRef> {
+  const parentDir = dirname(run.absDir);
   const runSegment = basename(run.absDir);
-  const pointer = {
-    runId: run.runId,
-    journeyId: run.journeyId,
-    profileId: index.profileId,
-    status: index.status,
-    summary: index.summary,
-    completedAt: index.completedAt,
-    updatedAt: new Date().toISOString(),
-    runDir: runSegment,
-    index: `${runSegment}/index.md`,
-    indexJson: `${runSegment}/index.json`,
-    result: `${runSegment}/result.json`,
-  };
-  const absPath = resolve(journeyDir, "latest.json");
-  await mkdir(journeyDir, { recursive: true });
-  await writeFile(absPath, `${JSON.stringify(pointer, null, 2)}\n`, "utf8");
+  const linkPath = resolve(parentDir, "latest");
+  await mkdir(parentDir, { recursive: true });
+  // `latest` is convenience only and several runs may finalize concurrently
+  // (e.g. parallel verify workers sharing a suite dir). Create the link under a
+  // unique temp name then atomically rename it over `latest`, and never throw —
+  // a lost race or a symlink-hostile filesystem must not fail the run.
+  let kind = "symlink";
+  const tmpPath = `${linkPath}.tmp-${runSegment}`;
+  try {
+    await rm(tmpPath, { force: true }).catch(() => undefined);
+    try {
+      await symlink(runSegment, tmpPath, "dir");
+    } catch {
+      await writeFile(tmpPath, `${runSegment}\n`, "utf8");
+      kind = "text";
+    }
+    await rename(tmpPath, linkPath);
+  } catch {
+    await rm(tmpPath, { force: true }).catch(() => undefined);
+  }
   return {
-    id: `artifact:${safePathSegment(run.journeyId)}:latest`,
-    kind: "json",
+    id: `artifact:${safePathSegment(run.runId)}:latest`,
+    kind,
     name: "latest",
-    uri: `file://${absPath}`,
-    path: toPortablePath(relative(process.cwd(), absPath)),
-    description: "Pointer to the newest run for this journey: status, summary, and index links.",
+    uri: `file://${linkPath}`,
+    path: toPortablePath(relative(process.cwd(), linkPath)),
+    description: "Local convenience pointer to the newest run. Durable references should use the real run id.",
   };
 }
 
@@ -391,12 +376,23 @@ export function artifactRef(
   return ref;
 }
 
+// Journey-step evidence nests inside the run as
+// journeys/<journeyId>/phases/<phaseId>/steps/<stepId>/. Plain, human-readable
+// ids (no numeric prefixes); ordering comes from the run-report timeline.
+function journeyStepDir<TTypes extends AnyHarnessTypes>(
+  journey: ExecutableJourney<TTypes> | undefined,
+  phaseId: string,
+  stepId: string,
+): string {
+  return `journeys/${safePathSegment(journey?.id ?? "journey")}/phases/${safePathSegment(phaseId)}/steps/${safePathSegment(stepId)}`;
+}
+
 export function phaseDir<TTypes extends AnyHarnessTypes>(
   run: RunArtifacts,
   journey: ExecutableJourney<TTypes> | undefined,
   phaseId: string,
 ): string {
-  return resolve(run.absDir, phaseSegment(journey, phaseId));
+  return resolve(run.absDir, `journeys/${safePathSegment(journey?.id ?? "journey")}/phases/${safePathSegment(phaseId)}`);
 }
 
 export function stepDir<TTypes extends AnyHarnessTypes>(
@@ -405,10 +401,7 @@ export function stepDir<TTypes extends AnyHarnessTypes>(
   phaseId: string,
   stepId: string,
 ): string {
-  return resolve(
-    phaseDir(run, journey, phaseId),
-    stepSegment(journey, phaseId, stepId),
-  );
+  return resolve(run.absDir, journeyStepDir(journey, phaseId, stepId));
 }
 
 export function stepRelativePath<TTypes extends AnyHarnessTypes>(
@@ -417,11 +410,7 @@ export function stepRelativePath<TTypes extends AnyHarnessTypes>(
   stepId: string,
   filename: string,
 ): string {
-  return `${phaseSegment(journey, phaseId)}/${stepSegment(journey, phaseId, stepId)}/${filename}`;
-}
-
-export function forensicsRelativePath(filename: string): string {
-  return `forensics/${filename}`;
+  return `${journeyStepDir(journey, phaseId, stepId)}/${filename}`;
 }
 
 export function resolveArtifactPath(
@@ -493,6 +482,18 @@ export function safePathSegment(value: string): string {
   );
 }
 
+// Run ids are timestamp-first and case-significant (e.g. `2026-05-31T10-24-18Z-...`).
+// They become the run directory name verbatim, so this guards path traversal
+// WITHOUT lowercasing — the on-disk run dir always equals the run id.
+export function safeRunSegment(value: string): string {
+  return (
+    value
+      .trim()
+      .replace(/[^A-Za-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "unnamed"
+  );
+}
+
 export function timestampSegment(date = new Date()): string {
   return date.toISOString().toLowerCase().replace(/[:.]/g, "-");
 }
@@ -529,28 +530,6 @@ function isInside(root: string, candidate: string): boolean {
     normalizedCandidate === normalizedRoot ||
     normalizedCandidate.startsWith(`${normalizedRoot}${sep}`)
   );
-}
-
-function phaseSegment<TTypes extends AnyHarnessTypes>(
-  journey: ExecutableJourney<TTypes> | undefined,
-  phaseId: string,
-): string {
-  const phaseIndex = journey?.phases.findIndex((phase) => phase.id === phaseId) ?? -1;
-  return `${padIndex(phaseIndex)}-phase-${safePathSegment(phaseId)}`;
-}
-
-function stepSegment<TTypes extends AnyHarnessTypes>(
-  journey: ExecutableJourney<TTypes> | undefined,
-  phaseId: string,
-  stepId: string,
-): string {
-  const phase = journey?.phases.find((candidate) => candidate.id === phaseId);
-  const stepIndex = phase?.steps.findIndex((step) => step.id === stepId) ?? -1;
-  return `${padIndex(stepIndex)}-step-${safePathSegment(stepId)}`;
-}
-
-function padIndex(index: number): string {
-  return String(index >= 0 ? index + 1 : 0).padStart(2, "0");
 }
 
 function basenameWithoutExtension(path: string): string {

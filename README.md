@@ -331,21 +331,18 @@ stack.capability.list
 stack.capability.run
 run.begin
 browser.open
-browser.snapshot
-browser.find
+browser.sessions
+browser.inspect
+browser.refs
 browser.act
 browser.wait
-browser.get
-browser.console
-browser.network
 browser.eval
 browser.playwright
-browser.screenshot
+browser.close
 journey.step
 journey.untilStep
 journey.phase
 journey.untilPhase
-artifact.read
 cleanup.plan
 run.reseed
 ```
@@ -358,7 +355,9 @@ Stack providers should use **StackStartContext** as the default allocation patte
 
 Use **Named Stack Allocations** through `ctx.allocatePort(name)` and `ctx.allocateArtifactPath(name, ...)` for ports, logs, databases, and other per-stack paths so Dev MCP and verify reports can show which resources belonged to each Stack Instance. Named allocations are reporting and debugging evidence; journey code should still read runtime targets from `StackStatusPacket.services`.
 
-The Browser Workbench is the browser-side exploration surface. Use `browser.snapshot` for visible refs, `browser.find` for semantic lookup, `browser.act` for one UI mutation, `browser.wait` for explicit conditions, `browser.get` for targeted reads, `browser.console` / `browser.network` for signal buffers, `browser.screenshot` for explicit visual artifacts, and `browser.eval` / `browser.playwright` when exploration needs custom page or Playwright code.
+The Browser Workbench is the browser-side exploration surface. Use `browser.inspect` as the standard evidence path — it captures a compact path-oriented index, a screenshot, and console/network signals in one call and writes them to `runs/<runId>/inspections/<seq>/`. Use `browser.refs` to toggle the live overlay that paints exactly the referencable nodes from the UI forensics tree, connecting live pixels to ref addresses. Use `browser.act` for one UI mutation (accepts a `@ref` address or selector), `browser.wait` for explicit conditions, and `browser.eval` / `browser.playwright` when exploration needs custom page or Playwright code. Console and network facts come from `browser.inspect` signals — not separate tools.
+
+**Agent UX principles.** The tool surface follows a small set of design rules: few generic tools over many narrow wrappers; tools observe facts, agents reason; tool output is a compact index and details live in artifacts; tool names are obvious and single-purpose; no legacy aliases. If a capability is cleanly expressible via `browser.eval` or `browser.playwright`, no narrow tool is added. `browser.inspect` exists because it packages a costly, repeated evidence pattern into one idempotent call. `browser.refs` exists because it connects live pixels to the UI forensics ref system that `browser.inspect` and `browser.act` share.
 
 `journey.inspect` returns the full contract for one journey: phases, steps, proofs, profiles, and descriptions. Agents use it to plan, humans use it to read, and CI uses it to diff.
 
@@ -388,37 +387,35 @@ Prefer the `--http-url ... --tool ...` form for localhost. Do not rely on dotted
 
 ### 5. Read the artifacts a run left behind
 
-Every phase and step writes evidence under `.agents-e2e/artifacts/<journey>/<run>/`. The layout is contractual, and agents and CI can read the same filenames. `artifact.read` returns a typed packet without the agent having to know filesystem internals.
-
-```json
-{
-  "runId": "<runId from run.begin>",
-  "path": "01-phase-phase:notes/01-step-step:create-note/step-feedback.json"
-}
-```
+Every run writes evidence under `runs/<runId>/`. The layout is contractual: agents and CI read the same paths. `runs/latest` is a local convenience symlink to the most recent run directory.
 
 The on-disk layout, in the order an agent typically reaches for it:
 
 ```text
-.agents-e2e/artifacts/<journey>/<run>/
-  seed-manifest.json
-  result.json
-  timeline.json
-  metrics.json
-  owned-resources.json
-  cleanup-plan.json
-  cleanup.json
-  forensics/browser-snapshot-*.json
-  forensics/screenshot-*.png
-  01-phase-<phase-id>/01-step-<step-id>/
-    before.png
-    after.png
-    failure.png
-    console.json
-    network.json
-    result.json
-    step-feedback.json
+runs/
+  latest -> <runId>                 # local convenience symlink only
+  <runId>/
+    run-report.md
+    run-report.json                 # whole-run verdict + index
+    seed-manifest.json
+    timeline.json
+    metrics.json
+    owned-resources.json
+    cleanup-plan.json
+    cleanup.json
+    inspections/<seq>/
+      inspect.md
+      inspect.json
+      screenshot.png
+    journeys/<journeyId>/phases/<phaseId>/steps/<stepId>/
+      before.png
+      after.png | failure.png | skipped.png
+      inspect.md
+      inspect.json
+      step-report.json              # single agent-facing per-step report
 ```
+
+`run-report.json` is the whole-run verdict and artifact index; there is no separate `result.json`, `index.json`, or `latest.json`. `step-report.json` is the single agent-facing per-step report (status, what ran, artifact paths, signals, failure info, and raw payload nested under `execution`); it replaces the former `step-feedback.json`. Journey steps use the same `browser.inspect` evidence machinery as standalone inspections — one evidence system.
 
 Together with seed, cleanup, and reseed, these artifacts let the agent move through app state deliberately: inspect a failure, return to a known point, and rerun the same step without inventing a new test path.
 
@@ -484,7 +481,7 @@ The v1.0 package exports six entries. All are stable.
 - `@agent-e2e/harness/core` - core API: `defineJourney`, `HarnessTypes`, inspectable contract types, feedback and guidance types, seed contracts, ownership and resource cleanup contracts, typed resource registry helpers, and journey run helpers.
 - `@agent-e2e/harness/dev-mcp` - Dev MCP server facade: `defineAgentE2EConfig`, `startAgentE2EDevMcpFromConfig`, manifest types, defaults (`127.0.0.1:3766/mcp`, `.agents-e2e/artifacts`), and the Dev MCP tool grammar types.
 - `@agent-e2e/harness/verify` - config-backed verify runner, suite selection types, report types, built-in reporters, and `runAgentE2EVerifyFromConfig`.
-- `@agent-e2e/harness/playwright-mcp` - MCP-owned browser session factory and Browser Workbench packet types for `browser.open`, `browser.snapshot`, `browser.find`, `browser.act`, `browser.wait`, `browser.get`, `browser.eval`, `browser.playwright`, `browser.console`, `browser.network`, `browser.screenshot`, and `browser.close`.
+- `@agent-e2e/harness/playwright-mcp` - MCP-owned browser session factory and Browser Workbench packet types for `browser.open`, `browser.sessions`, `browser.inspect`, `browser.refs`, `browser.act`, `browser.wait`, `browser.eval`, `browser.playwright`, and `browser.close`.
 - `@agent-e2e/harness/stack` - stack provider contract, `StackStartContext`, `StackStatusPacket`, `StackLifecyclePhase`, `createStackStartContext`, `createProcessStackProvider`, `allocateTcpPort`.
 - `@agent-e2e/harness/artifacts` - artifact recorder and reader helpers: `createRunArtifacts`, `createRunArtifactRecorder`, `readArtifact`, `resolveArtifactPath`, canonical filenames, and `DEFAULT_AGENT_E2E_ARTIFACT_ROOT`.
 

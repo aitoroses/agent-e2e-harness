@@ -46,6 +46,10 @@ test-results/
 .agents-e2e/
 apps/*/.agents-e2e/
 packages/*/.agents-e2e/
+# Run artifacts (runs/<runId>/...). The committed sample lives under docs/.
+/runs/
+apps/*/runs/
+packages/*/runs/
 
 # Claude Code scheduled task lock (transient)
 .claude/scheduled_tasks.lock
