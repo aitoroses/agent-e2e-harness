@@ -11,7 +11,7 @@ const RELOAD_SOURCE_EXTENSIONS = [
   ".json",
 ];
 const RELOAD_IGNORED_SEGMENTS = new Set([
-  "node_modules", "dist", ".git", ".agents-e2e", ".next", ".cache",
+  "node_modules", "dist", ".git", ".agents-e2e", "runs", ".next", ".cache",
 ]);
 
 export interface ReloadingHarnessSourceOptions<
