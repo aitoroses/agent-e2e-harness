@@ -134,8 +134,8 @@ function refreshRefsNext() {
   return {
     actions: [
       {
-        id: "snapshot",
-        tool: "browser.snapshot",
+        id: "inspect",
+        tool: "browser.inspect",
         why: "Refresh refs after browser code runs; page state may have changed.",
       },
     ],

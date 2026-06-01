@@ -4,7 +4,7 @@ import {
   createRunArtifacts,
   type RunArtifacts,
 } from "../artifacts/index.js";
-import { asInspectPage, writeInspection } from "../forensics/inspect-capture.js";
+import { asInspectPage, writeInspection, type InspectSignals } from "../forensics/inspect-capture.js";
 import { runBrowserAction, type BrowserActionable } from "./actions.js";
 import { runPageCode, runPlaywrightCode, effectiveTimeout, type BrowserCodeRunInput, type BrowserCodeRunResult } from "./code-runner.js";
 import {
@@ -93,7 +93,7 @@ export interface BrowserInspectResult {
   title?: string;
   target: { input: string | null; kind: "page" | "ref" | "selector"; resolved: boolean };
   artifacts: { inspect?: string | undefined; inspectJson?: string | undefined; screenshot?: string | undefined };
-  signals: { consoleErrors: number; networkFailures: number };
+  signals: InspectSignals;
   refsOverlayEnabled: boolean;
   error?: { code: string; message: string };
 }
@@ -526,10 +526,32 @@ export function createPlaywrightMcpBrowserSessionManager(options: { artifactRoot
   };
 }
 
-function inspectSignals(session: BrowserSession): { consoleErrors: number; networkFailures: number } {
-  const consoleErrors = session.signals.console({ level: "error", limit: 100_000 }).entries.length;
-  const networkFailures = session.signals.network({ status: "failed", limit: 100_000 }).entries.length;
-  return { consoleErrors, networkFailures };
+function inspectSignals(session: BrowserSession): InspectSignals {
+  const consoleErrorEntries = session.signals.console({ level: "error", limit: 100_000 }).entries;
+  const networkFailureEntries = session.signals.network({ status: "failed", limit: 100_000 }).entries;
+  return {
+    consoleErrors: consoleErrorEntries.length,
+    networkFailures: networkFailureEntries.length,
+    ...(consoleErrorEntries.length > 0
+      ? {
+          consoleErrorDetails: consoleErrorEntries.slice(-10).map((entry) => ({
+            text: entry.text,
+            ...(entry.location ? { location: entry.location } : {}),
+          })),
+        }
+      : {}),
+    ...(networkFailureEntries.length > 0
+      ? {
+          networkFailureDetails: networkFailureEntries.slice(-10).map((entry) => ({
+            kind: entry.kind,
+            ...(entry.method ? { method: entry.method } : {}),
+            url: entry.url,
+            ...(entry.statusCode !== undefined ? { statusCode: entry.statusCode } : {}),
+            ...(entry.failureText ? { failureText: entry.failureText } : {}),
+          })),
+        }
+      : {}),
+  };
 }
 
 function targetKind(target: string | undefined): "page" | "ref" | "selector" {

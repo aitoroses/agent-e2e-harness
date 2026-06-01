@@ -15,6 +15,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
+## [3.0.3] - 2026-06-01
+
+### Fixed
+
+- `browser.eval` and `browser.playwright` now point agents back to `browser.inspect` in their `next.actions` instead of the removed `browser.snapshot` tool.
+- `browser.inspect` artifacts now include capped console/network failure details alongside the signal counters, so agents can classify whether a non-zero signal is product failure, expected navigation abort, or other browser noise without needing extra tools.
+
 ## [3.0.2] - 2026-06-01
 
 ### Fixed
